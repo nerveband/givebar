@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Givebar — Live Stage HUD</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--bg-canvas);
+      background-image: 
+        radial-gradient(circle at 50% 20%, rgba(226, 183, 85, 0.08) 0%, transparent 60%),
+        radial-gradient(circle at 80% 80%, rgba(56, 189, 248, 0.04) 0%, transparent 50%);
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    #stage-canvas {
+      width: 100vw;
+      height: 100vh;
+      max-width: 1920px;
+      max-height: 1080px;
+      padding: 48px 64px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .stage-odometer-text {
+      font-size: 116px;
+      line-height: 1;
+    }
+
+    #confetti-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 999;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="confetti-canvas"></canvas>
+
+  <main id="stage-canvas">
+    <!-- Top Header -->
+    <header style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <div style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); padding: 8px 16px; border-radius: 9999px;">
+          <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--emerald-400); box-shadow: 0 0 10px var(--emerald-glow); animation: pulseDot 2s infinite;"></span>
+          <span style="font-size: 13px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--emerald-400);">Live Appeal</span>
+        </div>
+        <h2 id="event-name" style="font-size: 20px; font-weight: 700; color: var(--text-secondary); letter-spacing: -0.01em;">
+          Annual Gala & Benefit Auction
+        </h2>
+      </div>
+
+      <!-- Matching Grant Active Banner (Dynamic) -->
+      <div id="match-banner" class="matching-banner" style="display: none;">
+        <span style="font-size: 20px;">⭐</span>
+        <span id="match-banner-text" class="matching-banner-text">
+          $100K MATCH ACTIVE — EVERY DOLLAR DOUBLED
+        </span>
+        <span style="font-size: 20px;">⭐</span>
+      </div>
+
+      <div id="freeze-indicator" style="display: none; background: rgba(239, 68, 68, 0.2); border: 1px solid var(--crimson-500); padding: 8px 18px; border-radius: 9999px; color: var(--crimson-400); font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;">
+        Display Paused
+      </div>
+    </header>
+
+    <!-- Centerpiece: Double-Bezel Card with Odometer & Concentric Bar -->
+    <section class="double-bezel-card gold-accent" style="width: 100%; margin: auto 0;">
+      <div class="double-bezel-inner" style="padding: 48px 56px; text-align: center;">
+        
+        <div style="font-size: 16px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-400); margin-bottom: 12px;">
+          Total Live Appeal Pledges
+        </div>
+
+        <!-- Giant 120px Rolling Odometer -->
+        <div id="main-odometer" class="stage-odometer-text text-gold-gradient" style="margin-bottom: 36px;"></div>
+
+        <!-- Milestone Progress Bar Container -->
+        <div style="position: relative; margin-top: 48px; margin-bottom: 16px; width: 100%;">
+          
+          <!-- Dynamic Milestones -->
+          <div id="milestones-container" style="position: absolute; width: 100%; top: 0; left: 0; pointer-events: none;"></div>
+
+          <!-- Concentric Outer Bar -->
+          <div class="progress-track-outer">
+            <div class="progress-track-inner">
+              <div id="progress-bar-fill" class="progress-fill-bar" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer Stats below bar -->
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 14px; padding: 0 8px;">
+          <div style="font-size: 16px; font-weight: 700; color: var(--text-muted);">
+            Progress: <span id="progress-percent" style="color: var(--text-primary); font-weight: 800;">0%</span>
+          </div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--text-muted);">
+            Goal: <span id="goal-amount" style="color: var(--text-primary); font-weight: 800;">$500,000</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Bottom Bar: Left Paced Chyron Stream + Right High-Contrast QR Code -->
+    <footer style="display: flex; align-items: flex-end; justify-content: space-between; width: 100%; gap: 32px;">
+      
+      <!-- Paced Recognition Chyron -->
+      <div style="flex: 1; max-width: 960px;">
+        <div style="font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;">
+          Recent Supporter Recognition
+        </div>
+        <div id="chyron-host" class="chyron-container">
+          <div class="chyron-item">
+            <span class="chyron-name">Welcoming all Gala Patrons & Guests</span>
+            <span class="chyron-badge">Live</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stage QR Code Card -->
+      <div class="double-bezel-card" style="padding: 6px; border-radius: 20px;">
+        <div class="double-bezel-inner" style="padding: 14px 18px; display: flex; align-items: center; gap: 16px; border-radius: 16px;">
+          <div style="background: white; padding: 6px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,0.5);">
+            <img id="stage-qr-img" src="/api/qr" alt="Scan to Give" width="96" height="96" style="display: block;">
+          </div>
+          <div>
+            <div style="font-size: 15px; font-weight: 800; color: var(--gold-300); letter-spacing: -0.01em; margin-bottom: 4px;">
+              SCAN TO PLEDGE
+            </div>
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); line-height: 1.4;">
+              Apple Pay • Google Pay • Card<br>Direct from your table
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </footer>
+  </main>
+
+  <script src="/js/mock-backend.js"></script>
+  <script src="/js/odometer.js"></script>
+  <script src="/js/stage.js"></script>
+</body>
+</html>

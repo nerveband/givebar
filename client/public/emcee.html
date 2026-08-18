@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Givebar — Emcee Confidence Monitor</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <style>
+    body {
+      padding: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #040609; /* Deepest black for podium OLED screens */
+    }
+
+    .emcee-metric-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      padding: 28px;
+      text-align: center;
+    }
+
+    .emcee-total {
+      font-size: 72px;
+      font-weight: 900;
+      color: var(--gold-300);
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin: 12px 0;
+    }
+
+    .shoutout-card {
+      background: #0F1420;
+      border: 1px solid var(--border-subtle);
+      border-left: 4px solid var(--gold-400);
+      border-radius: 14px;
+      padding: 14px 18px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header & Live Pulse -->
+  <header style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--emerald-400); box-shadow: 0 0 12px var(--emerald-glow);"></span>
+      <h1 style="font-size: 20px; font-weight: 800; color: var(--text-primary);">
+        Podium Confidence Monitor
+      </h1>
+      <span style="font-size: 11px; font-weight: 800; background: rgba(255,255,255,0.06); color: var(--text-secondary); padding: 4px 8px; border-radius: 6px;">
+        Emcee View
+      </span>
+    </div>
+
+    <!-- Active Match Badge -->
+    <div id="emcee-match-badge" style="display: none; background: rgba(226, 183, 85, 0.15); border: 1px solid var(--gold-400); padding: 6px 14px; border-radius: 9999px; font-size: 13px; font-weight: 800; color: var(--gold-300);">
+      ⭐ MATCH ACTIVE: <span id="emcee-match-pool">$0</span> REMAINING
+    </div>
+  </header>
+
+  <!-- Big Total Centerpiece -->
+  <main class="double-bezel-card gold-accent" style="margin-bottom: 24px;">
+    <div class="double-bezel-inner" style="text-align: center; padding: 36px 24px;">
+      <div style="font-size: 14px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-400);">
+        Authoritative Gala Total Raised
+      </div>
+      
+      <div class="emcee-total text-gold-gradient" id="emcee-total-raised">$0</div>
+
+      <div style="font-size: 18px; font-weight: 700; color: var(--text-secondary);">
+        <span id="emcee-percent" style="color: var(--text-primary); font-weight: 800;">0%</span> of <span id="emcee-goal">$500,000</span> Goal
+        • <span id="emcee-active-count" style="color: var(--text-primary);">0</span> Total Pledges
+      </div>
+    </div>
+  </main>
+
+  <!-- Two-Column Callout Grid -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    
+    <!-- LEFT: Next Milestone & Top 5 Major Gifts for Shoutouts -->
+    <div>
+      
+      <!-- Next Milestone Target Box -->
+      <div class="double-bezel-card" style="margin-bottom: 20px;">
+        <div class="double-bezel-inner" style="padding: 20px;">
+          <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">
+            Next Stage Milestone Target
+          </div>
+          <div style="font-size: 24px; font-weight: 800; color: var(--emerald-400);" id="emcee-milestone-gap">
+            $0 to next goal
+          </div>
+          <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;" id="emcee-milestone-name">
+            -
+          </div>
+        </div>
+      </div>
+
+      <!-- Top 5 Largest Gifts -->
+      <div class="double-bezel-card">
+        <div class="double-bezel-inner" style="padding: 20px;">
+          <div style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gold-400); margin-bottom: 14px;">
+            🌟 Top 5 Largest Gifts (For Vocal Shoutouts)
+          </div>
+          <div id="top-gifts-container">
+            <div style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 24px;">
+              Awaiting first major gift...
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Live Activity Feed with seconds-ago counters -->
+    <div>
+      <div class="double-bezel-card">
+        <div class="double-bezel-inner" style="padding: 20px;">
+          <div style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 14px;">
+            ⚡ Live Incoming Pledges
+          </div>
+          <div id="recent-gifts-container" style="max-height: 480px; overflow-y: auto;">
+            <div style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 24px;">
+              Awaiting live pledges...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/js/mock-backend.js"></script>
+  <script src="/js/emcee.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "givebar",
+  "version": "1.0.0",
+  "description": "The open, bulletproof live fundraising thermometer & stage presentation HUD for high-stakes nonprofit galas and benefit auctions.",
+  "main": "server/src/index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run server/src/index.ts",
+    "dev": "bun --watch server/src/index.ts",
+    "test": "bun test"
+  },
+  "keywords": [
+    "fundraising",
+    "gala",
+    "thermometer",
+    "stage-hud",
+    "live-appeal",
+    "pledge-tracker",
+    "nonprofit"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

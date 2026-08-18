@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Givebar — Live Fundraising Stage HUD & Control Suite</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    body {
+      padding: 32px 20px;
+      max-width: 1080px;
+      margin: 0 auto;
+      background: var(--bg-canvas);
+    }
+    .launcher-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+      margin-top: 32px;
+    }
+    .surface-card {
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      transition: transform 0.2s ease;
+    }
+    .surface-card:hover {
+      transform: translateY(-4px);
+    }
+  </style>
+</head>
+<body>
+
+  <header style="text-align: center; margin-top: 20px;">
+    <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(226, 183, 85, 0.12); border: 1px solid var(--gold-400); padding: 6px 16px; border-radius: 9999px; font-size: 13px; font-weight: 800; color: var(--gold-300); text-transform: uppercase; margin-bottom: 16px;">
+      ⚡ Live Gala Fundraising System
+    </div>
+    <h1 style="font-size: 40px; font-weight: 900; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 12px;">
+      Givebar Suite Launcher
+    </h1>
+    <p style="font-size: 17px; color: var(--text-secondary); max-width: 640px; margin: 0 auto; line-height: 1.5;">
+      Open any of the four specialized live-event surfaces below. Data automatically syncs across all tabs and devices.
+    </p>
+  </header>
+
+  <main class="launcher-grid">
+    
+    <!-- 1. Stage 1080p HUD -->
+    <a href="stage.html" class="surface-card double-bezel-card gold-accent">
+      <div class="double-bezel-inner" style="padding: 28px 22px;">
+        <div style="font-size: 32px; margin-bottom: 12px;">🖥️</div>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--gold-300); margin-bottom: 8px;">
+          Stage 1080p HUD
+        </h2>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;">
+          Ballroom projector view with 120px rolling odometer, concentric progress bar, matching grant banner, and dynamic QR code.
+        </p>
+        <span class="btn-primary" style="padding: 8px 14px; font-size: 12px; width: 100%;">
+          Launch Stage HUD →
+        </span>
+      </div>
+    </a>
+
+    <!-- 2. AV & Admin Control Deck -->
+    <a href="control.html" class="surface-card double-bezel-card">
+      <div class="double-bezel-inner" style="padding: 28px 22px;">
+        <div style="font-size: 32px; margin-bottom: 12px;">🎛️</div>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">
+          AV Control Deck
+        </h2>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;">
+          Master control with 8-second delay buffer, 1-click Yank, screen freeze, manual override, and tech rehearsal simulator.
+        </p>
+        <span class="btn-secondary" style="padding: 8px 14px; font-size: 12px; width: 100%; display: block; text-align: center;">
+          Open Control Deck →
+        </span>
+      </div>
+    </a>
+
+    <!-- 3. Volunteer Entry Terminal -->
+    <a href="entry.html" class="surface-card double-bezel-card">
+      <div class="double-bezel-inner" style="padding: 28px 22px;">
+        <div style="font-size: 32px; margin-bottom: 12px;">📱</div>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">
+          Volunteer Terminal
+        </h2>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;">
+          Numpad-first pledge entry with ask-tier buttons, $9,500 guardrail modal, offline outbox, and 1-tap instant undo.
+        </p>
+        <span class="btn-secondary" style="padding: 8px 14px; font-size: 12px; width: 100%; display: block; text-align: center;">
+          Open Volunteer App →
+        </span>
+      </div>
+    </a>
+
+    <!-- 4. Emcee Confidence Monitor -->
+    <a href="emcee.html" class="surface-card double-bezel-card">
+      <div class="double-bezel-inner" style="padding: 28px 22px;">
+        <div style="font-size: 32px; margin-bottom: 12px;">🎤</div>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">
+          Emcee Confidence Monitor
+        </h2>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;">
+          Podium iPad display with giant authoritative total, milestone gap countdown, and top 5 largest gifts for vocal shoutouts.
+        </p>
+        <span class="btn-secondary" style="padding: 8px 14px; font-size: 12px; width: 100%; display: block; text-align: center;">
+          Open Emcee View →
+        </span>
+      </div>
+    </a>
+
+  </main>
+
+  <footer style="text-align: center; margin-top: 48px; font-size: 13px; color: var(--text-muted);">
+    Givebar — Open-Source Live Gala Fundraising System • Designed for $100k–$2M+ Live Appeals
+  </footer>
+
+</body>
+</html>
