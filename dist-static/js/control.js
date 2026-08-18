@@ -3,6 +3,9 @@
  */
 
 (function () {
+  const basePath = window.location.pathname.replace(/\/[^/]*$/, '');
+  const API_BASE = (basePath === '/' || basePath === '') ? '/api' : `${basePath}/api`;
+
   let controlPin = sessionStorage.getItem('givebar_control_pin') || '9999';
   let isFrozen = false;
   let hasPopulatedInputs = false;
@@ -19,7 +22,7 @@
   // --- API Helper ---
   async function postControl(payload) {
     try {
-      const res = await fetch('/api/control', {
+      const res = await fetch(`${API_BASE}/control`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -113,7 +116,7 @@
       btn.addEventListener('click', async () => {
         const mode = btn.getAttribute('data-sim');
         try {
-          const res = await fetch('/api/rehearsal', {
+          const res = await fetch(`${API_BASE}/rehearsal`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ mode })
@@ -213,7 +216,7 @@
         const donationId = voidBtn.getAttribute('data-void-id');
         if (confirm(`Void donation ${donationId}? This will remove it from total calculations.`)) {
           try {
-            const res = await fetch(`/api/donation/${donationId}/void`, {
+            const res = await fetch(`${API_BASE}/donation/${donationId}/void`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ entered_by: 'AV_CONTROL', reason: 'Voided from Control Deck' })
@@ -233,7 +236,7 @@
   // --- 1-Second Continuous State Polling ---
   async function pollControlState() {
     try {
-      const res = await fetch('/api/state?role=control');
+      const res = await fetch(`${API_BASE}/state?role=control`);
       if (!res.ok) return;
 
       const data = await res.json();

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Givebar — AV & Admin Control Deck</title>
-  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="css/app.css">
   <style>
     body {
       padding: 24px;
@@ -61,16 +61,16 @@
 
     <!-- Quick Navigation & CSV Export -->
     <div style="display: flex; align-items: center; gap: 10px;">
-      <a href="/stage" target="_blank" class="btn-secondary" style="text-decoration: none; font-size: 13px;">
+      <a href="stage" target="_blank" class="btn-secondary" style="text-decoration: none; font-size: 13px;">
         🖥️ Open Stage HUD
       </a>
-      <a href="/emcee" target="_blank" class="btn-secondary" style="text-decoration: none; font-size: 13px;">
+      <a href="emcee" target="_blank" class="btn-secondary" style="text-decoration: none; font-size: 13px;">
         🎤 Open Emcee View
       </a>
-      <a href="/entry" target="_blank" class="btn-secondary" style="text-decoration: none; font-size: 13px;">
+      <a href="entry" target="_blank" class="btn-secondary" style="text-decoration: none; font-size: 13px;">
         📝 Volunteer Terminal
       </a>
-      <a href="/api/export/csv" class="btn-primary" style="text-decoration: none; font-size: 13px; padding: 10px 18px;">
+      <a id="link-export-csv" href="api/export/csv" class="btn-primary" style="text-decoration: none; font-size: 13px; padding: 10px 18px;">
         📊 Export Finance CSV
       </a>
     </div>
@@ -315,7 +315,7 @@
     </div>
   </section>
 
-  <script src="/js/mock-backend.js"></script>
-  <script src="/js/control.js"></script>
+  <script src="js/mock-backend.js"></script>
+  <script src="js/control.js"></script>
 </body>
 </html>

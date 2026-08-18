@@ -3,13 +3,16 @@
  */
 
 (function () {
+  const basePath = window.location.pathname.replace(/\/[^/]*$/, '');
+  const API_BASE = (basePath === '/' || basePath === '') ? '/api' : `${basePath}/api`;
+
   function init() {
     startPolling();
   }
 
   async function pollEmceeState() {
     try {
-      const res = await fetch('/api/state?role=emcee');
+      const res = await fetch(`${API_BASE}/state?role=emcee`);
       if (!res.ok) return;
 
       const data = await res.json();

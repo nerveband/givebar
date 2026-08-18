@@ -3,6 +3,9 @@
  */
 
 (function () {
+  const basePath = window.location.pathname.replace(/\/[^/]*$/, '');
+  const API_BASE = (basePath === '/' || basePath === '') ? '/api' : `${basePath}/api`;
+
   let odometer = null;
   let lastSeq = 0;
   let lastConfettiTrigger = 0;
@@ -100,7 +103,7 @@
   // --- 1-Second Sequence Polling ---
   async function fetchState() {
     try {
-      const res = await fetch(`/api/state?role=stage&since=${lastSeq}`);
+      const res = await fetch(`${API_BASE}/state?role=stage&since=${lastSeq}`);
       if (!res.ok) return;
 
       const data = await res.json();
@@ -161,7 +164,7 @@
         currentQrUrl = data.qr_donate_url;
         const qrImg = document.getElementById('stage-qr-img');
         if (qrImg) {
-          qrImg.src = `/api/qr?url=${encodeURIComponent(currentQrUrl)}&size=240`;
+          qrImg.src = `${API_BASE}/qr?url=${encodeURIComponent(currentQrUrl)}&size=240`;
         }
       }
 

@@ -3,6 +3,9 @@
  */
 
 (function () {
+  const basePath = window.location.pathname.replace(/\/[^/]*$/, '');
+  const API_BASE = (basePath === '/' || basePath === '') ? '/api' : `${basePath}/api`;
+
   let volunteerId = localStorage.getItem('givebar_volunteer_id');
   if (!volunteerId) {
     volunteerId = `V-${Math.floor(Math.random() * 899 + 100)}`;
@@ -232,7 +235,7 @@
     const queue = [...outbox];
     for (const item of queue) {
       try {
-        const res = await fetch(`/api/donation/${item.donation_id}`, {
+        const res = await fetch(`${API_BASE}/donation/${item.donation_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(item)
@@ -292,7 +295,7 @@
       banner.style.display = 'none';
 
       try {
-        const res = await fetch(`/api/donation/${item.donation_id}/void`, {
+        const res = await fetch(`${API_BASE}/donation/${item.donation_id}/void`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -313,7 +316,7 @@
   // --- Background Polling (State & Personal Audit Log) ---
   async function pollState() {
     try {
-      const res = await fetch(`/api/state?role=entry&volunteer_id=${encodeURIComponent(volunteerId)}`);
+      const res = await fetch(`${API_BASE}/state?role=entry&volunteer_id=${encodeURIComponent(volunteerId)}`);
       const connDot = document.getElementById('conn-dot');
 
       if (!res.ok) {
