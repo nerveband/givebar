@@ -164,7 +164,7 @@
         currentQrUrl = data.qr_donate_url;
         const qrImg = document.getElementById('stage-qr-img');
         if (qrImg) {
-          qrImg.src = `${API_BASE}/qr?url=${encodeURIComponent(currentQrUrl)}&size=240`;
+          qrImg.src = `${API_BASE}/qr?url=${encodeURIComponent(currentQrUrl)}&size=288`;
         }
       }
 
@@ -187,6 +187,7 @@
   }
 
   // --- Dynamic Milestone Notches ---
+  // --- Dynamic Milestone Notches (Staggered Anti-Collision) ---
   function updateMilestones(milestones, goalCents, currentCents) {
     if (goalCents <= 0) return;
     const key = JSON.stringify(milestones) + `_${goalCents}_${currentCents}`;
@@ -197,7 +198,7 @@
     if (!container) return;
     container.innerHTML = '';
 
-    milestones.forEach((m) => {
+    milestones.forEach((m, idx) => {
       if (m.cents <= 0 || m.cents >= goalCents) return; // Only intermediate milestones
 
       const pct = (m.cents / goalCents) * 100;
@@ -208,8 +209,9 @@
         : `$${Math.floor(dollars / 1000)}k`;
 
       const marker = document.createElement('div');
-      marker.className = `milestone-marker ${isReached ? 'reached' : ''}`;
-      marker.style.left = `${pct}%`;
+      const isStaggered = idx % 2 === 1;
+      marker.className = `milestone-marker ${isStaggered ? 'stagger-high' : ''} ${isReached ? 'reached' : ''}`;
+      marker.style.left = `clamp(54px, ${pct}%, calc(100% - 54px))`;
 
       marker.innerHTML = `
         <div class="milestone-pill">
@@ -222,10 +224,11 @@
     });
   }
 
-  // --- Paced Chyron Stream Rotator ---
+  // --- Paced Chyron Stream Rotator with Surge Aggregation ---
+  let chyronTick = 0;
   function startChyronRotator() {
     rotateChyron();
-    chyronInterval = setInterval(rotateChyron, 4500);
+    chyronInterval = setInterval(rotateChyron, 4000);
   }
 
   function rotateChyron() {
@@ -237,6 +240,23 @@
         <div class="chyron-item">
           <span class="chyron-name">Welcoming all Gala Patrons & Guests</span>
           <span class="chyron-badge">Live</span>
+        </div>
+      `;
+      return;
+    }
+
+    chyronTick++;
+    // If rapid surge (> 6 gifts in stream) and every 3rd tick, show aggregate momentum toast
+    if (chyronList.length >= 6 && chyronTick % 3 === 0) {
+      const recentSubset = chyronList.slice(0, 8);
+      const sumCents = recentSubset.reduce((acc, c) => acc + c.amount_cents, 0);
+      const sumDollars = Math.floor(sumCents / 100).toLocaleString('en-US');
+
+      host.innerHTML = `
+        <div class="chyron-item" style="border-left-color: var(--emerald-400);">
+          <span style="font-size: 20px;">⚡</span>
+          <span class="chyron-name">${recentSubset.length} Pledges Streaming In • +$${sumDollars} Surge</span>
+          <span class="chyron-badge" style="background: rgba(74, 222, 128, 0.15); color: var(--emerald-400);">Momentum</span>
         </div>
       `;
       return;

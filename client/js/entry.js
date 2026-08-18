@@ -18,7 +18,7 @@
   let lastSubmittedDonation = null;
   let undoTimeout = null;
   let pendingSubmission = null;
-
+  let isPresetSelected = false;
   // Outbox for offline resilience
   let outbox = JSON.parse(localStorage.getItem('givebar_outbox') || '[]');
 
@@ -68,15 +68,21 @@
       const key = btn.getAttribute('data-key');
       let currentDollars = Math.floor(currentAmountCents / 100);
 
-      if (key === 'backspace') {
+      if (isPresetSelected && /\d/.test(key)) {
+        currentDollars = parseInt(key, 10);
+        isPresetSelected = false;
+      } else if (key === 'backspace') {
         const str = currentDollars.toString();
         const nextStr = str.length > 1 ? str.slice(0, -1) : '0';
         currentDollars = parseInt(nextStr, 10) || 0;
+        isPresetSelected = false;
       } else if (key === '00') {
         currentDollars = currentDollars * 100;
+        isPresetSelected = false;
       } else if (/\d/.test(key)) {
         const digit = parseInt(key, 10);
         currentDollars = currentDollars * 10 + digit;
+        isPresetSelected = false;
       }
 
       // Max ceiling $10,000,000 to prevent runaway overflow
@@ -101,11 +107,13 @@
 
       document.querySelectorAll('#tier-grid .tier-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
-
       const cents = parseInt(btn.getAttribute('data-cents') || '0', 10);
       if (cents > 0) {
         currentAmountCents = cents;
+        isPresetSelected = true;
         updateAmountDisplay();
+      } else {
+        isPresetSelected = false;
       }
     });
   }
@@ -197,7 +205,14 @@
       modal.style.display = 'none';
       pendingSubmission = null;
     });
-  }
+
+    // Escape key support for accessibility
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.style.display === 'flex') {
+        modal.style.display = 'none';
+        pendingSubmission = null;
+      }
+    });
 
   async function executeSubmission(payload) {
     // Add to local outbox
@@ -225,9 +240,12 @@
       b.classList.toggle('selected', b.getAttribute('data-cents') === '0');
     });
 
-    document.getElementById('input-donor-name').focus();
+    // Only auto-focus name on desktop to prevent mobile software keyboard from obstructing the numpad
+    if (!('ontouchstart' in window) && window.innerWidth >= 768) {
+      const nameField = document.getElementById('input-donor-name');
+      if (nameField) nameField.focus();
+    }
   }
-
   // --- Outbox Flush & Idempotent API ---
   async function flushOutbox() {
     if (outbox.length === 0) return;

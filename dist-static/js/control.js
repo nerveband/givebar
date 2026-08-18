@@ -43,8 +43,87 @@
     }
   }
 
+  // --- Non-Blocking Custom Modal Dialog Engine ---
+  let activeModalCallback = null;
+
+  function showCockpitModal({ icon = '⚡', title, desc, hasInput = false, inputPlaceholder = '', confirmText = 'Confirm', isDanger = false, onConfirm }) {
+    const modal = document.getElementById('cockpit-modal');
+    const iconEl = document.getElementById('cockpit-modal-icon');
+    const titleEl = document.getElementById('cockpit-modal-title');
+    const descEl = document.getElementById('cockpit-modal-desc');
+    const inputWrap = document.getElementById('cockpit-modal-input-wrap');
+    const inputEl = document.getElementById('cockpit-modal-input');
+    const confirmBtn = document.getElementById('btn-cockpit-confirm');
+
+    if (iconEl) iconEl.textContent = icon;
+    if (titleEl) titleEl.textContent = title;
+    if (descEl) descEl.textContent = desc;
+
+    if (hasInput) {
+      inputWrap.style.display = 'block';
+      inputEl.value = '';
+      inputEl.placeholder = inputPlaceholder;
+      setTimeout(() => inputEl.focus(), 50);
+    } else {
+      inputWrap.style.display = 'none';
+    }
+
+    if (confirmBtn) {
+      confirmBtn.textContent = confirmText;
+      confirmBtn.className = isDanger ? 'btn-danger' : 'btn-primary';
+      if (isDanger) {
+        confirmBtn.style.background = 'var(--crimson-500)';
+        confirmBtn.style.color = '#FFFFFF';
+      } else {
+        confirmBtn.style.background = '';
+        confirmBtn.style.color = '';
+      }
+    }
+
+    activeModalCallback = onConfirm;
+    modal.style.display = 'flex';
+  }
+
+  function setupModalListeners() {
+    const modal = document.getElementById('cockpit-modal');
+    const confirmBtn = document.getElementById('btn-cockpit-confirm');
+    const cancelBtn = document.getElementById('btn-cockpit-cancel');
+    const inputEl = document.getElementById('cockpit-modal-input');
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', () => {
+        const val = inputEl ? inputEl.value : '';
+        modal.style.display = 'none';
+        if (activeModalCallback) {
+          const cb = activeModalCallback;
+          activeModalCallback = null;
+          cb(val);
+        }
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+        activeModalCallback = null;
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.style.display === 'flex') {
+        modal.style.display = 'none';
+        activeModalCallback = null;
+      }
+      if (e.key === 'Enter' && modal.style.display === 'flex') {
+        confirmBtn.click();
+      }
+    });
+  }
+
   // --- Emergency Actions ---
   function setupEmergencyActions() {
+    setupModalListeners();
+
     // Freeze / Unfreeze
     const freezeBtn = document.getElementById('btn-toggle-freeze');
     if (freezeBtn) {
@@ -66,33 +145,45 @@
       });
     }
 
-    // Force Odometer Resync
+    // Force Odometer Resync (Non-blocking Modal)
     const resyncBtn = document.getElementById('btn-resync-odometer');
     if (resyncBtn) {
-      resyncBtn.addEventListener('click', async () => {
-        if (confirm('Force Stage Odometer to immediately resync to true authoritative total? (Bypasses no-backward freeze)')) {
-          await postControl({ action: 'resync_odometer' });
-        }
+      resyncBtn.addEventListener('click', () => {
+        showCockpitModal({
+          icon: '🔄',
+          title: 'Force Stage Odometer Resync',
+          desc: 'This will immediately force the ballroom projector odometer to match the authoritative ledger total, clearing any downward void freeze floor.',
+          confirmText: 'Yes, Force Resync',
+          isDanger: false,
+          onConfirm: async () => {
+            await postControl({ action: 'resync_odometer' });
+          }
+        });
       });
     }
 
-    // Manual Override Total
+    // Manual Override Total (Non-blocking Modal)
     const overrideBtn = document.getElementById('btn-set-override');
     if (overrideBtn) {
-      overrideBtn.addEventListener('click', async () => {
-        const input = prompt('Enter manual override total in USD (or leave blank to clear override):');
-        if (input === null) return;
-
-        if (input.trim() === '') {
-          await postControl({ action: 'clear_override' });
-        } else {
-          const dollars = parseFloat(input.replace(/[^0-9.]/g, ''));
-          if (isNaN(dollars) || dollars < 0) {
-            alert('Invalid dollar amount');
-            return;
+      overrideBtn.addEventListener('click', () => {
+        showCockpitModal({
+          icon: '⚡',
+          title: 'Manual Total Override',
+          desc: 'Enter emergency total in USD (or leave blank and confirm to clear override):',
+          hasInput: true,
+          inputPlaceholder: 'e.g. 750000',
+          confirmText: 'Apply Override',
+          onConfirm: async (input) => {
+            if (!input || input.trim() === '') {
+              await postControl({ action: 'clear_override' });
+            } else {
+              const dollars = parseFloat(input.replace(/[^0-9.]/g, ''));
+              if (!isNaN(dollars) && dollars >= 0) {
+                await postControl({ action: 'set_override', override_cents: Math.round(dollars * 100) });
+              }
+            }
           }
-          await postControl({ action: 'set_override', override_cents: Math.round(dollars * 100) });
-        }
+        });
       });
     }
   }
@@ -182,13 +273,17 @@
   function setupLedgerActions() {
     const wipeBtn = document.getElementById('btn-wipe-ledger');
     if (wipeBtn) {
-      wipeBtn.addEventListener('click', async () => {
-        if (confirm('⚠️ CRITICAL WARNING: This will permanently delete all donations and reset the live gala ledger. Continue?')) {
-          if (confirm('Type YES in your mind and click OK to confirm complete ledger wipe.')) {
+      wipeBtn.addEventListener('click', () => {
+        showCockpitModal({
+          icon: '⚠️',
+          title: 'Wipe All Ledger Data',
+          desc: 'CRITICAL: This will permanently delete all pledges and reset the live gala ledger for a fresh rehearsal.',
+          confirmText: 'YES, WIPE ALL DATA',
+          isDanger: true,
+          onConfirm: async () => {
             await postControl({ action: 'reset_ledger', confirm_wipe: true });
-            alert('Ledger has been completely wiped for fresh rehearsal.');
           }
-        }
+        });
       });
     }
 
@@ -210,24 +305,29 @@
         return;
       }
 
-      // Void Donation
+      // Void Donation (Non-blocking Modal)
       const voidBtn = e.target.closest('[data-void-id]');
       if (voidBtn) {
         const donationId = voidBtn.getAttribute('data-void-id');
-        if (confirm(`Void donation ${donationId}? This will remove it from total calculations.`)) {
-          try {
-            const res = await fetch(`${API_BASE}/donation/${donationId}/void`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ entered_by: 'AV_CONTROL', reason: 'Voided from Control Deck' })
-            });
-            if (res.ok) {
-              alert('Donation successfully voided.');
-            }
-          } catch {
-            alert('Failed to void donation.');
+        showCockpitModal({
+          icon: '🗑️',
+          title: 'Void Pledge',
+          desc: `Void pledge ${donationId}? This will remove it from the authoritative gala total and stage display.`,
+          confirmText: 'Void Pledge',
+          isDanger: true,
+          onConfirm: async () => {
+            try {
+              const res = await fetch(`${API_BASE}/donation/${donationId}/void`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entered_by: 'AV_CONTROL', reason: 'Voided from Control Deck' })
+              });
+              if (res.ok) {
+                pollControlState();
+              }
+            } catch {}
           }
-        }
+        });
         return;
       }
     });
@@ -286,6 +386,7 @@
     }
   }
 
+  // --- DOM Diffing Delay Buffer Queue (Preserves Clicks and Hover State) ---
   function renderChyronQueue(chyrons) {
     const container = document.getElementById('chyron-queue-container');
     if (!container) return;
@@ -299,8 +400,22 @@
       return;
     }
 
-    let html = '';
-    chyrons.forEach(item => {
+    // Remove placeholder if present
+    const placeholder = container.querySelector('div[style*="text-align: center"]');
+    if (placeholder) placeholder.remove();
+
+    const currentIds = new Set(chyrons.map(c => c.donation_id));
+
+    // Remove dead items
+    Array.from(container.children).forEach(child => {
+      const id = child.getAttribute('data-item-id');
+      if (id && !currentIds.has(id)) {
+        child.remove();
+      }
+    });
+
+    // Update or insert items
+    chyrons.forEach((item, index) => {
       const amountStr = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
       let statusClass = item.is_live_on_stage ? 'live' : 'staged';
       if (item.is_yanked) statusClass = 'yanked';
@@ -321,8 +436,20 @@
         yankBtn = `<button type="button" class="btn-danger" data-yank-id="${item.donation_id}" style="padding: 6px 14px; font-size: 13px; font-weight: 800;">🛑 YANK</button>`;
       }
 
-      html += `
-        <div class="delay-queue-item ${statusClass}">
+      let existing = container.querySelector(`[data-item-id="${item.donation_id}"]`);
+      if (existing) {
+        // In-place update without DOM wipe
+        existing.className = `delay-queue-item ${statusClass}`;
+        const actionWrap = existing.querySelector('.queue-action-wrap');
+        if (actionWrap) {
+          actionWrap.innerHTML = `${statusBadge} ${yankBtn}`;
+        }
+      } else {
+        // Prepend new element
+        const el = document.createElement('div');
+        el.className = `delay-queue-item ${statusClass}`;
+        el.setAttribute('data-item-id', item.donation_id);
+        el.innerHTML = `
           <div>
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
               <span style="font-size: 17px; font-weight: 800; color: var(--gold-300);">${amountStr}</span>
@@ -333,16 +460,19 @@
               Legal: ${escapeHTML(item.donor_name)} • Card: ${item.card_number || '-'} • Clerk: ${item.entered_by || '-'}
             </div>
           </div>
-
-          <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="queue-action-wrap" style="display: flex; align-items: center; gap: 12px;">
             ${statusBadge}
             ${yankBtn}
           </div>
-        </div>
-      `;
-    });
+        `;
 
-    container.innerHTML = html;
+        if (container.children[index]) {
+          container.insertBefore(el, container.children[index]);
+        } else {
+          container.appendChild(el);
+        }
+      }
+    });
   }
 
   function renderLedgerTable(events) {

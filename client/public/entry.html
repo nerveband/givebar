@@ -55,11 +55,12 @@
   </header>
 
   <!-- 1-Tap Undo Banner (Transient after submission) -->
-  <div id="undo-banner" style="display: none; background: rgba(226, 183, 85, 0.15); border: 1px solid var(--gold-400); border-radius: 14px; padding: 12px 18px; margin-bottom: 20px; align-items: center; justify-content: space-between;">
+  <!-- 1-Tap Undo Floating Toast (Zero Layout Shift) -->
+  <div id="undo-banner" class="floating-undo-toast" style="display: none; align-items: center; justify-content: space-between;">
     <div style="font-size: 14px; font-weight: 700; color: var(--gold-300);">
-      Entered: <span id="undo-desc">Pledge</span>
+      Entered: <span id="undo-desc" style="color: var(--text-primary); font-weight: 800;">Pledge</span>
     </div>
-    <button id="btn-undo" class="btn-danger" style="padding: 6px 14px; font-size: 13px;">
+    <button id="btn-undo" class="btn-danger" style="padding: 8px 16px; font-size: 13px; box-shadow: 0 4px 14px var(--crimson-glow);">
       ↺ Undo Entry
     </button>
   </div>
@@ -179,10 +180,10 @@
   </section>
 
   <!-- $9,500 Major Gift Intercept Modal -->
-  <div id="guardrail-modal" class="modal-backdrop" style="display: none;">
+  <div id="guardrail-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="guardrail-modal-title" style="display: none;">
     <div class="guardrail-modal-card">
       <div class="guardrail-icon-badge">⚠️</div>
-      <h3 style="font-size: 24px; font-weight: 800; color: var(--crimson-400); margin-bottom: 8px;">
+      <h3 id="guardrail-modal-title" style="font-size: 24px; font-weight: 800; color: var(--crimson-400); margin-bottom: 8px;">
         Major Gift Confirmation
       </h3>
       <p style="font-size: 15px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 20px;">

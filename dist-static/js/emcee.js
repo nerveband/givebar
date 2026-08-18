@@ -62,6 +62,8 @@
     }
   }
 
+  let knownTopGiftIds = new Set();
+
   function renderTopGifts(gifts) {
     const container = document.getElementById('top-gifts-container');
     if (!container) return;
@@ -78,22 +80,38 @@
     let html = '';
     gifts.forEach((item, index) => {
       const amountStr = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
+      const isNewMajor = !knownTopGiftIds.has(item.donation_id) && item.amount_cents >= 1000000;
+      
+      let noteBadge = '';
+      if (item.notes) {
+        const tableMatch = item.notes.match(/Table\s*#?\s*(\d+)/i);
+        if (tableMatch) {
+          noteBadge = `<span class="table-badge">TABLE ${tableMatch[1]}</span> <span style="font-size: 14px; font-weight: 700; color: var(--text-secondary); margin-left: 6px;">${escapeHTML(item.notes.replace(tableMatch[0], '').trim())}</span>`;
+        } else {
+          noteBadge = `<span style="font-size: 14px; font-weight: 700; color: var(--gold-300);">${escapeHTML(item.notes)}</span>`;
+        }
+      } else {
+        noteBadge = `<span style="font-size: 13px; font-weight: 600; color: var(--text-muted);">General Gala Pledge</span>`;
+      }
+
       html += `
-        <div class="shoutout-card">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <span style="font-size: 14px; font-weight: 800; color: var(--gold-400);">#${index + 1}</span>
+        <div class="shoutout-card ${isNewMajor ? 'new-major-gift' : ''}">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 16px; font-weight: 900; color: var(--gold-400); min-width: 28px;">#${index + 1}</span>
             <div>
-              <div style="font-size: 16px; font-weight: 800; color: var(--text-primary);">${escapeHTML(item.display_name)}</div>
-              <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
-                ${item.notes ? escapeHTML(item.notes) : 'General Gala Pledge'}
+              <div style="font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">${escapeHTML(item.display_name)}</div>
+              <div style="margin-top: 4px; display: flex; align-items: center; gap: 6px;">
+                ${noteBadge}
               </div>
             </div>
           </div>
-          <div style="font-size: 20px; font-weight: 900; color: var(--gold-300);">${amountStr}</div>
+          <div style="font-size: 24px; font-weight: 900; color: var(--gold-300); letter-spacing: -0.02em;">${amountStr}</div>
         </div>
       `;
     });
 
+    // Track known IDs so beacon animation triggers only when fresh gifts enter top stack
+    knownTopGiftIds = new Set(gifts.map(g => g.donation_id));
     container.innerHTML = html;
   }
 
@@ -115,14 +133,25 @@
       const amountStr = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
       const timeAgo = item.seconds_ago < 5 ? 'Just now' : `${item.seconds_ago}s ago`;
 
+      let noteSnippet = '';
+      if (item.notes) {
+        const tableMatch = item.notes.match(/Table\s*#?\s*(\d+)/i);
+        if (tableMatch) {
+          noteSnippet = `<span class="table-badge" style="font-size: 10px; padding: 2px 6px;">T${tableMatch[1]}</span>`;
+        }
+      }
+
       html += `
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.04);">
-          <div>
-            <div style="font-size: 14px; font-weight: 700; color: var(--text-primary);">${escapeHTML(item.display_name)}</div>
-            <div style="font-size: 11px; color: var(--text-muted);">${item.notes ? escapeHTML(item.notes) : 'Live Table Pledge'}</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            ${noteSnippet}
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--text-primary);">${escapeHTML(item.display_name)}</div>
+              <div style="font-size: 12px; color: var(--text-muted);">${item.notes ? escapeHTML(item.notes) : 'Live Table Pledge'}</div>
+            </div>
           </div>
           <div style="text-align: right;">
-            <div style="font-size: 15px; font-weight: 800; color: var(--gold-300);">${amountStr}</div>
+            <div style="font-size: 16px; font-weight: 800; color: var(--gold-300);">${amountStr}</div>
             <div style="font-size: 11px; color: var(--text-muted);">${timeAgo}</div>
           </div>
         </div>

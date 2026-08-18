@@ -315,6 +315,22 @@
     </div>
   </section>
 
+  <!-- Non-Blocking Action Modal (Replaces blocking browser prompt/confirm) -->
+  <div id="cockpit-modal" class="modal-backdrop" role="dialog" aria-modal="true" style="display: none;">
+    <div class="guardrail-modal-card" style="border-color: var(--gold-400); box-shadow: 0 25px 60px rgba(0,0,0,0.9), 0 0 35px var(--gold-glow); background: #0E131E;">
+      <div id="cockpit-modal-icon" class="guardrail-icon-badge" style="border-color: var(--gold-400); color: var(--gold-400); background: rgba(226, 183, 85, 0.15);">⚡</div>
+      <h3 id="cockpit-modal-title" style="font-size: 22px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">Action Title</h3>
+      <p id="cockpit-modal-desc" style="font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 18px;">Action description</p>
+      <div id="cockpit-modal-input-wrap" style="margin-bottom: 20px; display: none;">
+        <input type="text" id="cockpit-modal-input" class="input-dark" style="font-size: 18px; font-weight: 700; text-align: center;" placeholder="Enter value">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button type="button" id="btn-cockpit-confirm" class="btn-primary" style="height: 48px; font-size: 15px;">Confirm</button>
+        <button type="button" id="btn-cockpit-cancel" class="btn-secondary" style="height: 42px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/mock-backend.js"></script>
   <script src="js/control.js"></script>
 </body>
