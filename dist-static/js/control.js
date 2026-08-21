@@ -1,6 +1,6 @@
 /**
  * Givebar — Event Control Room Controller
- * 3-Tab Operational Layout, Live Settings Management, Staging Hold Safety
+ * 3-Tab Operational Layout, Live Settings Management, QR Customizer, Staging Hold Safety
  */
 
 (function () {
@@ -13,10 +13,13 @@
   let activeModalCallback = null;
   let selectedThemePreset = 'champagne';
   let selectedThemeHue = 85;
+  let selectedQrStyle = 'dots';
+  let selectedQrBadge = 'star';
 
   function init() {
     setupTabs();
     setupSwatches();
+    setupQrCustomizer();
     setupTransportActions();
     setupRehearsalActions();
     setupSettingsForm();
@@ -91,8 +94,46 @@
     });
   }
 
-  // --- Modal Engine (Accessible, Non-Blocking) ---
-  function showModal({ icon = '⚡', title, desc, hasInput = false, inputPlaceholder = '', confirmText = 'Confirm', isDanger = false, onConfirm }) {
+  // --- QR Customizer & Live Preview ---
+  function setupQrCustomizer() {
+    const styleBtns = document.querySelectorAll('[data-qr-style]');
+    const badgeBtns = document.querySelectorAll('[data-qr-badge]');
+    const urlInput = document.getElementById('input-set-qr-url');
+
+    function updateQrPreview() {
+      const previewImg = document.getElementById('qr-customizer-preview');
+      if (!previewImg) return;
+      const url = (urlInput ? urlInput.value : '').trim() || 'https://give.hope.org/donate';
+      previewImg.src = `${API_BASE}/qr?url=${encodeURIComponent(url)}&style=${encodeURIComponent(selectedQrStyle)}&center=${encodeURIComponent(selectedQrBadge)}&size=160`;
+    }
+
+    styleBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        styleBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedQrStyle = btn.getAttribute('data-qr-style') || 'dots';
+        updateQrPreview();
+      });
+    });
+
+    badgeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        badgeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedQrBadge = btn.getAttribute('data-qr-badge') || 'star';
+        updateQrPreview();
+      });
+    });
+
+    if (urlInput) {
+      urlInput.addEventListener('input', () => {
+        updateQrPreview();
+      });
+    }
+  }
+
+  // --- Modal Engine (Accessible, Non-Blocking, Phosphor Icons) ---
+  function showModal({ iconHtml = '<i class="ph-bold ph-lightning"></i>', title, desc, hasInput = false, inputPlaceholder = '', confirmText = 'Confirm', isDanger = false, onConfirm }) {
     const modal = document.getElementById('cockpit-modal');
     const iconEl = document.getElementById('cockpit-modal-icon');
     const titleEl = document.getElementById('cockpit-modal-title');
@@ -101,7 +142,7 @@
     const inputEl = document.getElementById('cockpit-modal-input');
     const confirmBtn = document.getElementById('btn-cockpit-confirm');
 
-    if (iconEl) iconEl.textContent = icon;
+    if (iconEl) iconEl.innerHTML = iconHtml;
     if (titleEl) titleEl.textContent = title;
     if (descEl) descEl.textContent = desc;
 
@@ -181,7 +222,7 @@
 
     const doResync = async () => {
       showModal({
-        icon: '🔄',
+        iconHtml: '<i class="ph-bold ph-arrows-clockwise"></i>',
         title: 'Resync Ballroom Screen Total',
         desc: 'This resets the stage odometer floor directly to match the verified total raised in the ledger.',
         confirmText: 'Yes, Resync Screen Total',
@@ -198,7 +239,7 @@
     if (overrideBtn) {
       overrideBtn.addEventListener('click', () => {
         showModal({
-          icon: '⚡',
+          iconHtml: '<i class="ph-bold ph-pencil-simple"></i>',
           title: 'Adjust Ballroom Screen Total',
           desc: 'Enter an override dollar amount for the stage display (leave blank to clear override):',
           hasInput: true,
@@ -222,7 +263,7 @@
     if (wipeBtn) {
       wipeBtn.addEventListener('click', () => {
         showModal({
-          icon: '⚠️',
+          iconHtml: '<i class="ph-bold ph-warning"></i>',
           title: 'Reset All Event Data?',
           desc: 'Type WIPE to permanently delete all test pledges and reset the ledger for a fresh gala night:',
           hasInput: true,
@@ -263,6 +304,8 @@
         event_subtitle: subtitle,
         goal_cents: goalDollars * 100,
         qr_donate_url: qrUrl,
+        qr_style: selectedQrStyle,
+        qr_center_icon: selectedQrBadge,
         theme_preset: selectedThemePreset,
         brand_hue: selectedThemeHue,
         is_match_active: matchActive,
@@ -286,10 +329,10 @@
       }
 
       if (res && res.ok) {
-        saveBtn.textContent = '✓ Settings Saved!';
+        saveBtn.innerHTML = '<i class="ph-bold ph-check"></i> Settings Saved!';
         saveBtn.style.background = 'var(--color-success)';
         setTimeout(() => {
-          saveBtn.textContent = 'Save Event Settings';
+          saveBtn.innerHTML = '<i class="ph-bold ph-check"></i> Save Event Settings';
           saveBtn.style.background = '';
         }, 2000);
         pollState();
@@ -382,11 +425,12 @@
 
     isFrozen = Boolean(data.event_state?.is_frozen);
     if (displayStatusEl) {
-      displayStatusEl.textContent = isFrozen ? '⏸️ PAUSED (FROZEN)' : '● LIVE ON-AIR';
-      displayStatusEl.style.color = isFrozen ? 'var(--color-danger)' : 'var(--color-success)';
+      displayStatusEl.innerHTML = isFrozen
+        ? '<span style="color: var(--color-danger);"><i class="ph-bold ph-pause"></i> PAUSED</span>'
+        : '<span style="color: var(--color-success);"><span class="pulse-dot"></span> LIVE ON-AIR</span>';
     }
     if (freezeBtn) {
-      freezeBtn.textContent = isFrozen ? '▶️ Resume Stage Screen' : '⏸️ Pause Ballroom Screen';
+      freezeBtn.innerHTML = isFrozen ? '<i class="ph-bold ph-play"></i> Resume Stage Screen' : '<i class="ph-bold ph-pause"></i> Pause Ballroom Screen';
       freezeBtn.className = isFrozen ? 'btn-primary' : 'btn-secondary';
     }
 
@@ -426,14 +470,14 @@
       let actionBtn = '';
 
       if (item.is_held) {
-        statusBadge = `<span class="badge badge-held">HELD</span>`;
-        actionBtn = `<button type="button" class="btn-secondary" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarRelease('${item.donation_id}')">Release to Stage</button>`;
+        statusBadge = `<span class="badge badge-held"><i class="ph-bold ph-pause"></i> HELD</span>`;
+        actionBtn = `<button type="button" class="btn-secondary" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarRelease('${item.donation_id}')"><i class="ph-bold ph-play"></i> Release to Stage</button>`;
       } else if (isStaged) {
-        statusBadge = `<span class="badge badge-staged">REVIEW (${item.remaining_delay_sec}s)</span>`;
-        actionBtn = `<button type="button" class="btn-danger" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarHold('${item.donation_id}')">Hold from Stage</button>`;
+        statusBadge = `<span class="badge badge-staged"><i class="ph-bold ph-clock"></i> REVIEW (${item.remaining_delay_sec}s)</span>`;
+        actionBtn = `<button type="button" class="btn-danger" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarHold('${item.donation_id}')"><i class="ph-bold ph-hand"></i> Hold from Stage</button>`;
       } else {
-        statusBadge = `<span class="badge badge-live">ON-AIR</span>`;
-        actionBtn = `<button type="button" class="btn-ghost" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarHold('${item.donation_id}')">Remove</button>`;
+        statusBadge = `<span class="badge badge-live"><span class="pulse-dot"></span> ON-AIR</span>`;
+        actionBtn = `<button type="button" class="btn-ghost" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarHold('${item.donation_id}')"><i class="ph-bold ph-x"></i> Remove</button>`;
       }
 
       html += `
@@ -477,7 +521,7 @@
 
       let actionHtml = '-';
       if (!isMatch && !isVoid) {
-        actionHtml = `<button type="button" class="btn-ghost" style="font-size: 11px; padding: 4px 8px;" onclick="window.givebarVoidPrompt('${ev.donation_id}')">Void</button>`;
+        actionHtml = `<button type="button" class="btn-ghost" style="font-size: 11px; padding: 4px 8px;" onclick="window.givebarVoidPrompt('${ev.donation_id}')"><i class="ph-bold ph-trash"></i> Void</button>`;
       }
 
       html += `
@@ -519,13 +563,34 @@
     if (qrUrlInput && state.qr_donate_url) qrUrlInput.value = state.qr_donate_url;
 
     if (state.theme_preset) {
+      selectedThemePreset = state.theme_preset;
       document.querySelectorAll('.theme-swatch').forEach(s => {
         s.classList.toggle('active', s.getAttribute('data-preset') === state.theme_preset);
       });
     }
+
+    if (state.qr_style) {
+      selectedQrStyle = state.qr_style;
+      document.querySelectorAll('[data-qr-style]').forEach(s => {
+        s.classList.toggle('active', s.getAttribute('data-qr-style') === state.qr_style);
+      });
+    }
+
+    if (state.qr_center_icon) {
+      selectedQrBadge = state.qr_center_icon;
+      document.querySelectorAll('[data-qr-badge]').forEach(s => {
+        s.classList.toggle('active', s.getAttribute('data-qr-badge') === state.qr_center_icon);
+      });
+    }
+
+    // Refresh preview
+    const previewImg = document.getElementById('qr-customizer-preview');
+    if (previewImg && state.qr_donate_url) {
+      previewImg.src = `${API_BASE}/qr?url=${encodeURIComponent(state.qr_donate_url)}&style=${encodeURIComponent(state.qr_style || 'dots')}&center=${encodeURIComponent(state.qr_center_icon || 'star')}&size=160`;
+    }
   }
 
-  // Global Action Handlers for inline onclicks
+  // Global Action Handlers
   window.givebarHold = async (donationId) => {
     await postControl({ action: 'hold_donation', donation_id: donationId });
     pollState();
@@ -538,7 +603,7 @@
 
   window.givebarVoidPrompt = (donationId) => {
     showModal({
-      icon: '🗑️',
+      iconHtml: '<i class="ph-bold ph-trash"></i>',
       title: 'Void Donation?',
       desc: 'Enter the reason for voiding this donation from the authoritative ledger:',
       hasInput: true,
@@ -550,7 +615,7 @@
           await fetch(`${API_BASE}/donation/${donationId}/void`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ entered_by: 'CONTROL_DECK', reason: reason || 'Voided by operator' })
+            body: JSON.stringify({ entered_by: 'CONTROL_ROOM', reason: reason || 'Voided by operator' })
           });
           pollState();
         } catch {

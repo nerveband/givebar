@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="css/app.css">
   <style>
     .control-shell {
-      max-width: 1400px;
+      max-width: 1440px;
       margin: 0 auto;
       padding: var(--space-6) var(--space-5);
     }
@@ -24,7 +24,8 @@
       align-items: center;
       gap: var(--space-2);
       padding: var(--space-2) var(--space-4);
-      background: var(--bg-canvas);
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
       border: 1px solid var(--border-subtle);
       border-radius: var(--brand-radius);
       color: var(--ink-primary);
@@ -37,7 +38,7 @@
     .theme-swatch.active {
       border-color: var(--brand-accent);
       background: var(--bg-elevated);
-      box-shadow: 0 0 12px rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 16px rgba(255, 255, 255, 0.08);
     }
 
     .swatch-circle {
@@ -51,8 +52,9 @@
       align-items: center;
       justify-content: space-between;
       gap: var(--space-4);
-      padding: var(--space-4);
-      background: var(--bg-surface);
+      padding: var(--space-4) var(--space-5);
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
       border: 1px solid var(--border-subtle);
       border-radius: var(--brand-radius);
       margin-bottom: var(--space-3);
@@ -71,6 +73,49 @@
     .queue-row.live {
       border-left: 4px solid var(--color-success);
     }
+
+    .qr-preview-box {
+      background: var(--bg-glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--brand-radius);
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    .selector-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: var(--space-2);
+      margin-top: var(--space-2);
+    }
+
+    .selector-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      padding: var(--space-3);
+      background: var(--bg-glass);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--brand-radius);
+      color: var(--ink-primary);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .selector-btn.active {
+      border-color: var(--brand-accent);
+      background: var(--bg-elevated);
+      color: var(--brand-accent);
+    }
   </style>
 </head>
 <body>
@@ -82,26 +127,26 @@
       <div>
         <div style="display: flex; align-items: center; gap: var(--space-3);">
           <h1 style="font-size: var(--text-2xl); font-weight: 900; letter-spacing: -0.03em;">Givebar Control Room</h1>
-          <span class="badge badge-live">Master Deck</span>
+          <span class="badge badge-live"><i class="ph-bold ph-broadcast"></i> Master Console</span>
         </div>
         <div id="event-name-sub" style="font-size: var(--text-sm); color: var(--ink-muted); margin-top: var(--space-1);">
           Annual Gala & Benefit Auction
         </div>
       </div>
 
-      <!-- Quick Surface Navigation -->
+      <!-- Quick Surface Navigation (Phosphor Icons) -->
       <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
         <a href="stage" target="_blank" class="btn-secondary" style="font-size: var(--text-xs); min-height: 40px;">
-          Main Ballroom Screen ↗
+          <i class="ph-bold ph-monitor"></i> Main Ballroom Screen
         </a>
         <a href="emcee" target="_blank" class="btn-secondary" style="font-size: var(--text-xs); min-height: 40px;">
-          Podium Screen ↗
+          <i class="ph-bold ph-microphone"></i> Podium Screen
         </a>
         <a href="entry" target="_blank" class="btn-secondary" style="font-size: var(--text-xs); min-height: 40px;">
-          Volunteer Pad ↗
+          <i class="ph-bold ph-device-mobile"></i> Volunteer Pad
         </a>
         <a id="link-export-csv" href="api/export/csv" class="btn-primary" style="font-size: var(--text-xs); min-height: 40px;">
-          Download Finance CSV
+          <i class="ph-bold ph-file-csv"></i> Download Finance CSV
         </a>
       </div>
     </header>
@@ -111,14 +156,14 @@
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);">
         <div>
           <div style="font-size: var(--text-sm); font-weight: 800; color: var(--color-warning);">
-            ⚠️ Ballroom Screen Total Drift Notice
+            <i class="ph-bold ph-warning"></i> Ballroom Screen Total Drift Notice
           </div>
           <div style="font-size: var(--text-xs); color: var(--ink-primary); margin-top: 2px;" id="drift-desc">
             The ballroom screen is holding at $0 while the true verified ledger is $0.
           </div>
         </div>
         <button type="button" id="btn-reconcile-resync" class="btn-primary" style="min-height: 40px; font-size: var(--text-xs);">
-          Resync Ballroom Total →
+          <i class="ph-bold ph-arrows-clockwise"></i> Resync Ballroom Total
         </button>
       </div>
     </div>
@@ -134,7 +179,7 @@
       <div class="metric-card">
         <div class="metric-label">Direct Pledges</div>
         <div class="metric-val" id="ctrl-direct-raised">$0</div>
-        <div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: var(--space-1);" id="ctrl-active-count">0 active pledges</div>
+        <div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: var(--space-1);" id="ctrl-active-count">0 verified gifts</div>
       </div>
 
       <div class="metric-card">
@@ -150,32 +195,38 @@
       </div>
     </section>
 
-    <!-- Persistent Transport Action Bar -->
+    <!-- Persistent Transport Action Bar (Phosphor Icons) -->
     <section class="surface-card elevated" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-6); padding: var(--space-4) var(--space-5);">
       <div style="display: flex; align-items: center; gap: var(--space-2);">
-        <span style="font-size: var(--text-sm); font-weight: 800; color: var(--ink-muted); text-transform: uppercase;">Live Actions:</span>
+        <span style="font-size: var(--text-xs); font-weight: 800; color: var(--ink-muted); text-transform: uppercase;">Live Controls:</span>
       </div>
       <div style="display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;">
         <button type="button" id="btn-toggle-freeze" class="btn-secondary" style="min-height: 44px;">
-          Pause Ballroom Screen
+          <i class="ph-bold ph-pause"></i> Pause Ballroom Screen
         </button>
         <button type="button" id="btn-fire-confetti" class="btn-primary" style="min-height: 44px;">
-          Launch Stage Confetti
+          <i class="ph-fill ph-confetti"></i> Launch Stage Confetti
         </button>
         <button type="button" id="btn-resync-odometer" class="btn-secondary" style="min-height: 44px;">
-          Resync Screen Total
+          <i class="ph-bold ph-arrows-clockwise"></i> Resync Screen Total
         </button>
         <button type="button" id="btn-set-override" class="btn-secondary" style="min-height: 44px;">
-          Adjust Screen Total
+          <i class="ph-bold ph-pencil-simple"></i> Adjust Screen Total
         </button>
       </div>
     </section>
 
     <!-- 3-Tab Operational Navigation Bar -->
     <nav class="tab-bar">
-      <button type="button" class="tab-btn active" data-tab="queue">1. Live Stage Queue (8s Review)</button>
-      <button type="button" class="tab-btn" data-tab="donations">2. Donation List & Adjustments</button>
-      <button type="button" class="tab-btn" data-tab="setup">3. Event Setup & Rehearsal</button>
+      <button type="button" class="tab-btn active" data-tab="queue">
+        <i class="ph-bold ph-clock"></i> 1. Live Stage Queue (8s Review)
+      </button>
+      <button type="button" class="tab-btn" data-tab="donations">
+        <i class="ph-bold ph-list-numbers"></i> 2. Donation List & Ledger
+      </button>
+      <button type="button" class="tab-btn" data-tab="setup">
+        <i class="ph-bold ph-gear"></i> 3. Event Setup & QR Customizer
+      </button>
     </nav>
 
     <!-- TAB 1: Live Stage Queue (8-Second Delay & Hold Actions) -->
@@ -188,7 +239,7 @@
               Pledges count down for 8 seconds before going live on the ballroom screen. Click <strong>Hold from Stage</strong> to prevent typos.
             </p>
           </div>
-          <span class="badge badge-staged">8s Buffer Active</span>
+          <span class="badge badge-staged"><i class="ph-bold ph-shield-check"></i> 8s Review Active</span>
         </div>
 
         <div id="chyron-queue-container" style="max-height: 600px; overflow-y: auto;">
@@ -239,14 +290,14 @@
       </div>
     </main>
 
-    <!-- TAB 3: Event Setup & Rehearsal Simulator -->
+    <!-- TAB 3: Event Setup, QR Customizer & Rehearsal Simulator -->
     <main id="tab-pane-setup" style="display: none;">
       <div class="grid-2">
         
-        <!-- Zero-Code In-App Settings Form -->
+        <!-- Left: Zero-Code In-App Settings Form -->
         <section class="surface-card">
           <h2 style="font-size: var(--text-lg); font-weight: 800; margin-bottom: var(--space-4);">
-            ⚙️ Event Setup & Branding (Zero Code)
+            <i class="ph-bold ph-sliders"></i> Event Setup & Branding
           </h2>
 
           <form id="settings-form" onsubmit="return false;" style="display: flex; flex-direction: column; gap: var(--space-4);">
@@ -328,14 +379,6 @@
               </div>
             </div>
 
-            <!-- Stage QR Target URL -->
-            <div>
-              <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-qr-url">
-                Stage QR Target URL
-              </label>
-              <input type="text" id="input-set-qr-url" class="input-dark" value="https://give.hope.org/donate">
-            </div>
-
             <!-- Passcode Protection -->
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
               <div>
@@ -353,14 +396,91 @@
             </div>
 
             <button type="button" id="btn-save-all-settings" class="btn-primary" style="width: 100%; min-height: 52px; margin-top: var(--space-2);">
-              Save Event Settings
+              <i class="ph-bold ph-check"></i> Save Event Settings
             </button>
           </form>
         </section>
 
-        <!-- Rehearsal Simulator & Safety Tools -->
+        <!-- Right: Apple-Style Adaptive QR Customizer & Rehearsal Simulator -->
         <div style="display: flex; flex-direction: column; gap: var(--space-6);">
           
+          <!-- Live Interactive QR Code Customizer Card -->
+          <section class="surface-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
+              <h2 style="font-size: var(--text-lg); font-weight: 800;">
+                <i class="ph-bold ph-qr-code"></i> Ballroom QR Customizer
+              </h2>
+              <span class="badge badge-live">Adaptive SVG</span>
+            </div>
+            <p style="font-size: var(--text-xs); color: var(--ink-muted); line-height: 1.5; margin-bottom: var(--space-4);">
+              Customize the ballroom projection QR code with modern module styles, center badges, and adaptive color themes.
+            </p>
+
+            <div style="display: grid; grid-template-columns: 180px 1fr; gap: var(--space-5); align-items: center; margin-bottom: var(--space-5);">
+              <!-- Live Interactive Preview -->
+              <div class="qr-preview-box">
+                <img id="qr-customizer-preview" src="api/qr?url=https://give.hope.org/donate&style=dots&center=star&size=160" alt="QR Preview" style="width: 140px; height: 140px; border-radius: 8px; display: block;">
+                <div style="font-size: 11px; font-weight: 800; color: var(--ink-muted); margin-top: var(--space-2);">
+                  Live Preview
+                </div>
+              </div>
+
+              <!-- Controls -->
+              <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+                <!-- Style Selector -->
+                <div>
+                  <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: 4px;">
+                    Module Style
+                  </label>
+                  <div class="selector-grid">
+                    <button type="button" class="selector-btn active" data-qr-style="dots">
+                      <i class="ph-bold ph-circles-four"></i> Dots
+                    </button>
+                    <button type="button" class="selector-btn" data-qr-style="squircle">
+                      <i class="ph-bold ph-square"></i> Squircle
+                    </button>
+                    <button type="button" class="selector-btn" data-qr-style="squares">
+                      <i class="ph-bold ph-grid-four"></i> Square
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Center Badge Selector -->
+                <div>
+                  <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: 4px;">
+                    Center Shield Badge
+                  </label>
+                  <div class="selector-grid">
+                    <button type="button" class="selector-btn active" data-qr-badge="star">
+                      <i class="ph-fill ph-star"></i> Star
+                    </button>
+                    <button type="button" class="selector-btn" data-qr-badge="heart">
+                      <i class="ph-fill ph-heart"></i> Heart
+                    </button>
+                    <button type="button" class="selector-btn" data-qr-badge="gift">
+                      <i class="ph-fill ph-gift"></i> Gift
+                    </button>
+                    <button type="button" class="selector-btn" data-qr-badge="sparkle">
+                      <i class="ph-fill ph-sparkle"></i> Sparkle
+                    </button>
+                    <button type="button" class="selector-btn" data-qr-badge="none">
+                      None
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Target URL -->
+            <div>
+              <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-qr-url">
+                Donation Target URL
+              </label>
+              <input type="text" id="input-set-qr-url" class="input-dark" value="https://give.hope.org/donate">
+            </div>
+          </section>
+
+          <!-- Gala Tech Rehearsal Simulator -->
           <section class="surface-card">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
               <h2 style="font-size: var(--text-lg); font-weight: 800;">Gala Tech Rehearsal Simulator</h2>
@@ -372,13 +492,13 @@
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
               <button type="button" class="btn-secondary" data-sim="single">
-                + 1 Random Pledge ($5k)
+                + 1 Test Pledge ($5k)
               </button>
               <button type="button" class="btn-secondary" data-sim="burst">
                 Test 7-Pledge Burst
               </button>
               <button type="button" class="btn-secondary" data-sim="typo" style="color: var(--color-warning);">
-                Inject Test Typo (Test Hold)
+                Inject Test Typo (Hold Test)
               </button>
               <button type="button" class="btn-secondary" data-sim="milestone" style="color: var(--color-success);">
                 Cross Milestone Goal
@@ -389,10 +509,10 @@
           <!-- Danger Zone: Reset Event Ledger -->
           <section class="surface-card" style="border-color: var(--color-danger); background: rgba(239, 68, 68, 0.04);">
             <h2 style="font-size: var(--text-base); font-weight: 800; color: var(--color-danger); margin-bottom: var(--space-2);">
-              ⚠️ Reset Ledger Data (Fresh Gala Event)
+              <i class="ph-bold ph-trash"></i> Reset Ledger Data (Fresh Gala Event)
             </h2>
             <p style="font-size: var(--text-xs); color: var(--ink-muted); line-height: 1.4; margin-bottom: var(--space-4);">
-              Permanently wipes all test transactions and resets the odometer floor to zero.
+              Permanently wipes all test transactions and resets the odometer floor to zero for the live event.
             </p>
             <button type="button" id="btn-wipe-ledger" class="btn-danger" style="font-size: var(--text-xs); min-height: 44px;">
               Reset All Event Data
@@ -406,10 +526,12 @@
 
   </div>
 
-  <!-- Non-Blocking Action Modal (Replaces window.alert / prompt) -->
+  <!-- Non-Blocking Action Modal (Phosphor Icons) -->
   <div id="cockpit-modal" class="modal-backdrop" style="display: none;">
     <div class="modal-dialog">
-      <div id="cockpit-modal-icon" style="font-size: 2rem; margin-bottom: var(--space-2);">⚡</div>
+      <div id="cockpit-modal-icon" style="font-size: 2rem; color: var(--brand-accent); margin-bottom: var(--space-2);">
+        <i class="ph-bold ph-lightning"></i>
+      </div>
       <h3 id="cockpit-modal-title" style="font-size: var(--text-xl); margin-bottom: var(--space-2);">Action Title</h3>
       <p id="cockpit-modal-desc" style="font-size: var(--text-sm); color: var(--ink-secondary); line-height: 1.5; margin-bottom: var(--space-4);">Action description</p>
       

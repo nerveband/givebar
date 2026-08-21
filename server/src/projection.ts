@@ -30,6 +30,10 @@ export interface ThemeTokens {
   chroma: number;
   accent_hex: string;
   radius_px: number;
+  qr_style: string;
+  qr_center_icon: string;
+  qr_fg_color: string;
+  qr_bg_color: string;
 }
 
 interface MilestoneRow {
@@ -54,7 +58,11 @@ export function getThemeTokens(state: EventStateRecord): ThemeTokens {
     hue: state.brand_hue ?? 85,
     chroma: state.brand_chroma ?? 0.12,
     accent_hex: state.brand_accent_hex || "",
-    radius_px: state.brand_radius_px ?? 12
+    radius_px: state.brand_radius_px ?? 12,
+    qr_style: state.qr_style || "dots",
+    qr_center_icon: state.qr_center_icon || "star",
+    qr_fg_color: state.qr_fg_color || "",
+    qr_bg_color: state.qr_bg_color || "#FFFFFF"
   };
 }
 
@@ -179,6 +187,10 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
     match_total_cents: eventState.match_total_cents,
     is_frozen: Boolean(eventState.is_frozen),
     qr_donate_url: eventState.qr_donate_url,
+    qr_style: eventState.qr_style || "dots",
+    qr_center_icon: eventState.qr_center_icon || "star",
+    qr_fg_color: eventState.qr_fg_color || "",
+    qr_bg_color: eventState.qr_bg_color || "#FFFFFF",
     theme: getThemeTokens(eventState),
     settings_seq: eventState.settings_seq || 1,
     milestones,

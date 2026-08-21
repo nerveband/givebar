@@ -32,6 +32,12 @@
       transform: translateY(-4px);
       border-color: var(--brand-accent);
     }
+
+    .launcher-icon {
+      font-size: 2.25rem;
+      color: var(--brand-accent);
+      margin-bottom: var(--space-3);
+    }
   </style>
 </head>
 <body>
@@ -40,12 +46,12 @@
     
     <header style="text-align: center;">
       <div class="badge badge-live" style="margin-bottom: var(--space-3);">
-        ⚡ Live Gala Fundraising System
+        <i class="ph-fill ph-lightning"></i> Live Gala Fundraising System
       </div>
       <h1 style="font-size: var(--text-3xl); font-weight: 900; margin-bottom: var(--space-2); letter-spacing: -0.03em;">
         Givebar Suite Launcher
       </h1>
-      <p style="font-size: var(--text-base); color: var(--ink-secondary); max-width: 600px; margin: 0 auto; line-height: 1.5;">
+      <p style="font-size: var(--text-base); color: var(--ink-secondary); max-width: 600px; margin-0 auto; line-height: 1.5;">
         Open any of the specialized live-event surfaces below. Data syncs automatically across all screens and mobile devices in real time.
       </p>
     </header>
@@ -55,23 +61,23 @@
       <!-- 1. Main Ballroom Screen -->
       <a href="stage" class="surface-card elevated surface-launcher-card">
         <div>
-          <div style="font-size: 2.5rem; margin-bottom: var(--space-3);">🖥️</div>
+          <i class="ph-bold ph-monitor launcher-icon"></i>
           <h2 style="font-size: var(--text-xl); font-weight: 800; color: var(--brand-accent); margin-bottom: var(--space-2);">
             Main Ballroom Screen
           </h2>
           <p style="font-size: var(--text-sm); color: var(--ink-secondary); line-height: 1.5; margin-bottom: var(--space-6);">
-            1080p projection HUD with 130px rolling odometer, concentric progress line, matching grant banner, and scannable QR code.
+            1080p projection HUD with 130px rolling odometer, concentric progress line, matching grant banner, and adaptive QR code.
           </p>
         </div>
         <span class="btn-primary" style="width: 100%;">
-          Launch Ballroom Screen →
+          Launch Ballroom Screen <i class="ph-bold ph-arrow-right"></i>
         </span>
       </a>
 
       <!-- 2. Event Control Room -->
       <a href="control" class="surface-card elevated surface-launcher-card">
         <div>
-          <div style="font-size: 2.5rem; margin-bottom: var(--space-3);">🎛️</div>
+          <i class="ph-bold ph-sliders launcher-icon"></i>
           <h2 style="font-size: var(--text-xl); font-weight: 800; color: var(--brand-accent); margin-bottom: var(--space-2);">
             Event Control Room
           </h2>
@@ -80,14 +86,14 @@
           </p>
         </div>
         <span class="btn-secondary" style="width: 100%;">
-          Open Control Room →
+          Open Control Room <i class="ph-bold ph-arrow-right"></i>
         </span>
       </a>
 
       <!-- 3. Podium Screen -->
       <a href="emcee" class="surface-card elevated surface-launcher-card">
         <div>
-          <div style="font-size: 2.5rem; margin-bottom: var(--space-3);">🎤</div>
+          <i class="ph-bold ph-microphone launcher-icon"></i>
           <h2 style="font-size: var(--text-xl); font-weight: 800; color: var(--brand-accent); margin-bottom: var(--space-2);">
             Podium Screen (Emcee)
           </h2>
@@ -96,14 +102,14 @@
           </p>
         </div>
         <span class="btn-secondary" style="width: 100%;">
-          Open Podium View →
+          Open Podium View <i class="ph-bold ph-arrow-right"></i>
         </span>
       </a>
 
       <!-- 4. Volunteer Pledge Pad -->
       <a href="entry" class="surface-card elevated surface-launcher-card">
         <div>
-          <div style="font-size: 2.5rem; margin-bottom: var(--space-3);">📱</div>
+          <i class="ph-bold ph-device-mobile launcher-icon"></i>
           <h2 style="font-size: var(--text-xl); font-weight: 800; color: var(--brand-accent); margin-bottom: var(--space-2);">
             Volunteer Pledge Pad
           </h2>
@@ -112,7 +118,7 @@
           </p>
         </div>
         <span class="btn-secondary" style="width: 100%;">
-          Open Volunteer Pad →
+          Open Volunteer Pad <i class="ph-bold ph-arrow-right"></i>
         </span>
       </a>
 

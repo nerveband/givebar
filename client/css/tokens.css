@@ -1,22 +1,26 @@
 /* =========================================================================
-   Givebar — OKLCH Design Tokens & Customization Engine
+   Givebar — OKLCH Design Tokens & Phosphor Icons Engine
    ========================================================================= */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap');
+@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css');
+@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css');
+@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css');
 
 :root {
   /* ---- 4 Customer-Facing Brand Customization Variables ---- */
-  --brand-hue: 85;             /* 85 = Champagne Gold, 220 = Sapphire, 145 = Emerald */
+  --brand-hue: 85;             /* 85 = Champagne Gold, 220 = Sapphire, 152 = Emerald, 25 = Ruby */
   --brand-chroma: 0.12;
   --brand-accent: oklch(0.80 var(--brand-chroma) var(--brand-hue));
   --brand-accent-hover: oklch(0.86 var(--brand-chroma) var(--brand-hue));
   --brand-radius: 12px;
 
-  /* ---- 3-Step Lightness Surface Scale (Replaces double bezels) ---- */
-  --bg-canvas:   oklch(0.14 0.010 var(--brand-hue));
-  --bg-surface:  oklch(0.19 0.012 var(--brand-hue));
-  --bg-elevated: oklch(0.25 0.015 var(--brand-hue));
-  --bg-hover:    oklch(0.29 0.018 var(--brand-hue));
+  /* ---- Apple-Grade 3-Step Translucent Glass Scale ---- */
+  --bg-canvas:        oklch(0.12 0.010 var(--brand-hue));
+  --bg-surface:       oklch(0.18 0.012 var(--brand-hue));
+  --bg-glass:         rgba(25, 30, 42, 0.75);
+  --bg-elevated:      oklch(0.24 0.015 var(--brand-hue));
+  --bg-hover:         oklch(0.28 0.018 var(--brand-hue));
 
   /* ---- Typography & Text Inks (High Contrast ≥ 7:1) ---- */
   --ink-primary:   oklch(0.98 0.005 var(--brand-hue));
@@ -24,15 +28,15 @@
   --ink-muted:     oklch(0.65 0.014 var(--brand-hue));
   --ink-inverse:   oklch(0.12 0.010 var(--brand-hue));
 
-  /* ---- Borders & Dividers ---- */
-  --border-subtle: oklch(0.28 0.010 var(--brand-hue));
-  --border-strong: oklch(0.38 0.015 var(--brand-hue));
-  --border-accent: oklch(0.65 var(--brand-chroma) var(--brand-hue));
+  /* ---- Subtle Hairline Lighting Borders ---- */
+  --border-subtle: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --border-accent: oklch(0.72 var(--brand-chroma) var(--brand-hue));
 
-  /* ---- Semantic Highlight Inks (WCAG AAA Compliant) ---- */
-  --color-success: oklch(0.76 0.17 152);      /* Emerald green */
+  /* ---- Semantic Inks (WCAG AAA Compliant) ---- */
+  --color-success: oklch(0.76 0.17 152);      /* Emerald */
   --color-warning: oklch(0.80 0.16  75);      /* Amber */
-  --color-danger:  oklch(0.55 0.22  27);      /* Deep red (#DC2626 equivalent: 4.83:1 with white) */
+  --color-danger:  oklch(0.55 0.22  27);      /* Deep red (#DC2626: 4.83:1 with white) */
   --color-info:    oklch(0.75 0.14 235);      /* Cyan/Sky */
 
   /* ---- Strict 4pt Spacing Scale ---- */
@@ -47,7 +51,7 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* ---- Fonts & Typographic Ratios ---- */
+  /* ---- Typography Scale ---- */
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'Geist Mono', monospace;
 
@@ -58,14 +62,14 @@
   --text-xl: 1.5rem;      /* 24px */
   --text-2xl: 2rem;       /* 32px */
   --text-3xl: 2.75rem;    /* 44px */
-  --text-odometer: clamp(3.5rem, 8vw, 7.5rem);
+  --text-odometer: clamp(3.5rem, 8.5vw, 7.5rem);
 
-  /* ---- Transitions & Springs ---- */
+  /* ---- Physics & Springs ---- */
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ---- Preset Theme Overrides ---- */
+/* Preset Theme Palettes */
 [data-theme="sapphire"] {
   --brand-hue: 235;
   --brand-chroma: 0.14;

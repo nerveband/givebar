@@ -74,6 +74,10 @@ export function migrateSchema(db: Database): void {
         is_frozen INTEGER NOT NULL DEFAULT 0,                  -- 1 = stage display frozen
         manual_override_cents INTEGER DEFAULT NULL,            -- Manual override total if emergency
         qr_donate_url TEXT DEFAULT 'https://give.hope.org/donate',
+        qr_style TEXT NOT NULL DEFAULT 'dots',                 -- 'dots', 'squircle', 'squares'
+        qr_center_icon TEXT NOT NULL DEFAULT 'star',           -- 'star', 'heart', 'gift', 'sparkle', 'none'
+        qr_fg_color TEXT NOT NULL DEFAULT '',                  -- Empty means adapt to theme
+        qr_bg_color TEXT NOT NULL DEFAULT '#FFFFFF',
         entry_pin TEXT NOT NULL DEFAULT '1234',
         control_pin TEXT NOT NULL DEFAULT '9999',
         milestones_json TEXT DEFAULT '[{"cents":10000000,"label":"Foundation"},{"cents":25000000,"label":"Staffing"},{"cents":50000000,"label":"Legal Clinic"},{"cents":100000000,"label":"Expansion"}]',
@@ -99,14 +103,15 @@ export function migrateSchema(db: Database): void {
         INSERT INTO event_state (
           id, event_name, event_subtitle, goal_cents, match_pool_cents, match_total_cents,
           match_ratio, is_match_active, match_sponsor_title, is_frozen,
-          manual_override_cents, qr_donate_url, entry_pin, control_pin,
-          milestones_json, odometer_floor_cents, confetti_trigger,
+          manual_override_cents, qr_donate_url, qr_style, qr_center_icon, qr_fg_color, qr_bg_color,
+          entry_pin, control_pin, milestones_json, odometer_floor_cents, confetti_trigger,
           theme_preset, brand_hue, brand_chroma, brand_accent_hex, brand_radius_px,
           major_gift_threshold_cents, stage_delay_ms, confetti_on_milestone, settings_seq, updated_at
         ) VALUES (
           1, 'Annual Gala & Benefit Auction', 'Supporting Community Programs & Education',
           50000000, 0, 0, 1.0, 0, 'Board of Directors Matching Grant', 0,
-          NULL, 'https://give.hope.org/donate', '1234', '9999',
+          NULL, 'https://give.hope.org/donate', 'dots', 'star', '', '#FFFFFF',
+          '1234', '9999',
           '[{"cents":10000000,"label":"Foundation"},{"cents":25000000,"label":"Staffing"},{"cents":50000000,"label":"Legal Clinic"},{"cents":100000000,"label":"Expansion"}]',
           0, 0, 'champagne', 85, 0.12, '', 12, 950000, 0, 1, 1, ?
         )
@@ -229,8 +234,16 @@ export function migrateSchema(db: Database): void {
       try { db.exec(`ALTER TABLE event_state ADD COLUMN confetti_on_milestone INTEGER NOT NULL DEFAULT 1;`); } catch {}
       try { db.exec(`ALTER TABLE event_state ADD COLUMN settings_seq INTEGER NOT NULL DEFAULT 1;`); } catch {}
 
-      // Set user_version to 2
       db.exec(`PRAGMA user_version = 2;`);
+    }
+
+    if (userVersion < 3) {
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN qr_style TEXT NOT NULL DEFAULT 'dots';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN qr_center_icon TEXT NOT NULL DEFAULT 'star';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN qr_fg_color TEXT NOT NULL DEFAULT '';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN qr_bg_color TEXT NOT NULL DEFAULT '#FFFFFF';`); } catch {}
+
+      db.exec(`PRAGMA user_version = 3;`);
     }
   })();
 }

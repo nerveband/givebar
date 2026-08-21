@@ -13,6 +13,8 @@
   let chyronList = [];
   let chyronIndex = 0;
   let currentQrUrl = '';
+  let currentQrStyle = '';
+  let currentQrBadge = '';
 
   // Confetti Particle Engine
   const confettiCanvas = document.getElementById('confetti-canvas');
@@ -166,12 +168,18 @@
         fireConfettiBurst();
       }
 
-      // 7. Update Scannable QR Code
-      if (data.qr_donate_url && data.qr_donate_url !== currentQrUrl) {
-        currentQrUrl = data.qr_donate_url;
+      // 7. Update Adaptive Scannable QR Code
+      const qrUrl = data.qr_donate_url || 'https://give.hope.org/donate';
+      const qrStyle = data.qr_style || 'dots';
+      const qrBadge = data.qr_center_icon || 'star';
+
+      if (qrUrl !== currentQrUrl || qrStyle !== currentQrStyle || qrBadge !== currentQrBadge) {
+        currentQrUrl = qrUrl;
+        currentQrStyle = qrStyle;
+        currentQrBadge = qrBadge;
         const qrImg = document.getElementById('stage-qr-img');
         if (qrImg) {
-          qrImg.src = `${API_BASE}/qr?url=${encodeURIComponent(currentQrUrl)}&size=200`;
+          qrImg.src = `${API_BASE}/qr?url=${encodeURIComponent(currentQrUrl)}&style=${encodeURIComponent(qrStyle)}&center=${encodeURIComponent(qrBadge)}&size=200`;
         }
       }
 

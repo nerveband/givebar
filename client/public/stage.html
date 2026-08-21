@@ -11,6 +11,9 @@
       align-items: center;
       justify-content: center;
       background-color: var(--bg-canvas);
+      background-image: 
+        radial-gradient(circle at 50% 15%, oklch(0.25 0.05 var(--brand-hue)) 0%, transparent 65%),
+        radial-gradient(circle at 85% 85%, oklch(0.20 0.04 var(--brand-hue)) 0%, transparent 55%);
       min-height: 100vh;
       overflow: hidden;
     }
@@ -46,7 +49,8 @@
       display: inline-flex;
       align-items: center;
       gap: var(--space-2);
-      background: var(--bg-elevated);
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
       border: 1px solid var(--brand-accent);
       padding: var(--space-2) var(--space-5);
       border-radius: 9999px;
@@ -55,16 +59,12 @@
       color: var(--brand-accent);
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      animation: pulseGlow 3s infinite ease-in-out;
-    }
-
-    @keyframes pulseGlow {
-      0%, 100% { box-shadow: 0 0 0 rgba(255, 255, 255, 0); }
-      50% { box-shadow: 0 0 20px rgba(255, 255, 255, 0.12); }
+      box-shadow: 0 0 24px rgba(255, 255, 255, 0.08);
     }
 
     .chyron-box {
-      background: var(--bg-surface);
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
       border: 1px solid var(--border-subtle);
       border-radius: var(--brand-radius);
       padding: var(--space-4) var(--space-6);
@@ -73,6 +73,17 @@
       gap: var(--space-4);
       min-height: 80px;
       transition: all 0.3s var(--ease-spring);
+    }
+
+    .glass-qr-card {
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--brand-radius);
+      padding: var(--space-3);
+      text-align: center;
+      flex-shrink: 0;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
     }
   </style>
 </head>
@@ -83,7 +94,7 @@
     <!-- Top Ballroom Header -->
     <header style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
       <div style="display: flex; align-items: center; gap: var(--space-4);">
-        <div style="display: flex; align-items: center; gap: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: var(--space-2) var(--space-4); border-radius: 9999px;">
+        <div style="display: flex; align-items: center; gap: var(--space-2); background: var(--bg-glass); backdrop-filter: blur(16px); border: 1px solid var(--border-subtle); padding: var(--space-2) var(--space-4); border-radius: 9999px;">
           <span class="pulse-dot"></span>
           <span style="font-size: var(--text-xs); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-success);">Live Appeal</span>
         </div>
@@ -99,21 +110,21 @@
 
       <!-- Active Matching Grant Banner -->
       <div id="match-banner" class="match-pill" style="display: none;">
-        <span style="font-size: 1.1rem;">⭐</span>
+        <i class="ph-fill ph-sparkle"></i>
         <span id="match-banner-text">
           $100K MATCH ACTIVE — EVERY DOLLAR DOUBLED
         </span>
-        <span style="font-size: 1.1rem;">⭐</span>
+        <i class="ph-fill ph-sparkle"></i>
       </div>
 
       <!-- Stage Frozen / Blackout Notice -->
       <div id="freeze-indicator" style="display: none; background: rgba(239, 68, 68, 0.2); border: 1px solid var(--color-danger); padding: var(--space-2) var(--space-4); border-radius: 9999px; color: var(--color-danger); font-weight: 800; font-size: var(--text-xs); letter-spacing: 0.06em; text-transform: uppercase;">
-        Display Paused
+        <i class="ph-bold ph-pause"></i> Display Paused
       </div>
     </header>
 
-    <!-- Centerpiece Hero: Flat Surface Card with Tabular 130px Odometer -->
-    <section class="surface-card elevated accent-border" style="width: 100%; margin: auto 0; text-align: center; padding: var(--space-10) var(--space-8);">
+    <!-- Centerpiece Hero: Translucent Glass Surface with Tabular 130px Odometer -->
+    <section class="surface-card elevated accent-border" style="width: 100%; margin: auto 0; text-align: center; padding: var(--space-10) var(--space-8); background: var(--bg-glass); backdrop-filter: blur(20px);">
       <div style="font-size: var(--text-sm); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand-accent); margin-bottom: var(--space-2);">
         Total Live Appeal Pledges
       </div>
@@ -125,7 +136,7 @@
       <div style="position: relative; margin-top: var(--space-6); margin-bottom: var(--space-4); width: 100%;">
         <div id="milestones-container" style="position: absolute; width: 100%; top: -28px; left: 0; pointer-events: none;"></div>
 
-        <div class="progress-track">
+        <div class="progress-track" style="height: 32px; background: rgba(0, 0, 0, 0.4);">
           <div id="progress-bar-fill" class="progress-fill" style="width: 0%;"></div>
         </div>
       </div>
@@ -141,7 +152,7 @@
       </div>
     </section>
 
-    <!-- Bottom Lower-Third Chyron Ticker & Scannable QR -->
+    <!-- Bottom Lower-Third Chyron Ticker & Scannable Adaptive QR -->
     <footer style="display: flex; align-items: flex-end; justify-content: space-between; width: 100%; gap: var(--space-8);">
       
       <!-- Lower-Third Recognition Chyron -->
@@ -150,7 +161,7 @@
           Recent Supporter Recognition
         </div>
         <div id="chyron-host" class="chyron-box">
-          <div style="font-size: 1.5rem;">⭐</div>
+          <i class="ph-fill ph-star" style="color: var(--brand-accent); font-size: 1.5rem;"></i>
           <div>
             <div id="chyron-donor" style="font-size: var(--text-lg); font-weight: 800; color: var(--ink-primary);">Welcome to the Live Appeal</div>
             <div id="chyron-meta" style="font-size: var(--text-xs); color: var(--ink-muted);">Live verified donations will appear here</div>
@@ -158,11 +169,11 @@
         </div>
       </div>
 
-      <!-- Scannable Vector SVG QR Code with Quiet Zone -->
-      <div class="surface-card" style="padding: var(--space-3); text-align: center; flex-shrink: 0;">
-        <img id="stage-qr-img" src="api/qr?url=https://give.hope.org/donate&size=160" alt="Scan to Pledge" style="width: 140px; height: 140px; border-radius: 6px; display: block;">
-        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--ink-muted); margin-top: var(--space-1); letter-spacing: 0.05em;">
-          Scan to Pledge
+      <!-- Apple-Style Adaptive Glassmorphic QR Card -->
+      <div class="glass-qr-card">
+        <img id="stage-qr-img" src="api/qr?url=https://give.hope.org/donate&style=dots&center=star&size=160" alt="Scan to Pledge" style="width: 140px; height: 140px; border-radius: 8px; display: block;">
+        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--ink-muted); margin-top: var(--space-1); letter-spacing: 0.06em; display: flex; align-items: center; justify-content: center; gap: 4px;">
+          <i class="ph-bold ph-qr-code"></i> Scan to Pledge
         </div>
       </div>
     </footer>
