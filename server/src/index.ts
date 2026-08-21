@@ -43,7 +43,9 @@ function serveStaticFile(relativePath: string): Response {
     return new Response(fileBytes, {
       headers: {
         "Content-Type": getMimeType(fullPath),
-        "Cache-Control": relativePath.includes("/public/") ? "no-cache" : "public, max-age=3600"
+        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0"
       }
     });
   }

@@ -72,14 +72,14 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
         const typoDonation = {
           donation_id: crypto.randomUUID(),
           amount_cents: 500000, // $5,000
-          donor_name: "TEST TYPO NAME PLEASE YANK ME",
-          display_name: "TEST TYPO NAME PLEASE YANK ME",
+          donor_name: "TEST TYPO NAME - PLEASE HOLD FROM STAGE",
+          display_name: "TEST TYPO NAME - PLEASE HOLD FROM STAGE",
           is_anonymous: false,
           payment_method: "pledge" as const,
           source: "rehearsal" as const,
           card_number: `#${rehearsalCardCounter}`,
           entered_by: "REHEARSAL_BOT",
-          notes: "Table 99 - Test typo for 8s yank buffer verification"
+          notes: "Table 99 - Test typo for 8s stage review buffer"
         };
         const result = recordDonation(db, typoDonation);
         return Response.json({ ok: true, mode: "typo", donation: typoDonation, result });

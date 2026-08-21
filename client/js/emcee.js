@@ -55,7 +55,7 @@
           gapEl.textContent = `$${remainingDollars.toLocaleString('en-US')} to go`;
           nameEl.textContent = `Goal: ${data.next_milestone.label} ($${Math.floor(data.next_milestone.target_cents / 100).toLocaleString('en-US')})`;
         } else {
-          gapEl.textContent = '🎉 All Milestones Cleared!';
+          gapEl.textContent = 'All Milestones Cleared!';
           nameEl.textContent = 'Fundraising goal achieved';
         }
       }

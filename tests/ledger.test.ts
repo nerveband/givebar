@@ -5,8 +5,8 @@ import {
   recordDonation,
   amendDonation,
   voidDonation,
-  yankChyron,
-  unyankChyron,
+  holdDonation,
+  releaseHeldDonation,
   updateEventState,
   getStageState,
   getEmceeState,
@@ -170,26 +170,26 @@ describe("Givebar Ledger & Deterministic Fold Engine", () => {
     expect(emceeState.top_gifts[0].is_anonymous).toBe(true);
   });
 
-  test("1-click Yank removes donation chyron from stage HUD", () => {
+  test("1-click Hold removes donation from stage review queue", () => {
     recordDonation(db, {
-      donation_id: "don_yank_1",
+      donation_id: "don_hold_1",
       amount_cents: 50000,
       donor_name: "Typo in Public Name",
       source: "manual"
     });
 
-    // Yank before it reaches stage
-    yankChyron(db, "don_yank_1", "AV_DIRECTOR", "Typo noticed");
+    // Hold before it reaches stage
+    holdDonation(db, "don_hold_1", "AV_DIRECTOR", "Typo noticed");
 
     const ctrlState = getControlState(db);
-    const item = ctrlState.staged_chyrons.find(c => c.donation_id === "don_yank_1");
-    expect(item?.is_yanked).toBe(true);
+    const item = ctrlState.staged_chyrons.find(c => c.donation_id === "don_hold_1");
+    expect(item?.is_held).toBe(true);
 
-    // Unyank
-    unyankChyron(db, "don_yank_1");
+    // Release
+    releaseHeldDonation(db, "don_hold_1");
     const ctrlStateAfter = getControlState(db);
-    const itemAfter = ctrlStateAfter.staged_chyrons.find(c => c.donation_id === "don_yank_1");
-    expect(itemAfter?.is_yanked).toBe(false);
+    const itemAfter = ctrlStateAfter.staged_chyrons.find(c => c.donation_id === "don_hold_1");
+    expect(itemAfter?.is_held).toBe(false);
   });
 
   test("enforces no-backward-odometer rule across downward corrections", () => {

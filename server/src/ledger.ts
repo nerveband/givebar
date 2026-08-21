@@ -121,7 +121,7 @@ export class CardSerialCollisionError extends Error {
     priorAmountCents: number = 0,
     priorDonorName: string = ""
   ) {
-    super(`Physical pledge card #${cardNumber} was already entered by ${priorEnteredBy || "another clerk"}.`);
+    super(`Physical pledge card #${cardNumber} was already entered by ${priorEnteredBy || "another volunteer"}.`);
     this.name = "CardSerialCollisionError";
     this.card_number = cardNumber;
     this.prior_donation_id = priorDonationId;

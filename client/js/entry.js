@@ -337,8 +337,8 @@
           const collisionDesc = document.getElementById('collision-desc');
     clearTimeout(undoTimeout);
           if (collisionCard && collisionTitle && collisionDesc) {
-            collisionTitle.textContent = `⚠️ Card #${collision.card_number} Already Entered`;
-            collisionDesc.textContent = `Entered by ${collision.prior_entered_by || 'another clerk'}. Please verify physical card.`;
+            collisionTitle.innerHTML = `<i class="ph-bold ph-warning"></i> Card #${collision.card_number} Already Entered`;
+            collisionDesc.textContent = `Entered by ${collision.prior_entered_by || 'another volunteer'}. Please verify physical card.`;
             collisionCard.style.display = 'block';
           }
           continue;
