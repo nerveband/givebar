@@ -7,8 +7,7 @@
   "scripts": {
     "start": "bun run server/src/index.ts",
     "dev": "bun --watch server/src/index.ts",
-    "test": "bun test",
-    "build:static": "mkdir -p dist-static/css dist-static/js && cp -r client/public/*.html dist-static/ && cp -r client/css/*.css dist-static/css/ && cp -r client/js/*.js dist-static/js/"
+    "test": "bun test"
   },
   "keywords": [
     "fundraising",
