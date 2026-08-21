@@ -2,6 +2,8 @@
 
 > **Givebar**: The open, bulletproof live fundraising thermometer & stage presentation HUD for high-stakes nonprofit galas and benefit auctions.
 
+> **Superseded in part.** The UI/UX, styling, settings, and surface-behaviour sections below are superseded by [`docs/REDESIGN_PLAN.md`](docs/REDESIGN_PLAN.md), which also carries a verified defect inventory. This file remains the original architecture and schema reference.
+
 ---
 
 ## 1. Executive Summary & Core Principles

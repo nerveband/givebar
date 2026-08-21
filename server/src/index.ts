@@ -105,7 +105,7 @@ export const server = Bun.serve({
 
     // --- Surface Page Routes ---
     if (pathname === "/" || pathname === "/index.html") {
-      return serveStaticFile("client/public/control.html");
+      return serveStaticFile("client/public/index.html");
     }
 
     if (pathname === "/stage" || pathname === "/stage.html") {

@@ -1,604 +1,58 @@
-/* Givebar — Vanguard Dark Luxury Design System & Component Tokens */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap');
-
-:root {
-  /* Surfaces & Backgrounds */
-  --bg-canvas: #07090E;
-  --bg-bezel: #0D111A;
-  --bg-card: #141A26;
-  --bg-card-elevated: #1B2232;
-  --bg-card-hover: #222B3D;
-
-  /* Accents (Liquid Champagne Gold) */
-  --gold-300: #F3D78A;
-  --gold-400: #E2B755;
-  --gold-500: #C99B36;
-  --gold-600: #A87D22;
-  --gold-glow: rgba(226, 183, 85, 0.22);
-  --gold-gradient: linear-gradient(135deg, #F9E7B3 0%, #E2B755 45%, #B88B2A 100%);
-  --gold-gradient-subtle: linear-gradient(180deg, rgba(226, 183, 85, 0.15) 0%, rgba(226, 183, 85, 0.03) 100%);
-
-  /* Semantic Highlights */
-  --emerald-400: #4ADE80;
-  --emerald-500: #22C55E;
-  --emerald-glow: rgba(74, 222, 128, 0.25);
-  
-  --crimson-400: #F87171;
-  --crimson-500: #EF4444;
-  --crimson-glow: rgba(239, 68, 68, 0.35);
-
-  --cyan-400: #38BDF8;
-  --amber-400: #FBBF24;
-
-  /* Typography Colors */
-  --text-primary: #F9FAFB;
-  --text-secondary: #9CA3AF;
-  --text-muted: #8E9BAE; /* WCAG 2.2 AA Contrast Uplift (4.8:1 on #141A26) */
-  --text-inverse: #07090E;
-
-  /* Borders & Dividers */
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.15);
-  --border-gold: rgba(226, 183, 85, 0.4);
-
-  /* Physics & Transitions */
-  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Global Reset & Base */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html, body {
-  width: 100%;
-  height: 100%;
-  background-color: var(--bg-canvas);
-  color: var(--text-primary);
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-  overflow-x: hidden;
-}
-
-/* Strictly Sans-Serif Enforcement */
-h1, h2, h3, h4, h5, h6, p, span, button, input, textarea, select, div, label {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-code, pre, .mono-val {
-  font-family: 'Geist Mono', monospace;
-}
-
 /* =========================================================================
-   Double-Bezel Card Container Architecture
+   Givebar — Master Stylesheet Entrypoint
    ========================================================================= */
 
-.double-bezel-card {
-  position: relative;
-  background: rgba(255, 255, 255, 0.035);
+@import url('tokens.css');
+@import url('base.css');
+@import url('components.css');
+
+/* Layout Utilities & Operational Surfaces */
+
+/* Grid and Card Layouts */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+}
+
+@media (max-width: 900px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.grid-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+/* Metric Card */
+.metric-card {
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 24px;
-  padding: 8px;
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(16px);
-  transition: border-color 0.2s var(--ease-smooth), box-shadow 0.2s var(--ease-smooth);
+  border-radius: var(--brand-radius);
+  padding: var(--space-5);
 }
 
-.double-bezel-inner {
-  background: var(--bg-card);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 18px;
-  padding: 24px;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 4px 20px rgba(0, 0, 0, 0.35);
-  position: relative;
-  overflow: hidden;
-}
-
-.double-bezel-inner::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
-}
-
-.double-bezel-card.gold-accent {
-  border-color: rgba(226, 183, 85, 0.3);
-  box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.7), 0 0 30px -10px var(--gold-glow);
-}
-
-/* =========================================================================
-   Hardware-Accelerated Rolling Odometer Reels
-   ========================================================================= */
-
-.odometer-wrapper {
-  display: inline-flex;
-  align-items: baseline;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  color: var(--text-primary);
-  user-select: none;
-}
-
-.odometer-currency {
-  font-size: 0.65em;
+.metric-label {
+  font-size: var(--text-xs);
   font-weight: 700;
-  color: var(--gold-400);
-  margin-right: 4px;
-  align-self: flex-start;
-  padding-top: 0.15em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  margin-bottom: var(--space-2);
 }
 
-.odometer-digit-reel {
-  position: relative;
-  display: inline-block;
-  height: 1.15em;
-  overflow: hidden;
-  line-height: 1.15em;
-}
-
-.odometer-digit-track {
-  display: flex;
-  flex-direction: column;
-  transition: transform 1400ms var(--ease-spring);
-  will-change: transform;
-}
-
-.odometer-digit-val {
-  height: 1.15em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
+.metric-val {
+  font-size: var(--text-2xl);
+  font-weight: 900;
+  color: var(--ink-primary);
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 
-.odometer-separator {
-  color: var(--text-muted);
-  margin: 0 1px;
-  font-weight: 600;
-}
-
-/* Gold Gradient Text Utility */
-.text-gold-gradient {
-  background: var(--gold-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-/* =========================================================================
-   Concentric Glowing Progress Bar & Milestone Notches
-   ========================================================================= */
-
-.progress-track-outer {
-  width: 100%;
-  height: 48px;
-  background: var(--bg-bezel);
-  border: 1px solid var(--border-subtle);
-  border-radius: 9999px;
-  padding: 6px;
-  position: relative;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.7);
-}
-
-.progress-track-inner {
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 9999px;
-  position: relative;
-  overflow: hidden;
-}
-
-.progress-fill-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #C99B36 0%, #E2B755 70%, #FFF1C5 100%);
-  border-radius: 9999px;
-  position: relative;
-  transition: width 1200ms var(--ease-spring);
-  box-shadow: 0 0 24px var(--gold-glow), inset 0 1px 1px rgba(255, 255, 255, 0.6);
-  min-width: 12px;
-}
-
-.progress-fill-bar::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 24px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8));
-  border-radius: 9999px;
-  filter: blur(2px);
-}
-
-.milestone-marker {
-  position: absolute;
-  top: -34px;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-  transition: all 0.3s ease;
-  z-index: 10;
-}
-
-/* Staggered Anti-Collision Layout for Closely Spaced Milestones */
-.milestone-marker.stagger-high {
-  top: -56px;
-}
-
-.milestone-marker.stagger-high .milestone-notch {
-  height: 70px;
-}
-
-.milestone-notch {
-  width: 2px;
-  height: 48px;
-  background: rgba(255, 255, 255, 0.25);
-  margin-top: 4px;
-  position: relative;
-  z-index: 5;
-}
-
-.milestone-marker.reached .milestone-notch {
-  background: var(--gold-300);
-  box-shadow: 0 0 8px var(--gold-glow);
-}
-.milestone-pill {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-  padding: 4px 10px;
-  border-radius: 9999px;
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-}
-
-.milestone-marker.reached .milestone-pill {
-  border-color: var(--gold-400);
-  color: var(--gold-300);
-  background: #1C2333;
-}
-
-/* =========================================================================
-   Paced Chyron Stream & Recognition Toasts
-   ========================================================================= */
-
-.chyron-container {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  overflow: hidden;
-  height: 84px;
-}
-
-.chyron-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  background: var(--bg-card);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-left: 4px solid var(--gold-400);
-  border-radius: 16px;
-  padding: 14px 22px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
-  animation: chyronSlideIn 0.5s var(--ease-spring) forwards;
-}
-
-@keyframes chyronSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.chyron-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.chyron-amount {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--gold-300);
-  white-space: nowrap;
-}
-
-.chyron-badge {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(226, 183, 85, 0.15);
-  color: var(--gold-300);
-}
-
-/* =========================================================================
-   Matching Grant Top Banner
-   ========================================================================= */
-
-.matching-banner {
-  background: linear-gradient(90deg, rgba(226, 183, 85, 0.18) 0%, rgba(226, 183, 85, 0.3) 50%, rgba(226, 183, 85, 0.18) 100%);
-  border: 1px solid rgba(226, 183, 85, 0.45);
-  border-radius: 9999px;
-  padding: 10px 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  box-shadow: 0 8px 24px var(--gold-glow);
-  animation: pulseGlow 3s infinite alternate ease-in-out;
-}
-
-@keyframes pulseGlow {
-  0% { box-shadow: 0 4px 16px rgba(226, 183, 85, 0.2); }
-  100% { box-shadow: 0 8px 32px rgba(226, 183, 85, 0.45); }
-}
-
-.matching-banner-text {
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #FFF2CC;
-}
-
-/* =========================================================================
-   Volunteer Numpad & Tier Presets (/entry)
-   ========================================================================= */
-
-.numpad-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.numpad-btn {
-  height: 64px;
-  font-size: 24px;
-  font-weight: 700;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  color: var(--text-primary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.12s ease;
-  user-select: none;
-}
-
-.numpad-btn:active {
-  transform: scale(0.95);
-  background: var(--bg-card-hover);
-  border-color: var(--gold-400);
-}
-
-.tier-btn-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-
-.tier-btn {
-  padding: 14px 8px;
-  font-size: 16px;
-  font-weight: 800;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: center;
-  transition: all 0.15s ease;
-}
-
-.tier-btn:hover, .tier-btn.selected {
-  background: rgba(226, 183, 85, 0.15);
-  border-color: var(--gold-400);
-  color: var(--gold-300);
-}
-
-.tier-btn:active {
-  transform: scale(0.96);
-}
-
-/* =========================================================================
-   Buttons, Inputs, Controls
-   ========================================================================= */
-
-.btn-primary {
-  background: var(--gold-gradient);
-  color: #07090E;
-  font-weight: 800;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-  padding: 14px 28px;
-  border-radius: 14px;
-  border: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  box-shadow: 0 8px 20px rgba(226, 183, 85, 0.35);
-  transition: all 0.15s ease;
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(226, 183, 85, 0.45);
-}
-
-.btn-primary:active {
-  transform: translateY(1px);
-}
-
-.btn-danger {
-  background: var(--crimson-500);
-  color: white;
-  font-weight: 800;
-  padding: 10px 18px;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-danger:hover {
-  background: #DC2626;
-  box-shadow: 0 6px 18px var(--crimson-glow);
-}
-
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-  font-weight: 600;
-  padding: 10px 18px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: var(--border-strong);
-}
-
-.input-dark {
-  width: 100%;
-  background: #0A0E17;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 12px 16px;
-  color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 600;
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.input-dark:focus {
-  border-color: var(--gold-400);
-  box-shadow: 0 0 0 3px rgba(226, 183, 85, 0.15);
-}
-
-/* =========================================================================
-   $9,500 Major Gift Intercept Warning Modal
-   ========================================================================= */
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(4, 6, 10, 0.85);
-  backdrop-filter: blur(12px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-  animation: fadeIn 0.2s ease forwards;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.guardrail-modal-card {
-  max-width: 480px;
-  width: 100%;
-  background: #120E12;
-  border: 2px solid var(--crimson-500);
-  border-radius: 24px;
-  padding: 32px;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 40px var(--crimson-glow);
-  text-align: center;
-}
-
-.guardrail-icon-badge {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: rgba(239, 68, 68, 0.15);
-  border: 2px solid var(--crimson-400);
-  color: var(--crimson-400);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
-  margin: 0 auto 16px;
-}
-
-/* =========================================================================
-   AV Delay Buffer & 1-Click Yank Queue
-   ========================================================================= */
-
-.delay-queue-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 12px 18px;
-  margin-bottom: 8px;
-  transition: all 0.2s ease;
-}
-
-.delay-queue-item.live {
-  border-left: 4px solid var(--emerald-400);
-}
-
-.delay-queue-item.staged {
-  border-left: 4px solid var(--amber-400);
-  background: #171B24;
-}
-
-.delay-queue-item.yanked {
-  border-left: 4px solid var(--crimson-500);
-  opacity: 0.55;
-  background: #160F12;
-}
-
-.countdown-chip {
-  font-size: 12px;
-  font-weight: 800;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(251, 191, 36, 0.2);
-  color: var(--amber-400);
-}
-
-/* =========================================================================
-   Tables & Audit Logs
-   ========================================================================= */
-
+/* Tables */
 .table-luxury {
   width: 100%;
   border-collapse: collapse;
@@ -606,110 +60,64 @@ code, pre, .mono-val {
 }
 
 .table-luxury th {
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-muted);
-  padding: 12px 16px;
+  color: var(--ink-muted);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .table-luxury td {
-  padding: 14px 16px;
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  font-size: 14px;
+  font-size: var(--text-sm);
+  color: var(--ink-primary);
 }
 
 .table-luxury tr:hover td {
   background: rgba(255, 255, 255, 0.02);
 }
 
-/* =========================================================================
-   Floating 1-Tap Undo Toast (Zero Layout Shift)
-   ========================================================================= */
-
-#undo-banner.floating-undo-toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 32px);
-  max-width: 540px;
-  z-index: 900;
-  background: rgba(14, 19, 30, 0.95);
-  border: 1px solid var(--gold-400);
-  border-radius: 16px;
-  padding: 14px 20px;
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.85), 0 0 24px var(--gold-glow);
-  backdrop-filter: blur(16px);
-  animation: toastSlideUp 0.3s var(--ease-spring) forwards;
+/* Tab Navigation Bar */
+.tab-bar {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-6);
 }
 
-@keyframes toastSlideUp {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(30px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
-  }
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--brand-radius);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
-/* =========================================================================
-   Emcee Major Gift Horizon Beacon & Table Badges
-   ========================================================================= */
-
-@keyframes emceeNewGiftBeacon {
-  0% {
-    border-color: var(--gold-400);
-    box-shadow: 0 0 30px var(--gold-glow);
-    background: rgba(226, 183, 85, 0.2);
-  }
-  50% {
-    border-color: var(--emerald-400);
-    box-shadow: 0 0 45px var(--emerald-glow);
-    background: rgba(74, 222, 128, 0.15);
-  }
-  100% {
-    border-color: var(--border-subtle);
-    box-shadow: none;
-    background: #0F1420;
-  }
+.tab-btn:hover {
+  color: var(--ink-primary);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.shoutout-card.new-major-gift {
-  animation: emceeNewGiftBeacon 3s ease-out forwards;
+.tab-btn.active {
+  color: var(--ink-inverse);
+  background: var(--brand-accent);
 }
 
-.table-badge {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(226, 183, 85, 0.15);
-  color: var(--gold-300);
-  border: 1px solid rgba(226, 183, 85, 0.3);
-}
-
-/* =========================================================================
-   Reduced Motion Accessibility (WCAG 2.2)
-   ========================================================================= */
-
-@media (prefers-reduced-motion: reduce) {
-  .odometer-digit-track {
-    transition: none !important;
-  }
-  .progress-fill-bar {
-    transition: width 0.2s ease !important;
-  }
-  .chyron-item,
-  .matching-banner,
-  .floating-undo-toast,
-  .shoutout-card.new-major-gift {
-    animation: none !important;
-  }
+/* Pulse Dot */
+.pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
 }

@@ -1,5 +1,6 @@
 /**
- * Givebar — Volunteer Rapid Entry Terminal Controller
+ * Givebar — Volunteer Mobile Pledge Pad Controller
+ * 2-Stage Progressive Input, Dual-Mode Accumulator, 8s Undo Toast, Offline Outbox
  */
 
 (function () {
@@ -13,13 +14,12 @@
   }
 
   let currentAmountCents = 0;
-  let selectedMethod = 'pledge';
   let activeDonationId = generateUUID();
   let lastSubmittedDonation = null;
   let undoTimeout = null;
   let pendingSubmission = null;
   let isPresetSelected = false;
-  // Outbox for offline resilience
+  let majorGiftThresholdCents = 950000;
   let outbox = JSON.parse(localStorage.getItem('givebar_outbox') || '[]');
 
   function saveOutbox() {
@@ -27,6 +27,9 @@
   }
 
   function generateUUID() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
       const r = (Math.random() * 16) | 0;
       const v = c === 'x' ? r : (r & 0x3) | 0x8;
@@ -40,7 +43,7 @@
 
     setupNumpad();
     setupTiers();
-    setupPaymentMethods();
+    setupStageNavigation();
     setupSubmission();
     setupUndo();
     setupGuardrailModal();
@@ -52,9 +55,15 @@
   // --- Numpad & Amount Controls ---
   function updateAmountDisplay() {
     const displayEl = document.getElementById('amount-display');
-    if (!displayEl) return;
+    const confirmEl = document.getElementById('confirm-amount-text');
+    const submitBtn = document.getElementById('btn-submit-pledge');
+
     const dollars = Math.floor(currentAmountCents / 100);
-    displayEl.textContent = `$${dollars.toLocaleString('en-US')}`;
+    const formatted = `$${dollars.toLocaleString('en-US')}`;
+
+    if (displayEl) displayEl.textContent = formatted;
+    if (confirmEl) confirmEl.textContent = formatted;
+    if (submitBtn) submitBtn.textContent = `Record Pledge (${formatted}) →`;
   }
 
   function setupNumpad() {
@@ -68,32 +77,36 @@
       const key = btn.getAttribute('data-key');
       let currentDollars = Math.floor(currentAmountCents / 100);
 
-      if (isPresetSelected && /\d/.test(key)) {
-        currentDollars = parseInt(key, 10);
+      if (isPresetSelected) {
+        if (/^\d+$/.test(key)) {
+          currentDollars = parseInt(key, 10);
+        } else if (key === '00') {
+          currentDollars = 0;
+        } else if (key === 'backspace') {
+          currentDollars = 0;
+        }
         isPresetSelected = false;
-      } else if (key === 'backspace') {
-        const str = currentDollars.toString();
-        const nextStr = str.length > 1 ? str.slice(0, -1) : '0';
-        currentDollars = parseInt(nextStr, 10) || 0;
-        isPresetSelected = false;
-      } else if (key === '00') {
-        currentDollars = currentDollars * 100;
-        isPresetSelected = false;
-      } else if (/\d/.test(key)) {
-        const digit = parseInt(key, 10);
-        currentDollars = currentDollars * 10 + digit;
-        isPresetSelected = false;
+        clearPresetHighlights();
+      } else {
+        if (key === 'backspace') {
+          const str = currentDollars.toString();
+          currentDollars = str.length > 1 ? parseInt(str.slice(0, -1), 10) : 0;
+        } else if (key === '00') {
+          currentDollars = Math.min(currentDollars * 100, 10000000);
+        } else if (/^\d+$/.test(key)) {
+          const digit = parseInt(key, 10);
+          currentDollars = Math.min(currentDollars * 10 + digit, 10000000);
+        }
       }
 
-      // Max ceiling $10,000,000 to prevent runaway overflow
-      if (currentDollars > 10000000) currentDollars = 10000000;
       currentAmountCents = currentDollars * 100;
       updateAmountDisplay();
+    });
+  }
 
-      // Clear tier preset highlights if custom
-      document.querySelectorAll('#tier-grid .tier-btn').forEach(b => {
-        b.classList.toggle('selected', b.getAttribute('data-cents') === currentAmountCents.toString());
-      });
+  function clearPresetHighlights() {
+    document.querySelectorAll('#tier-grid .tier-btn').forEach(b => {
+      b.classList.toggle('selected', b.getAttribute('data-cents') === '0');
     });
   }
 
@@ -107,68 +120,106 @@
 
       document.querySelectorAll('#tier-grid .tier-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
+
       const cents = parseInt(btn.getAttribute('data-cents') || '0', 10);
       if (cents > 0) {
         currentAmountCents = cents;
         isPresetSelected = true;
-        updateAmountDisplay();
       } else {
         isPresetSelected = false;
       }
+      updateAmountDisplay();
     });
   }
 
-  function setupPaymentMethods() {
-    document.querySelectorAll('[data-method]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-method]').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        selectedMethod = btn.getAttribute('data-method') || 'pledge';
+  // --- 2-Stage Progressive Navigation ---
+  function setupStageNavigation() {
+    const nextBtn = document.getElementById('btn-next-step');
+    const backBtn = document.getElementById('btn-back-to-stage-1');
+    const pane1 = document.getElementById('pane-stage-1');
+    const pane2 = document.getElementById('pane-stage-2');
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        if (currentAmountCents <= 0) {
+          // Highlight amount display
+          const hero = document.querySelector('.amount-hero');
+          if (hero) {
+            hero.style.borderColor = 'var(--color-danger)';
+            setTimeout(() => hero.style.borderColor = '', 1000);
+          }
+          return;
+        }
+
+        pane1.style.display = 'none';
+        pane2.style.display = 'flex';
+
+        // Auto-focus donor name input
+        const nameInput = document.getElementById('input-donor-name');
+        if (nameInput) {
+          setTimeout(() => nameInput.focus(), 50);
+        }
       });
-    });
+    }
+
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        pane2.style.display = 'none';
+        pane1.style.display = 'flex';
+      });
+    }
   }
 
-  // --- Submission & $9,500 Guardrail ---
+  // --- Submission & Guardrails ---
   function setupSubmission() {
     const submitBtn = document.getElementById('btn-submit-pledge');
     if (!submitBtn) return;
 
-    submitBtn.addEventListener('click', () => {
-      const donorName = (document.getElementById('input-donor-name').value || '').trim();
-      const isAnon = document.getElementById('input-is-anon').checked;
-      const cardNumber = (document.getElementById('input-card-number').value || '').trim();
-      const notes = (document.getElementById('input-notes').value || '').trim();
+    submitBtn.addEventListener('click', async () => {
+      const nameInput = document.getElementById('input-donor-name');
+      const donorName = (nameInput ? nameInput.value : '').trim();
+      const phoneticInput = document.getElementById('input-donor-phonetic');
+      const phonetic = (phoneticInput ? phoneticInput.value : '').trim();
+      const isAnon = document.getElementById('input-is-anon')?.checked || false;
+      const cardInput = document.getElementById('input-card-number');
+      const cardNumber = (cardInput ? cardInput.value : '').trim();
+      const tableInput = document.getElementById('input-table-number');
+      const tableNumber = (tableInput ? tableInput.value : '').trim();
 
-      if (currentAmountCents <= 0) {
-        alert('Please enter a pledge amount greater than $0.');
-        return;
-      }
+      const errorEl = document.getElementById('error-donor-name');
 
       if (!donorName) {
-        alert('Please enter the donor name (or legal contact name).');
-        document.getElementById('input-donor-name').focus();
+        if (errorEl) errorEl.style.display = 'block';
+        if (nameInput) {
+          nameInput.style.borderColor = 'var(--color-danger)';
+          nameInput.focus();
+        }
         return;
       }
+
+      if (errorEl) errorEl.style.display = 'none';
+      if (nameInput) nameInput.style.borderColor = '';
 
       const payload = {
         donation_id: activeDonationId,
         amount_cents: currentAmountCents,
         donor_name: donorName,
         display_name: isAnon ? 'Anonymous Supporter' : donorName,
+        donor_phonetic: phonetic || null,
+        table_number: tableNumber || null,
         is_anonymous: isAnon,
-        payment_method: selectedMethod,
+        payment_method: 'pledge',
         source: 'manual',
         card_number: cardNumber || null,
-        entered_by: volunteerId,
-        notes: notes || null
+        entered_by: volunteerId
       };
 
-      // Check $9,500 Major Gift Guardrail
-      if (currentAmountCents >= 950000) {
+      // Check Major Gift Guardrail (>= $9,500)
+      if (currentAmountCents >= majorGiftThresholdCents) {
         pendingSubmission = payload;
         showGuardrailModal(payload);
       } else {
-        executeSubmission(payload);
+        await executeSubmission(payload);
       }
     });
   }
@@ -177,14 +228,12 @@
     const modal = document.getElementById('guardrail-modal');
     const amountEl = document.getElementById('guardrail-amount-text');
     const donorEl = document.getElementById('guardrail-donor-text');
-    const cardEl = document.getElementById('guardrail-card-text');
 
     const dollars = Math.floor(payload.amount_cents / 100);
-    amountEl.textContent = `$${dollars.toLocaleString('en-US')}`;
-    donorEl.textContent = payload.donor_name;
-    cardEl.textContent = payload.card_number || 'None specified';
+    if (amountEl) amountEl.textContent = `$${dollars.toLocaleString('en-US')}`;
+    if (donorEl) donorEl.textContent = payload.donor_name;
 
-    modal.style.display = 'flex';
+    if (modal) modal.style.display = 'flex';
   }
 
   function setupGuardrailModal() {
@@ -192,61 +241,78 @@
     const confirmBtn = document.getElementById('btn-guardrail-confirm');
     const cancelBtn = document.getElementById('btn-guardrail-cancel');
 
-    confirmBtn.addEventListener('click', () => {
-      modal.style.display = 'none';
-      if (pendingSubmission) {
-        const item = pendingSubmission;
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', async () => {
+        if (modal) modal.style.display = 'none';
+        if (pendingSubmission) {
+          const item = { ...pendingSubmission, confirmed_major_gift: true };
+          pendingSubmission = null;
+          await executeSubmission(item);
+        }
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        if (modal) modal.style.display = 'none';
         pendingSubmission = null;
-        executeSubmission(item);
-      }
-    });
+      });
+    }
 
-    cancelBtn.addEventListener('click', () => {
-      modal.style.display = 'none';
-      pendingSubmission = null;
-    });
-
-    // Escape key support for accessibility
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modal.style.display === 'flex') {
+      if (e.key === 'Escape' && modal && modal.style.display === 'flex') {
         modal.style.display = 'none';
         pendingSubmission = null;
       }
     });
+  }
 
   async function executeSubmission(payload) {
-    // Add to local outbox
+    // Hide collision card
+    const collisionCard = document.getElementById('collision-card');
+    if (collisionCard) collisionCard.style.display = 'none';
+
+    // Queue in outbox
     outbox.push(payload);
     saveOutbox();
 
-    // Reset Form for next donor immediately
+    // Reset Form for next donor
     resetForm();
 
-    // Attempt network flush
+    // Switch back to Stage 1
+    const pane1 = document.getElementById('pane-stage-1');
+    const pane2 = document.getElementById('pane-stage-2');
+    if (pane1 && pane2) {
+      pane2.style.display = 'none';
+      pane1.style.display = 'flex';
+    }
+
+    // Flush to server
     await flushOutbox();
   }
 
   function resetForm() {
     activeDonationId = generateUUID();
     currentAmountCents = 0;
+    isPresetSelected = false;
     updateAmountDisplay();
 
-    document.getElementById('input-donor-name').value = '';
-    document.getElementById('input-is-anon').checked = false;
-    document.getElementById('input-card-number').value = '';
-    document.getElementById('input-notes').value = '';
+    const nameInput = document.getElementById('input-donor-name');
+    const phoneticInput = document.getElementById('input-donor-phonetic');
+    const anonInput = document.getElementById('input-is-anon');
+    const cardInput = document.getElementById('input-card-number');
+    const tableInput = document.getElementById('input-table-number');
 
-    document.querySelectorAll('#tier-grid .tier-btn').forEach(b => {
-      b.classList.toggle('selected', b.getAttribute('data-cents') === '0');
-    });
+    if (nameInput) nameInput.value = '';
+    if (phoneticInput) phoneticInput.value = '';
+    if (anonInput) anonInput.checked = false;
+    if (cardInput) cardInput.value = '';
+    if (tableInput) tableInput.value = '';
 
-    // Only auto-focus name on desktop to prevent mobile software keyboard from obstructing the numpad
-    if (!('ontouchstart' in window) && window.innerWidth >= 768) {
-      const nameField = document.getElementById('input-donor-name');
-      if (nameField) nameField.focus();
-    }
+    clearPresetHighlights();
   }
-  // --- Outbox Flush & Idempotent API ---
+
+  // --- Outbox Flush & Duplicate Resolution ---
   async function flushOutbox() {
     if (outbox.length === 0) return;
 
@@ -260,57 +326,66 @@
         });
 
         if (res.status === 409) {
-          // Card Serial Collision Error
           const collision = await res.json();
-          alert(`⚠️ COLLISION WARNING:\n${collision.message}\nThis pledge was NOT submitted.`);
           // Remove from outbox so it doesn't loop
           outbox = outbox.filter(i => i.donation_id !== item.donation_id);
           saveOutbox();
+
+          // Show non-destructive inline warning card
+          const collisionCard = document.getElementById('collision-card');
+          const collisionTitle = document.getElementById('collision-title');
+          const collisionDesc = document.getElementById('collision-desc');
+    clearTimeout(undoTimeout);
+          if (collisionCard && collisionTitle && collisionDesc) {
+            collisionTitle.textContent = `⚠️ Card #${collision.card_number} Already Entered`;
+            collisionDesc.textContent = `Entered by ${collision.prior_entered_by || 'another clerk'}. Please verify physical card.`;
+            collisionCard.style.display = 'block';
+          }
           continue;
         }
 
         if (res.ok) {
-          // Success or duplicate receipt
           outbox = outbox.filter(i => i.donation_id !== item.donation_id);
           saveOutbox();
 
-          // Show 1-Tap Undo Banner for this item
-          showUndoBanner(item);
+          showUndoToast(item);
         }
       } catch {
-        // Network offline — will retry next tick
+        // Network offline — will retry on next tick
         break;
       }
     }
   }
 
-  // --- 1-Tap Undo ---
-  function showUndoBanner(item) {
+  // --- 8-Second Floating Undo Toast ---
+  function showUndoToast(item) {
     lastSubmittedDonation = item;
-    const banner = document.getElementById('undo-banner');
-    const desc = document.getElementById('undo-desc');
+    const toast = document.getElementById('undo-toast');
+    const desc = document.getElementById('undo-toast-desc');
+
+    if (!toast || !desc) return;
 
     const dollars = Math.floor(item.amount_cents / 100);
-    desc.textContent = `$${dollars.toLocaleString('en-US')} from ${item.donor_name}`;
-    banner.style.display = 'flex';
+    desc.textContent = `$${dollars.toLocaleString('en-US')} — ${item.donor_name}`;
+    toast.style.display = 'flex';
 
-    if (undoTimeout) clearTimeout(undoTimeout);
+    clearTimeout(undoTimeout);
     undoTimeout = setTimeout(() => {
-      banner.style.display = 'none';
+      toast.style.display = 'none';
       lastSubmittedDonation = null;
-    }, 25000); // 25s window for 1-tap undo
+    }, 8000); // 8-second staging window
   }
 
   function setupUndo() {
-    const undoBtn = document.getElementById('btn-undo');
+    const undoBtn = document.getElementById('btn-toast-undo');
     if (!undoBtn) return;
 
     undoBtn.addEventListener('click', async () => {
       if (!lastSubmittedDonation) return;
 
       const item = lastSubmittedDonation;
-      const banner = document.getElementById('undo-banner');
-      banner.style.display = 'none';
+      const toast = document.getElementById('undo-toast');
+      if (toast) toast.style.display = 'none';
 
       try {
         const res = await fetch(`${API_BASE}/donation/${item.donation_id}/void`, {
@@ -318,47 +393,62 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             entered_by: volunteerId,
-            reason: '1-tap volunteer undo from terminal'
+            reason: '1-tap volunteer undo from mobile pad'
           })
         });
 
         if (res.ok) {
-          alert(`Undid pledge for $${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}.`);
+          lastSubmittedDonation = null;
+          pollState();
         }
       } catch {
-        alert('Failed to contact server to undo pledge. Please notify AV control deck.');
+        // Silently fail if unreachable
       }
     });
   }
 
-  // --- Background Polling (State & Personal Audit Log) ---
+  // --- 1-Second State Polling & Theme Sync ---
   async function pollState() {
     try {
       const res = await fetch(`${API_BASE}/state?role=entry&volunteer_id=${encodeURIComponent(volunteerId)}`);
       const connDot = document.getElementById('conn-dot');
 
       if (!res.ok) {
-        if (connDot) connDot.style.background = 'var(--crimson-400)';
+        if (connDot) connDot.style.background = 'var(--color-danger)';
         return;
       }
 
-      if (connDot) connDot.style.background = 'var(--emerald-400)';
+      if (connDot) connDot.style.background = 'var(--color-success)';
 
       const data = await res.json();
 
-      // Update live gala total snippet
+      // Update major gift threshold
+      if (data.major_gift_threshold_cents) {
+        majorGiftThresholdCents = data.major_gift_threshold_cents;
+      }
+
+      // Update live total snippet
       const totalSnippet = document.getElementById('live-total-snippet');
-      if (totalSnippet) {
+      if (totalSnippet && data.total_raised_cents !== undefined) {
         const dollars = Math.floor(data.total_raised_cents / 100);
         totalSnippet.textContent = `$${dollars.toLocaleString('en-US')}`;
       }
 
-      // Update personal audit log
+      // Apply live theme custom properties
+      if (data.theme) {
+        document.documentElement.style.setProperty('--brand-hue', data.theme.hue);
+        document.documentElement.style.setProperty('--brand-chroma', data.theme.chroma);
+        if (data.theme.radius_px) {
+          document.documentElement.style.setProperty('--brand-radius', `${data.theme.radius_px}px`);
+        }
+      }
+
+      // Render personal audit log
       renderPersonalLog(data.personal_log || []);
 
     } catch {
       const connDot = document.getElementById('conn-dot');
-      if (connDot) connDot.style.background = 'var(--crimson-400)';
+      if (connDot) connDot.style.background = 'var(--color-danger)';
     }
   }
 
@@ -368,8 +458,8 @@
 
     if (logs.length === 0) {
       container.innerHTML = `
-        <div style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px;">
-          No entries recorded in this session yet.
+        <div style="padding: var(--space-4); text-align: center; color: var(--ink-muted); font-size: var(--text-sm);">
+          Awaiting first entry in this session...
         </div>
       `;
       return;
@@ -393,15 +483,15 @@
       const timeStr = new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       const amountStr = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
       const statusBadge = item.is_voided
-        ? `<span style="color: var(--crimson-400); font-weight: 800; font-size: 11px;">VOIDED</span>`
-        : `<span style="color: var(--emerald-400); font-weight: 800; font-size: 11px;">ACTIVE</span>`;
+        ? `<span class="badge badge-held">VOIDED</span>`
+        : `<span class="badge badge-live">ACTIVE</span>`;
 
       html += `
-        <tr style="${item.is_voided ? 'opacity: 0.5; text-decoration: line-through;' : ''}">
-          <td style="color: var(--text-muted); font-size: 12px;">${timeStr}</td>
-          <td style="font-weight: 800; color: var(--gold-300);">${amountStr}</td>
+        <tr style="${item.is_voided ? 'opacity: 0.45; text-decoration: line-through;' : ''}">
+          <td style="color: var(--ink-muted); font-size: var(--text-xs);">${timeStr}</td>
+          <td style="font-weight: 800; color: var(--brand-accent);">${amountStr}</td>
           <td style="font-weight: 600;">${escapeHTML(item.donor_name)}</td>
-          <td style="font-family: monospace; font-size: 12px;">${item.card_number || '-'}</td>
+          <td class="mono" style="font-size: var(--text-xs);">${item.card_number || '-'}</td>
           <td>${statusBadge}</td>
         </tr>
       `;

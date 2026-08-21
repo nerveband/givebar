@@ -22,13 +22,16 @@ export function handleStateRequest(req: Request, db: Database): Response {
     case "entry":
       payload = getVolunteerState(db, volunteerId);
       break;
-    default:
+    default: {
+      const fullState = getEventState(db);
+      const { control_pin: _c, entry_pin: _e, ...sanitizedEvent } = fullState;
       payload = {
         stage: getStageState(db, sinceSeq),
-        event: getEventState(db),
+        event: sanitizedEvent,
         folded: foldLedger(db)
       };
       break;
+    }
   }
 
   return new Response(JSON.stringify(payload), {

@@ -3,32 +3,122 @@ import {
   getEventState,
   updateEventState,
   getControlState,
-  yankChyron,
-  unyankChyron,
-  foldLedger
+  holdDonation,
+  releaseHeldDonation,
+  foldLedger,
+  type EventStateRecord
 } from "../ledger";
 
 export async function handleControlRequest(req: Request, db: Database): Promise<Response> {
-  if (req.method.toUpperCase() !== "POST") {
-    return Response.json({ error: "METHOD_NOT_ALLOWED", message: "POST required" }, { status: 405 });
+  if (req.method.toUpperCase() !== "POST" && req.method.toUpperCase() !== "PUT") {
+    return Response.json({ error: "METHOD_NOT_ALLOWED", message: "POST or PUT required" }, { status: 405 });
   }
 
   try {
     const body = await req.json() as Record<string, unknown>;
-    const action = String(body.action || "");
+    const action = String(body.action || (req.method.toUpperCase() === "PUT" ? "update_settings" : ""));
     const currentState = getEventState(db);
 
-    // Validate PIN if configured
+    const isAuthDisabled = process.env.GIVEBAR_DISABLE_AUTH === "1";
     const providedPin = String(body.pin || req.headers.get("X-Control-Pin") || "");
-    if (currentState.control_pin && providedPin !== currentState.control_pin && action !== "auth_check") {
-      return Response.json({ error: "UNAUTHORIZED", message: "Invalid control PIN" }, { status: 401 });
+    const isControlPinValid = isAuthDisabled || !currentState.control_pin || providedPin === currentState.control_pin;
+
+    if (!isControlPinValid && action !== "auth_check") {
+      return Response.json({ error: "UNAUTHORIZED", message: "Invalid or missing Control Room PIN" }, { status: 401 });
     }
 
     if (action === "auth_check") {
-      return Response.json({ ok: true, authenticated: true });
+      return Response.json({ ok: isControlPinValid, authenticated: isControlPinValid });
     }
 
     switch (action) {
+      case "update_settings": {
+        const patch: Partial<EventStateRecord> = {};
+
+        if (typeof body.event_name === "string" && body.event_name.trim()) {
+          patch.event_name = body.event_name.trim();
+        }
+        if (typeof body.event_subtitle === "string") {
+          patch.event_subtitle = body.event_subtitle.trim();
+        }
+        if (typeof body.goal_cents === "number" && body.goal_cents > 0) {
+          patch.goal_cents = Math.round(body.goal_cents);
+        }
+        if (typeof body.qr_donate_url === "string") {
+          patch.qr_donate_url = body.qr_donate_url.trim();
+        }
+        if (typeof body.theme_preset === "string") {
+          patch.theme_preset = body.theme_preset.trim();
+        }
+        if (typeof body.brand_hue === "number") {
+          patch.brand_hue = body.brand_hue;
+        }
+        if (typeof body.brand_chroma === "number") {
+          patch.brand_chroma = body.brand_chroma;
+        }
+        if (typeof body.brand_accent_hex === "string") {
+          patch.brand_accent_hex = body.brand_accent_hex.trim();
+        }
+        if (typeof body.brand_radius_px === "number") {
+          patch.brand_radius_px = Math.round(body.brand_radius_px);
+        }
+        if (typeof body.major_gift_threshold_cents === "number") {
+          patch.major_gift_threshold_cents = Math.round(body.major_gift_threshold_cents);
+        }
+        if (typeof body.stage_delay_ms === "number") {
+          patch.stage_delay_ms = Math.max(0, Math.round(body.stage_delay_ms));
+        }
+        if (typeof body.confetti_on_milestone === "boolean" || typeof body.confetti_on_milestone === "number") {
+          patch.confetti_on_milestone = body.confetti_on_milestone ? 1 : 0;
+        }
+
+        // Matching Grant settings
+        if (typeof body.is_match_active === "boolean" || typeof body.is_match_active === "number") {
+          patch.is_match_active = body.is_match_active ? 1 : 0;
+        }
+        if (typeof body.match_total_cents === "number") {
+          patch.match_total_cents = Math.max(0, Math.round(body.match_total_cents));
+        }
+        if (typeof body.match_ratio === "number") {
+          patch.match_ratio = Math.max(0.1, body.match_ratio);
+        }
+        if (typeof body.match_sponsor_title === "string") {
+          patch.match_sponsor_title = body.match_sponsor_title.trim();
+        }
+
+        db.transaction(() => {
+          // Update ask tiers child table if provided
+          if (Array.isArray(body.ask_tiers)) {
+            db.exec(`DELETE FROM ask_tier;`);
+            const insertTier = db.prepare(`INSERT INTO ask_tier (sort_order, cents, label) VALUES (?, ?, ?)`);
+            body.ask_tiers.forEach((tier: unknown, idx: number) => {
+              if (tier && typeof tier === "object" && "cents" in tier && typeof tier.cents === "number") {
+                const label = "label" in tier && typeof tier.label === "string" ? tier.label : `$${Math.floor(tier.cents / 100).toLocaleString("en-US")}`;
+                insertTier.run(idx + 1, Math.round(tier.cents), label);
+              }
+            });
+          }
+
+          // Update milestones child table if provided
+          if (Array.isArray(body.milestones)) {
+            db.exec(`DELETE FROM milestone;`);
+            const insertMilestone = db.prepare(`INSERT INTO milestone (sort_order, percent_of_goal, cents, label, celebrate) VALUES (?, ?, ?, ?, ?)`);
+            body.milestones.forEach((m: unknown, idx: number) => {
+              if (m && typeof m === "object" && "label" in m && typeof m.label === "string") {
+                const percent = "percent_of_goal" in m && typeof m.percent_of_goal === "number" ? m.percent_of_goal : null;
+                const cents = "cents" in m && typeof m.cents === "number" ? Math.round(m.cents) : null;
+                const celebrate = "celebrate" in m && !m.celebrate ? 0 : 1;
+                insertMilestone.run(idx + 1, percent, cents, m.label, celebrate);
+              }
+            });
+            patch.milestones_json = JSON.stringify(body.milestones);
+          }
+
+          updateEventState(db, patch);
+        })();
+        break;
+      }
+
       case "freeze":
         updateEventState(db, { is_frozen: 1 });
         break;
@@ -54,12 +144,9 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
       }
 
       case "set_match": {
-        const updates: Partial<Parameters<typeof updateEventState>[1]> = {};
+        const updates: Partial<EventStateRecord> = {};
         if (typeof body.is_active === "boolean") {
           updates.is_match_active = body.is_active ? 1 : 0;
-        }
-        if (typeof body.pool_cents === "number") {
-          updates.match_pool_cents = Math.max(0, Math.round(body.pool_cents));
         }
         if (typeof body.total_cents === "number") {
           updates.match_total_cents = Math.max(0, Math.round(body.total_cents));
@@ -74,19 +161,21 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         break;
       }
 
+      case "hold_donation":
       case "yank_chyron": {
         const donationId = String(body.donation_id || "");
-        const reason = typeof body.reason === "string" ? body.reason : "Yanked by AV technician";
+        const reason = typeof body.reason === "string" ? body.reason : "Held by Event Director";
         if (donationId) {
-          yankChyron(db, donationId, "CONTROL_DECK", reason);
+          holdDonation(db, donationId, "CONTROL_ROOM", reason);
         }
         break;
       }
 
+      case "release_donation":
       case "unyank_chyron": {
         const donationId = String(body.donation_id || "");
         if (donationId) {
-          unyankChyron(db, donationId);
+          releaseHeldDonation(db, donationId);
         }
         break;
       }
@@ -97,37 +186,13 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
       }
 
       case "resync_odometer": {
-        // Resets the stage odometer floor to the exact current true folded total
         const folded = foldLedger(db);
         updateEventState(db, { odometer_floor_cents: folded.total_raised_cents });
         break;
       }
 
-      case "set_qr_url": {
-        const url = String(body.qr_donate_url || "").trim();
-        if (url) {
-          updateEventState(db, { qr_donate_url: url });
-        }
-        break;
-      }
-
-      case "set_event_name": {
-        const name = String(body.event_name || "").trim();
-        if (name) {
-          updateEventState(db, { event_name: name });
-        }
-        break;
-      }
-
-      case "set_milestones": {
-        if (Array.isArray(body.milestones)) {
-          updateEventState(db, { milestones_json: JSON.stringify(body.milestones) });
-        }
-        break;
-      }
-
       case "update_pins": {
-        const updates: Partial<Parameters<typeof updateEventState>[1]> = {};
+        const updates: Partial<EventStateRecord> = {};
         if (typeof body.entry_pin === "string") {
           updates.entry_pin = body.entry_pin.trim();
         }
@@ -148,14 +213,14 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
 
         db.transaction(() => {
           db.exec("DELETE FROM ledger;");
-          db.exec("DELETE FROM yanked_chyrons;");
+          db.exec("DELETE FROM held_donations;");
+          db.exec("DELETE FROM active_card;");
           db.exec("DELETE FROM connector_state;");
           updateEventState(db, {
             odometer_floor_cents: 0,
             manual_override_cents: null,
             is_frozen: 0,
             confetti_trigger: 0,
-            match_pool_cents: 0,
             match_total_cents: 0,
             is_match_active: 0
           });

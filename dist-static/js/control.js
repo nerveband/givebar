@@ -1,5 +1,6 @@
 /**
- * Givebar — AV & Admin Control Deck Controller
+ * Givebar — Event Control Room Controller
+ * 3-Tab Operational Layout, Live Settings Management, Staging Hold Safety
  */
 
 (function () {
@@ -9,12 +10,17 @@
   let controlPin = sessionStorage.getItem('givebar_control_pin') || '9999';
   let isFrozen = false;
   let hasPopulatedInputs = false;
+  let activeModalCallback = null;
+  let selectedThemePreset = 'champagne';
+  let selectedThemeHue = 85;
 
   function init() {
-    setupEmergencyActions();
+    setupTabs();
+    setupSwatches();
+    setupTransportActions();
     setupRehearsalActions();
-    setupConfigForms();
-    setupLedgerActions();
+    setupSettingsForm();
+    setupModalListeners();
 
     startPolling();
   }
@@ -33,20 +39,60 @@
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: 'Action failed' }));
-        alert(`Error: ${err.message || 'Action failed'}`);
+        showNotification(err.message || 'Action failed', true);
         return null;
       }
       return await res.json();
     } catch {
-      alert('Network error communicating with Givebar control server.');
+      showNotification('Network error communicating with Givebar server.', true);
       return null;
     }
   }
 
-  // --- Non-Blocking Custom Modal Dialog Engine ---
-  let activeModalCallback = null;
+  function showNotification(msg, isError = false) {
+    const banner = document.getElementById('drift-banner');
+    const desc = document.getElementById('drift-desc');
+    if (banner && desc && isError) {
+      desc.textContent = msg;
+      banner.style.display = 'block';
+    }
+  }
 
-  function showCockpitModal({ icon = '⚡', title, desc, hasInput = false, inputPlaceholder = '', confirmText = 'Confirm', isDanger = false, onConfirm }) {
+  // --- Tab Navigation ---
+  function setupTabs() {
+    const tabBtns = document.querySelectorAll('.tab-bar .tab-btn');
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const tabKey = btn.getAttribute('data-tab');
+        document.getElementById('tab-pane-queue').style.display = tabKey === 'queue' ? 'block' : 'none';
+        document.getElementById('tab-pane-donations').style.display = tabKey === 'donations' ? 'block' : 'none';
+        document.getElementById('tab-pane-setup').style.display = tabKey === 'setup' ? 'block' : 'none';
+      });
+    });
+  }
+
+  // --- Theme Swatches ---
+  function setupSwatches() {
+    const swatches = document.querySelectorAll('.theme-swatch');
+    swatches.forEach(swatch => {
+      swatch.addEventListener('click', () => {
+        swatches.forEach(s => s.classList.remove('active'));
+        swatch.classList.add('active');
+
+        selectedThemePreset = swatch.getAttribute('data-preset') || 'champagne';
+        selectedThemeHue = parseFloat(swatch.getAttribute('data-hue') || '85');
+
+        // Apply locally to preview immediately
+        document.documentElement.style.setProperty('--brand-hue', selectedThemeHue);
+      });
+    });
+  }
+
+  // --- Modal Engine (Accessible, Non-Blocking) ---
+  function showModal({ icon = '⚡', title, desc, hasInput = false, inputPlaceholder = '', confirmText = 'Confirm', isDanger = false, onConfirm }) {
     const modal = document.getElementById('cockpit-modal');
     const iconEl = document.getElementById('cockpit-modal-icon');
     const titleEl = document.getElementById('cockpit-modal-title');
@@ -59,29 +105,22 @@
     if (titleEl) titleEl.textContent = title;
     if (descEl) descEl.textContent = desc;
 
-    if (hasInput) {
+    if (hasInput && inputWrap && inputEl) {
       inputWrap.style.display = 'block';
       inputEl.value = '';
       inputEl.placeholder = inputPlaceholder;
       setTimeout(() => inputEl.focus(), 50);
-    } else {
+    } else if (inputWrap) {
       inputWrap.style.display = 'none';
     }
 
     if (confirmBtn) {
       confirmBtn.textContent = confirmText;
       confirmBtn.className = isDanger ? 'btn-danger' : 'btn-primary';
-      if (isDanger) {
-        confirmBtn.style.background = 'var(--crimson-500)';
-        confirmBtn.style.color = '#FFFFFF';
-      } else {
-        confirmBtn.style.background = '';
-        confirmBtn.style.color = '';
-      }
     }
 
     activeModalCallback = onConfirm;
-    modal.style.display = 'flex';
+    if (modal) modal.style.display = 'flex';
   }
 
   function setupModalListeners() {
@@ -93,7 +132,7 @@
     if (confirmBtn) {
       confirmBtn.addEventListener('click', () => {
         const val = inputEl ? inputEl.value : '';
-        modal.style.display = 'none';
+        if (modal) modal.style.display = 'none';
         if (activeModalCallback) {
           const cb = activeModalCallback;
           activeModalCallback = null;
@@ -104,83 +143,96 @@
 
     if (cancelBtn) {
       cancelBtn.addEventListener('click', () => {
-        modal.style.display = 'none';
+        if (modal) modal.style.display = 'none';
         activeModalCallback = null;
       });
     }
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modal.style.display === 'flex') {
+      if (e.key === 'Escape' && modal && modal.style.display === 'flex') {
         modal.style.display = 'none';
         activeModalCallback = null;
-      }
-      if (e.key === 'Enter' && modal.style.display === 'flex') {
-        confirmBtn.click();
       }
     });
   }
 
-  // --- Emergency Actions ---
-  function setupEmergencyActions() {
-    setupModalListeners();
-
-    // Freeze / Unfreeze
+  // --- Transport Actions ---
+  function setupTransportActions() {
     const freezeBtn = document.getElementById('btn-toggle-freeze');
+    const confettiBtn = document.getElementById('btn-fire-confetti');
+    const resyncBtn = document.getElementById('btn-resync-odometer');
+    const reconcileBtn = document.getElementById('btn-reconcile-resync');
+    const overrideBtn = document.getElementById('btn-set-override');
+    const wipeBtn = document.getElementById('btn-wipe-ledger');
+
     if (freezeBtn) {
       freezeBtn.addEventListener('click', async () => {
-        const nextAction = isFrozen ? 'unfreeze' : 'freeze';
-        const res = await postControl({ action: nextAction });
-        if (res) {
-          isFrozen = !isFrozen;
-          updateFreezeBtn();
-        }
+        const action = isFrozen ? 'unfreeze' : 'freeze';
+        await postControl({ action });
+        pollState();
       });
     }
 
-    // Confetti
-    const confettiBtn = document.getElementById('btn-fire-confetti');
     if (confettiBtn) {
       confettiBtn.addEventListener('click', async () => {
         await postControl({ action: 'trigger_confetti' });
       });
     }
 
-    // Force Odometer Resync (Non-blocking Modal)
-    const resyncBtn = document.getElementById('btn-resync-odometer');
-    if (resyncBtn) {
-      resyncBtn.addEventListener('click', () => {
-        showCockpitModal({
-          icon: '🔄',
-          title: 'Force Stage Odometer Resync',
-          desc: 'This will immediately force the ballroom projector odometer to match the authoritative ledger total, clearing any downward void freeze floor.',
-          confirmText: 'Yes, Force Resync',
-          isDanger: false,
-          onConfirm: async () => {
-            await postControl({ action: 'resync_odometer' });
+    const doResync = async () => {
+      showModal({
+        icon: '🔄',
+        title: 'Resync Ballroom Screen Total',
+        desc: 'This resets the stage odometer floor directly to match the verified total raised in the ledger.',
+        confirmText: 'Yes, Resync Screen Total',
+        onConfirm: async () => {
+          await postControl({ action: 'resync_odometer' });
+          pollState();
+        }
+      });
+    };
+
+    if (resyncBtn) resyncBtn.addEventListener('click', doResync);
+    if (reconcileBtn) reconcileBtn.addEventListener('click', doResync);
+
+    if (overrideBtn) {
+      overrideBtn.addEventListener('click', () => {
+        showModal({
+          icon: '⚡',
+          title: 'Adjust Ballroom Screen Total',
+          desc: 'Enter an override dollar amount for the stage display (leave blank to clear override):',
+          hasInput: true,
+          inputPlaceholder: 'e.g. 500000',
+          confirmText: 'Set Screen Override',
+          onConfirm: async (val) => {
+            if (!val || val.trim() === '') {
+              await postControl({ action: 'clear_override' });
+            } else {
+              const dollars = parseInt(val.replace(/[^0-9]/g, ''), 10);
+              if (!isNaN(dollars) && dollars >= 0) {
+                await postControl({ action: 'set_override', override_cents: dollars * 100 });
+              }
+            }
+            pollState();
           }
         });
       });
     }
 
-    // Manual Override Total (Non-blocking Modal)
-    const overrideBtn = document.getElementById('btn-set-override');
-    if (overrideBtn) {
-      overrideBtn.addEventListener('click', () => {
-        showCockpitModal({
-          icon: '⚡',
-          title: 'Manual Total Override',
-          desc: 'Enter emergency total in USD (or leave blank and confirm to clear override):',
+    if (wipeBtn) {
+      wipeBtn.addEventListener('click', () => {
+        showModal({
+          icon: '⚠️',
+          title: 'Reset All Event Data?',
+          desc: 'Type WIPE to permanently delete all test pledges and reset the ledger for a fresh gala night:',
           hasInput: true,
-          inputPlaceholder: 'e.g. 750000',
-          confirmText: 'Apply Override',
-          onConfirm: async (input) => {
-            if (!input || input.trim() === '') {
-              await postControl({ action: 'clear_override' });
-            } else {
-              const dollars = parseFloat(input.replace(/[^0-9.]/g, ''));
-              if (!isNaN(dollars) && dollars >= 0) {
-                await postControl({ action: 'set_override', override_cents: Math.round(dollars * 100) });
-              }
+          inputPlaceholder: 'Type WIPE to confirm',
+          confirmText: 'Reset Event Data',
+          isDanger: true,
+          onConfirm: async (val) => {
+            if (val && val.trim() === 'WIPE') {
+              await postControl({ action: 'reset_ledger', confirm_wipe: true });
+              pollState();
             }
           }
         });
@@ -188,343 +240,325 @@
     }
   }
 
-  function updateFreezeBtn() {
-    const btn = document.getElementById('btn-toggle-freeze');
-    const statusEl = document.getElementById('ctrl-display-status');
-    if (btn) {
-      btn.textContent = isFrozen ? '▶️ Resume Stage Screen' : '⏸️ Freeze Stage Screen';
-      btn.style.color = isFrozen ? 'var(--emerald-400)' : '';
-    }
-    if (statusEl) {
-      statusEl.textContent = isFrozen ? '⏸️ PAUSED / FROZEN' : '● BROADCASTING';
-      statusEl.style.color = isFrozen ? 'var(--crimson-400)' : 'var(--emerald-400)';
-    }
+  // --- Settings Form ---
+  function setupSettingsForm() {
+    const saveBtn = document.getElementById('btn-save-all-settings');
+    if (!saveBtn) return;
+
+    saveBtn.addEventListener('click', async () => {
+      const title = document.getElementById('input-set-title')?.value || '';
+      const subtitle = document.getElementById('input-set-subtitle')?.value || '';
+      const goalDollars = parseInt(document.getElementById('input-set-goal')?.value || '500000', 10);
+      const matchActive = document.getElementById('input-set-match-active')?.checked || false;
+      const matchPool = parseInt(document.getElementById('input-set-match-pool')?.value || '0', 10);
+      const matchRatio = parseFloat(document.getElementById('input-set-match-ratio')?.value || '1.0');
+      const matchSponsor = document.getElementById('input-set-match-sponsor')?.value || '';
+      const qrUrl = document.getElementById('input-set-qr-url')?.value || '';
+      const controlPinInput = document.getElementById('input-set-control-pin')?.value || '';
+      const entryPinInput = document.getElementById('input-set-entry-pin')?.value || '';
+
+      const settingsPayload = {
+        action: 'update_settings',
+        event_name: title,
+        event_subtitle: subtitle,
+        goal_cents: goalDollars * 100,
+        qr_donate_url: qrUrl,
+        theme_preset: selectedThemePreset,
+        brand_hue: selectedThemeHue,
+        is_match_active: matchActive,
+        match_total_cents: matchPool * 100,
+        match_ratio: matchRatio,
+        match_sponsor_title: matchSponsor
+      };
+
+      const res = await postControl(settingsPayload);
+
+      // Update PINs if entered
+      if (controlPinInput || entryPinInput) {
+        const pinPayload = { action: 'update_pins' };
+        if (controlPinInput) {
+          pinPayload.control_pin = controlPinInput;
+          controlPin = controlPinInput;
+          sessionStorage.setItem('givebar_control_pin', controlPin);
+        }
+        if (entryPinInput) pinPayload.entry_pin = entryPinInput;
+        await postControl(pinPayload);
+      }
+
+      if (res && res.ok) {
+        saveBtn.textContent = '✓ Settings Saved!';
+        saveBtn.style.background = 'var(--color-success)';
+        setTimeout(() => {
+          saveBtn.textContent = 'Save Event Settings';
+          saveBtn.style.background = '';
+        }, 2000);
+        pollState();
+      }
+    });
   }
 
-  // --- Rehearsal Simulation Actions ---
+  // --- Rehearsal Simulator Actions ---
   function setupRehearsalActions() {
     document.querySelectorAll('[data-sim]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const mode = btn.getAttribute('data-sim');
+        const simMode = btn.getAttribute('data-sim');
         try {
           const res = await fetch(`${API_BASE}/rehearsal`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode })
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Control-Pin': controlPin
+            },
+            body: JSON.stringify({ mode: simMode, pin: controlPin })
           });
-          if (!res.ok) {
-            alert('Rehearsal simulation error');
+          if (res.ok) {
+            pollState();
           }
         } catch {
-          alert('Network error injecting rehearsal mock data');
+          // Ignore
         }
       });
     });
   }
 
-  // --- Configuration Forms ---
-  function setupConfigForms() {
-    // Save Goal
-    const saveGoalBtn = document.getElementById('btn-save-goal');
-    if (saveGoalBtn) {
-      saveGoalBtn.addEventListener('click', async () => {
-        const dollars = parseFloat(document.getElementById('input-goal-dollars').value || '0');
-        if (dollars > 0) {
-          await postControl({ action: 'set_goal', goal_cents: Math.round(dollars * 100) });
-          alert('Fundraising goal updated.');
-        }
-      });
-    }
-
-    // Save Matching Configuration
-    const saveMatchBtn = document.getElementById('btn-save-match');
-    if (saveMatchBtn) {
-      saveMatchBtn.addEventListener('click', async () => {
-        const isActive = document.getElementById('input-match-active').checked;
-        const poolDollars = parseFloat(document.getElementById('input-match-pool').value || '0');
-        const ratio = parseFloat(document.getElementById('input-match-ratio').value || '1.0');
-        const title = (document.getElementById('input-match-title').value || '').trim();
-
-        await postControl({
-          action: 'set_match',
-          is_active: isActive,
-          pool_cents: Math.round(poolDollars * 100),
-          ratio: isNaN(ratio) ? 1.0 : ratio,
-          sponsor_title: title
-        });
-        alert('Matching grant configuration saved.');
-      });
-    }
-
-    // Save QR Target URL
-    const saveQrBtn = document.getElementById('btn-save-qr');
-    if (saveQrBtn) {
-      saveQrBtn.addEventListener('click', async () => {
-        const url = (document.getElementById('input-qr-url').value || '').trim();
-        if (url) {
-          await postControl({ action: 'set_qr_url', qr_donate_url: url });
-          alert('Stage QR code target URL updated.');
-        }
-      });
-    }
-  }
-
-  // --- Ledger Actions & Wiping ---
-  function setupLedgerActions() {
-    const wipeBtn = document.getElementById('btn-wipe-ledger');
-    if (wipeBtn) {
-      wipeBtn.addEventListener('click', () => {
-        showCockpitModal({
-          icon: '⚠️',
-          title: 'Wipe All Ledger Data',
-          desc: 'CRITICAL: This will permanently delete all pledges and reset the live gala ledger for a fresh rehearsal.',
-          confirmText: 'YES, WIPE ALL DATA',
-          isDanger: true,
-          onConfirm: async () => {
-            await postControl({ action: 'reset_ledger', confirm_wipe: true });
-          }
-        });
-      });
-    }
-
-    // Delegate Void & Yank buttons
-    document.addEventListener('click', async (e) => {
-      // Yank Chyron
-      const yankBtn = e.target.closest('[data-yank-id]');
-      if (yankBtn) {
-        const donationId = yankBtn.getAttribute('data-yank-id');
-        await postControl({ action: 'yank_chyron', donation_id: donationId });
-        return;
-      }
-
-      // Unyank Chyron
-      const unyankBtn = e.target.closest('[data-unyank-id]');
-      if (unyankBtn) {
-        const donationId = unyankBtn.getAttribute('data-unyank-id');
-        await postControl({ action: 'unyank_chyron', donation_id: donationId });
-        return;
-      }
-
-      // Void Donation (Non-blocking Modal)
-      const voidBtn = e.target.closest('[data-void-id]');
-      if (voidBtn) {
-        const donationId = voidBtn.getAttribute('data-void-id');
-        showCockpitModal({
-          icon: '🗑️',
-          title: 'Void Pledge',
-          desc: `Void pledge ${donationId}? This will remove it from the authoritative gala total and stage display.`,
-          confirmText: 'Void Pledge',
-          isDanger: true,
-          onConfirm: async () => {
-            try {
-              const res = await fetch(`${API_BASE}/donation/${donationId}/void`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ entered_by: 'AV_CONTROL', reason: 'Voided from Control Deck' })
-              });
-              if (res.ok) {
-                pollControlState();
-              }
-            } catch {}
-          }
-        });
-        return;
-      }
-    });
-  }
-
-  // --- 1-Second Continuous State Polling ---
-  async function pollControlState() {
+  // --- 1-Second Polling & Rendering ---
+  async function pollState() {
     try {
       const res = await fetch(`${API_BASE}/state?role=control`);
       if (!res.ok) return;
 
       const data = await res.json();
-      const eventState = data.event_state;
-      const folded = data.folded;
 
-      isFrozen = Boolean(eventState.is_frozen);
-      updateFreezeBtn();
+      // Render Top Metrics
+      renderMetrics(data);
 
-      // Top Metrics
-      const totalRaised = eventState.manual_override_cents !== null ? eventState.manual_override_cents : folded.total_raised_cents;
-      document.getElementById('ctrl-total-raised').textContent = `$${Math.floor(totalRaised / 100).toLocaleString('en-US')}`;
-      document.getElementById('ctrl-direct-raised').textContent = `$${Math.floor(folded.direct_raised_cents / 100).toLocaleString('en-US')}`;
-      document.getElementById('ctrl-match-applied').textContent = `$${Math.floor(folded.match_applied_cents / 100).toLocaleString('en-US')}`;
-      document.getElementById('ctrl-active-count').textContent = `${folded.active_donation_count} active pledges`;
+      // Render Staging Queue
+      renderQueue(data.staged_chyrons || []);
 
-      const pct = eventState.goal_cents > 0 ? Math.round((totalRaised / eventState.goal_cents) * 100) : 0;
-      document.getElementById('ctrl-goal-progress').textContent = `${pct}% of $${Math.floor(eventState.goal_cents / 100).toLocaleString('en-US')} goal`;
+      // Render Audit Log
+      renderAuditLog(data.recent_events || []);
 
-      const matchStatus = document.getElementById('ctrl-match-status');
-      if (matchStatus) {
-        matchStatus.textContent = eventState.is_match_active
-          ? `Active ($${Math.floor(eventState.match_pool_cents / 100).toLocaleString('en-US')} pool remaining)`
-          : 'Match Inactive';
-        matchStatus.style.color = eventState.is_match_active ? 'var(--emerald-400)' : 'var(--text-muted)';
-      }
-
-      // Populate Inputs once initially
-      if (!hasPopulatedInputs) {
+      // Populate Settings inputs once
+      if (!hasPopulatedInputs && data.event_state) {
+        populateSettingsInputs(data.event_state);
         hasPopulatedInputs = true;
-        document.getElementById('input-goal-dollars').value = Math.floor(eventState.goal_cents / 100);
-        document.getElementById('input-match-active').checked = Boolean(eventState.is_match_active);
-        document.getElementById('input-match-pool').value = Math.floor(eventState.match_pool_cents / 100);
-        document.getElementById('input-match-ratio').value = eventState.match_ratio;
-        document.getElementById('input-match-title').value = eventState.match_sponsor_title || '';
-        document.getElementById('input-qr-url').value = eventState.qr_donate_url || '';
       }
-
-      // Render Delay Buffer Queue
-      renderChyronQueue(data.staged_chyrons || []);
-
-      // Render Ledger Table
-      renderLedgerTable(data.recent_events || []);
 
     } catch {
-      // Flap tolerance
+      // Ignore network hiccup
     }
   }
 
-  // --- DOM Diffing Delay Buffer Queue (Preserves Clicks and Hover State) ---
-  function renderChyronQueue(chyrons) {
+  function renderMetrics(data) {
+    const totalRaisedEl = document.getElementById('ctrl-total-raised');
+    const directRaisedEl = document.getElementById('ctrl-direct-raised');
+    const matchAppliedEl = document.getElementById('ctrl-match-applied');
+    const goalProgressEl = document.getElementById('ctrl-goal-progress');
+    const activeCountEl = document.getElementById('ctrl-active-count');
+    const matchStatusEl = document.getElementById('ctrl-match-status');
+    const displayStatusEl = document.getElementById('ctrl-display-status');
+    const freezeBtn = document.getElementById('btn-toggle-freeze');
+    const driftBanner = document.getElementById('drift-banner');
+    const driftDesc = document.getElementById('drift-desc');
+
+    const totalCents = data.folded?.total_raised_cents || 0;
+    const directCents = data.folded?.direct_raised_cents || 0;
+    const matchCents = data.folded?.match_applied_cents || 0;
+    const goalCents = data.event_state?.goal_cents || 50000000;
+
+    if (totalRaisedEl) totalRaisedEl.textContent = `$${Math.floor(totalCents / 100).toLocaleString('en-US')}`;
+    if (directRaisedEl) directRaisedEl.textContent = `$${Math.floor(directCents / 100).toLocaleString('en-US')}`;
+    if (matchAppliedEl) matchAppliedEl.textContent = `$${Math.floor(matchCents / 100).toLocaleString('en-US')}`;
+
+    const percent = goalCents > 0 ? Math.min(100, Math.round((totalCents / goalCents) * 100)) : 0;
+    if (goalProgressEl) goalProgressEl.textContent = `${percent}% of $${Math.floor(goalCents / 100).toLocaleString('en-US')} goal`;
+
+    if (activeCountEl) activeCountEl.textContent = `${data.folded?.active_donation_count || 0} verified gifts`;
+
+    if (matchStatusEl) {
+      matchStatusEl.textContent = data.event_state?.is_match_active ? 'Match Active (Doubling)' : 'Match Inactive';
+      matchStatusEl.style.color = data.event_state?.is_match_active ? 'var(--color-success)' : 'var(--ink-muted)';
+    }
+
+    isFrozen = Boolean(data.event_state?.is_frozen);
+    if (displayStatusEl) {
+      displayStatusEl.textContent = isFrozen ? '⏸️ PAUSED (FROZEN)' : '● LIVE ON-AIR';
+      displayStatusEl.style.color = isFrozen ? 'var(--color-danger)' : 'var(--color-success)';
+    }
+    if (freezeBtn) {
+      freezeBtn.textContent = isFrozen ? '▶️ Resume Stage Screen' : '⏸️ Pause Ballroom Screen';
+      freezeBtn.className = isFrozen ? 'btn-primary' : 'btn-secondary';
+    }
+
+    // Drift banner check
+    if (data.stage_preview && data.stage_preview.is_drifted) {
+      const stageDollars = Math.floor(data.stage_preview.stage_total_cents / 100).toLocaleString('en-US');
+      const verifiedDollars = Math.floor(data.stage_preview.verified_total_cents / 100).toLocaleString('en-US');
+      if (driftDesc) {
+        driftDesc.textContent = `Ballroom screen displays $${stageDollars} while true verified ledger total is $${verifiedDollars}.`;
+      }
+      if (driftBanner) driftBanner.style.display = 'block';
+    } else if (driftBanner) {
+      driftBanner.style.display = 'none';
+    }
+  }
+
+  function renderQueue(chyrons) {
     const container = document.getElementById('chyron-queue-container');
     if (!container) return;
 
     if (chyrons.length === 0) {
       container.innerHTML = `
-        <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+        <div style="text-align: center; color: var(--ink-muted); padding: var(--space-8);">
           No recent pledge transactions in buffer.
         </div>
       `;
       return;
     }
 
-    // Remove placeholder if present
-    const placeholder = container.querySelector('div[style*="text-align: center"]');
-    if (placeholder) placeholder.remove();
-
-    const currentIds = new Set(chyrons.map(c => c.donation_id));
-
-    // Remove dead items
-    Array.from(container.children).forEach(child => {
-      const id = child.getAttribute('data-item-id');
-      if (id && !currentIds.has(id)) {
-        child.remove();
-      }
-    });
-
-    // Update or insert items
-    chyrons.forEach((item, index) => {
-      const amountStr = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
-      let statusClass = item.is_live_on_stage ? 'live' : 'staged';
-      if (item.is_yanked) statusClass = 'yanked';
+    let html = '';
+    chyrons.forEach(item => {
+      const dollars = Math.floor(item.amount_cents / 100).toLocaleString('en-US');
+      const isStaged = !item.is_live_on_stage && !item.is_held;
+      const rowClass = item.is_held ? 'queue-row held' : (isStaged ? 'queue-row staged' : 'queue-row live');
 
       let statusBadge = '';
-      if (item.is_yanked) {
-        statusBadge = `<span style="font-size: 11px; font-weight: 800; color: var(--crimson-400); background: rgba(239, 68, 68, 0.15); padding: 3px 8px; border-radius: 6px;">YANKED (BLOCKED)</span>`;
-      } else if (!item.is_live_on_stage) {
-        statusBadge = `<span class="countdown-chip">BROADCASTING IN ${item.remaining_delay_sec}s</span>`;
+      let actionBtn = '';
+
+      if (item.is_held) {
+        statusBadge = `<span class="badge badge-held">HELD</span>`;
+        actionBtn = `<button type="button" class="btn-secondary" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarRelease('${item.donation_id}')">Release to Stage</button>`;
+      } else if (isStaged) {
+        statusBadge = `<span class="badge badge-staged">REVIEW (${item.remaining_delay_sec}s)</span>`;
+        actionBtn = `<button type="button" class="btn-danger" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarHold('${item.donation_id}')">Hold from Stage</button>`;
       } else {
-        statusBadge = `<span style="font-size: 11px; font-weight: 800; color: var(--emerald-400); background: rgba(74, 222, 128, 0.15); padding: 3px 8px; border-radius: 6px;">LIVE ON STAGE</span>`;
+        statusBadge = `<span class="badge badge-live">ON-AIR</span>`;
+        actionBtn = `<button type="button" class="btn-ghost" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarHold('${item.donation_id}')">Remove</button>`;
       }
 
-      let yankBtn = '';
-      if (item.is_yanked) {
-        yankBtn = `<button type="button" class="btn-secondary" data-unyank-id="${item.donation_id}" style="padding: 6px 12px; font-size: 12px;">Un-Yank</button>`;
-      } else {
-        yankBtn = `<button type="button" class="btn-danger" data-yank-id="${item.donation_id}" style="padding: 6px 14px; font-size: 13px; font-weight: 800;">🛑 YANK</button>`;
-      }
-
-      let existing = container.querySelector(`[data-item-id="${item.donation_id}"]`);
-      if (existing) {
-        // In-place update without DOM wipe
-        existing.className = `delay-queue-item ${statusClass}`;
-        const actionWrap = existing.querySelector('.queue-action-wrap');
-        if (actionWrap) {
-          actionWrap.innerHTML = `${statusBadge} ${yankBtn}`;
-        }
-      } else {
-        // Prepend new element
-        const el = document.createElement('div');
-        el.className = `delay-queue-item ${statusClass}`;
-        el.setAttribute('data-item-id', item.donation_id);
-        el.innerHTML = `
-          <div>
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
-              <span style="font-size: 17px; font-weight: 800; color: var(--gold-300);">${amountStr}</span>
-              <span style="font-size: 15px; font-weight: 700; color: var(--text-primary);">${escapeHTML(item.display_name)}</span>
-              ${item.is_anonymous ? '<span style="font-size: 10px; color: var(--text-muted); background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">ANON</span>' : ''}
+      html += `
+        <div class="${rowClass}">
+          <div style="display: flex; align-items: center; gap: var(--space-3);">
+            <div>
+              <div style="font-size: var(--text-base); font-weight: 800; color: var(--brand-accent);">$${dollars}</div>
+              <div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: 2px;">Card ${item.card_number || 'N/A'} • Table ${item.table_number || 'N/A'}</div>
             </div>
-            <div style="font-size: 12px; color: var(--text-muted);">
-              Legal: ${escapeHTML(item.donor_name)} • Card: ${item.card_number || '-'} • Clerk: ${item.entered_by || '-'}
+            <div style="border-left: 1px solid var(--border-subtle); padding-left: var(--space-3);">
+              <div style="font-weight: 700; font-size: var(--text-sm);">${escapeHTML(item.donor_name)}</div>
+              <div style="font-size: var(--text-xs); color: var(--ink-muted);">Display: "${escapeHTML(item.display_name)}"</div>
             </div>
           </div>
-          <div class="queue-action-wrap" style="display: flex; align-items: center; gap: 12px;">
+
+          <div style="display: flex; align-items: center; gap: var(--space-3);">
             ${statusBadge}
-            ${yankBtn}
+            ${actionBtn}
           </div>
-        `;
-
-        if (container.children[index]) {
-          container.insertBefore(el, container.children[index]);
-        } else {
-          container.appendChild(el);
-        }
-      }
+        </div>
+      `;
     });
+
+    container.innerHTML = html;
   }
 
-  function renderLedgerTable(events) {
+  function renderAuditLog(events) {
     const tbody = document.getElementById('ledger-table-body');
     if (!tbody) return;
 
     if (events.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 24px;">
-            Ledger is currently empty.
-          </td>
-        </tr>
-      `;
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--ink-muted); padding: var(--space-6);">No ledger events recorded yet.</td></tr>`;
       return;
     }
 
     let html = '';
     events.forEach(ev => {
-      const amountStr = `$${Math.floor(ev.amount_cents / 100).toLocaleString('en-US')}`;
-      let typeBadge = `<span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">${ev.event_type}</span>`;
-      
-      if (ev.event_type === 'create') {
-        typeBadge = `<span style="font-size: 11px; font-weight: 800; color: var(--emerald-400);">CREATE</span>`;
-      } else if (ev.event_type === 'match_apply') {
-        typeBadge = `<span style="font-size: 11px; font-weight: 800; color: var(--gold-300);">MATCH</span>`;
-      } else if (ev.event_type === 'void') {
-        typeBadge = `<span style="font-size: 11px; font-weight: 800; color: var(--crimson-400);">VOID</span>`;
+      const dollars = `$${Math.floor(ev.amount_cents / 100).toLocaleString('en-US')}`;
+      const isMatch = ev.event_type === 'match_apply' || ev.event_type === 'match_release';
+      const isVoid = ev.event_type === 'void';
+
+      let actionHtml = '-';
+      if (!isMatch && !isVoid) {
+        actionHtml = `<button type="button" class="btn-ghost" style="font-size: 11px; padding: 4px 8px;" onclick="window.givebarVoidPrompt('${ev.donation_id}')">Void</button>`;
       }
 
       html += `
-        <tr style="${ev.event_type === 'void' ? 'opacity: 0.5; text-decoration: line-through;' : ''}">
-          <td style="font-family: monospace; font-size: 12px; color: var(--text-muted);">#${ev.seq}</td>
-          <td>${typeBadge}</td>
-          <td style="font-weight: 800; color: var(--gold-300);">${amountStr}</td>
+        <tr style="${isVoid ? 'opacity: 0.45; text-decoration: line-through;' : ''}">
+          <td class="mono" style="font-size: var(--text-xs); color: var(--ink-muted);">#${ev.seq}</td>
+          <td><span class="badge ${ev.event_type === 'create' ? 'badge-live' : (ev.event_type === 'void' ? 'badge-held' : 'badge-staged')}">${ev.event_type}</span></td>
+          <td class="mono" style="font-weight: 800; color: var(--brand-accent);">${dollars}</td>
           <td style="font-weight: 600;">${escapeHTML(ev.donor_name)}</td>
-          <td style="color: var(--text-secondary);">${escapeHTML(ev.display_name || '-')}</td>
-          <td style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">${ev.payment_method}</td>
-          <td style="font-size: 12px; color: var(--text-muted);">${ev.source}</td>
-          <td style="font-family: monospace; font-size: 12px;">${ev.card_number || '-'}</td>
-          <td style="font-size: 12px; color: var(--text-muted);">${ev.entered_by || '-'}</td>
-          <td>
-            ${ev.event_type !== 'void' && ev.event_type !== 'match_apply'
-              ? `<button type="button" class="btn-danger" data-void-id="${ev.donation_id}" style="padding: 4px 8px; font-size: 11px;">Void</button>`
-              : '-'}
-          </td>
+          <td style="font-size: var(--text-xs); color: var(--ink-muted);">${escapeHTML(ev.display_name || '-')}</td>
+          <td>${ev.payment_method}</td>
+          <td>${ev.source}</td>
+          <td class="mono" style="font-size: var(--text-xs);">${ev.card_number || '-'}</td>
+          <td>${ev.entered_by || '-'}</td>
+          <td>${actionHtml}</td>
         </tr>
       `;
     });
 
     tbody.innerHTML = html;
   }
+
+  function populateSettingsInputs(state) {
+    const titleInput = document.getElementById('input-set-title');
+    const subtitleInput = document.getElementById('input-set-subtitle');
+    const goalInput = document.getElementById('input-set-goal');
+    const matchActiveInput = document.getElementById('input-set-match-active');
+    const matchPoolInput = document.getElementById('input-set-match-pool');
+    const matchRatioInput = document.getElementById('input-set-match-ratio');
+    const matchSponsorInput = document.getElementById('input-set-match-sponsor');
+    const qrUrlInput = document.getElementById('input-set-qr-url');
+
+    if (titleInput && state.event_name) titleInput.value = state.event_name;
+    if (subtitleInput && state.event_subtitle) subtitleInput.value = state.event_subtitle;
+    if (goalInput && state.goal_cents) goalInput.value = Math.floor(state.goal_cents / 100);
+    if (matchActiveInput) matchActiveInput.checked = Boolean(state.is_match_active);
+    if (matchPoolInput && state.match_total_cents) matchPoolInput.value = Math.floor(state.match_total_cents / 100);
+    if (matchRatioInput && state.match_ratio) matchRatioInput.value = state.match_ratio;
+    if (matchSponsorInput && state.match_sponsor_title) matchSponsorInput.value = state.match_sponsor_title;
+    if (qrUrlInput && state.qr_donate_url) qrUrlInput.value = state.qr_donate_url;
+
+    if (state.theme_preset) {
+      document.querySelectorAll('.theme-swatch').forEach(s => {
+        s.classList.toggle('active', s.getAttribute('data-preset') === state.theme_preset);
+      });
+    }
+  }
+
+  // Global Action Handlers for inline onclicks
+  window.givebarHold = async (donationId) => {
+    await postControl({ action: 'hold_donation', donation_id: donationId });
+    pollState();
+  };
+
+  window.givebarRelease = async (donationId) => {
+    await postControl({ action: 'release_donation', donation_id: donationId });
+    pollState();
+  };
+
+  window.givebarVoidPrompt = (donationId) => {
+    showModal({
+      icon: '🗑️',
+      title: 'Void Donation?',
+      desc: 'Enter the reason for voiding this donation from the authoritative ledger:',
+      hasInput: true,
+      inputPlaceholder: 'Reason (e.g. Card entered with wrong amount)',
+      confirmText: 'Confirm Void',
+      isDanger: true,
+      onConfirm: async (reason) => {
+        try {
+          await fetch(`${API_BASE}/donation/${donationId}/void`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entered_by: 'CONTROL_DECK', reason: reason || 'Voided by operator' })
+          });
+          pollState();
+        } catch {
+          // Ignore
+        }
+      }
+    });
+  };
 
   function escapeHTML(str) {
     const p = document.createElement('p');
@@ -533,8 +567,8 @@
   }
 
   function startPolling() {
-    pollControlState();
-    setInterval(pollControlState, 1000);
+    pollState();
+    setInterval(pollState, 1500);
   }
 
   if (document.readyState === 'loading') {

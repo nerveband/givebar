@@ -3,335 +3,427 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Givebar — AV & Admin Control Deck</title>
+  <title>Givebar — Event Control Room</title>
   <link rel="stylesheet" href="css/app.css">
   <style>
-    body {
-      padding: 24px;
+    .control-shell {
       max-width: 1400px;
       margin: 0 auto;
+      padding: var(--space-6) var(--space-5);
+    }
+
+    .swatch-group {
+      display: flex;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+      margin-top: var(--space-2);
+    }
+
+    .theme-swatch {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-4);
       background: var(--bg-canvas);
-    }
-
-    .control-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      margin-top: 24px;
-    }
-
-    @media (max-width: 1024px) {
-      .control-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .metric-card {
-      background: var(--bg-card);
       border: 1px solid var(--border-subtle);
-      border-radius: 16px;
-      padding: 18px 22px;
+      border-radius: var(--brand-radius);
+      color: var(--ink-primary);
+      font-size: var(--text-sm);
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
     }
 
-    .metric-val {
-      font-size: 32px;
-      font-weight: 800;
-      color: var(--gold-300);
-      letter-spacing: -0.02em;
+    .theme-swatch.active {
+      border-color: var(--brand-accent);
+      background: var(--bg-elevated);
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.08);
+    }
+
+    .swatch-circle {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+    }
+
+    .queue-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--brand-radius);
+      margin-bottom: var(--space-3);
+      transition: background-color 0.15s ease;
+    }
+
+    .queue-row.staged {
+      border-left: 4px solid var(--color-warning);
+    }
+
+    .queue-row.held {
+      border-left: 4px solid var(--color-danger);
+      opacity: 0.6;
+    }
+
+    .queue-row.live {
+      border-left: 4px solid var(--color-success);
     }
   </style>
 </head>
 <body>
 
-  <!-- Top Executive Header -->
-  <header style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding-bottom: 20px; border-bottom: 1px solid var(--border-subtle);">
-    <div>
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <h1 style="font-size: 24px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em;">
-          Givebar Cockpit
-        </h1>
-        <span style="font-size: 12px; font-weight: 800; text-transform: uppercase; background: rgba(226, 183, 85, 0.15); color: var(--gold-300); padding: 4px 10px; border-radius: 6px;">
-          Master Control
-        </span>
-      </div>
-      <div id="event-name-sub" style="font-size: 14px; color: var(--text-secondary); margin-top: 4px;">
-        Annual Gala & Benefit Auction
-      </div>
-    </div>
-
-    <!-- Quick Navigation & CSV Export -->
-    <div style="display: flex; align-items: center; gap: 10px;">
-      <a href="stage" target="_blank" class="btn-secondary" style="text-decoration: none; font-size: 13px;">
-        🖥️ Open Stage HUD
-      </a>
-      <a href="emcee" target="_blank" class="btn-secondary" style="text-decoration: none; font-size: 13px;">
-        🎤 Open Emcee View
-      </a>
-      <a href="entry" target="_blank" class="btn-secondary" style="text-decoration: none; font-size: 13px;">
-        📝 Volunteer Terminal
-      </a>
-      <a id="link-export-csv" href="api/export/csv" class="btn-primary" style="text-decoration: none; font-size: 13px; padding: 10px 18px;">
-        📊 Export Finance CSV
-      </a>
-    </div>
-  </header>
-
-  <!-- High-Level Financial Metrics Banner -->
-  <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 24px;">
-    <div class="metric-card" style="border-left: 4px solid var(--gold-400);">
-      <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Total Raised</div>
-      <div class="metric-val" id="ctrl-total-raised">$0</div>
-      <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;" id="ctrl-goal-progress">0% of $500k goal</div>
-    </div>
-
-    <div class="metric-card">
-      <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Direct Pledges</div>
-      <div class="metric-val" id="ctrl-direct-raised" style="color: var(--text-primary);">$0</div>
-      <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;" id="ctrl-active-count">0 active pledges</div>
-    </div>
-
-    <div class="metric-card">
-      <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Matching Grant Applied</div>
-      <div class="metric-val" id="ctrl-match-applied" style="color: var(--emerald-400);">$0</div>
-      <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;" id="ctrl-match-status">Match Inactive</div>
-    </div>
-
-    <div class="metric-card">
-      <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Stage Display State</div>
-      <div class="metric-val" id="ctrl-display-status" style="font-size: 22px; color: var(--emerald-400); margin-top: 6px;">● BROADCASTING</div>
-      <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Odometer in sync</div>
-    </div>
-  </section>
-
-  <!-- Two-Column Operational Layout -->
-  <div class="control-grid">
+  <div class="control-shell">
     
-    <!-- LEFT COLUMN: 8-Second Broadcast Delay & Live Chyron Queue -->
-    <section class="double-bezel-card">
-      <div class="double-bezel-inner">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+    <!-- Top Executive Header & Navigation -->
+    <header style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); padding-bottom: var(--space-5); border-bottom: 1px solid var(--border-subtle); margin-bottom: var(--space-6);">
+      <div>
+        <div style="display: flex; align-items: center; gap: var(--space-3);">
+          <h1 style="font-size: var(--text-2xl); font-weight: 900; letter-spacing: -0.03em;">Givebar Control Room</h1>
+          <span class="badge badge-live">Master Deck</span>
+        </div>
+        <div id="event-name-sub" style="font-size: var(--text-sm); color: var(--ink-muted); margin-top: var(--space-1);">
+          Annual Gala & Benefit Auction
+        </div>
+      </div>
+
+      <!-- Quick Surface Navigation -->
+      <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
+        <a href="stage" target="_blank" class="btn-secondary" style="font-size: var(--text-xs); min-height: 40px;">
+          Main Ballroom Screen ↗
+        </a>
+        <a href="emcee" target="_blank" class="btn-secondary" style="font-size: var(--text-xs); min-height: 40px;">
+          Podium Screen ↗
+        </a>
+        <a href="entry" target="_blank" class="btn-secondary" style="font-size: var(--text-xs); min-height: 40px;">
+          Volunteer Pad ↗
+        </a>
+        <a id="link-export-csv" href="api/export/csv" class="btn-primary" style="font-size: var(--text-xs); min-height: 40px;">
+          Download Finance CSV
+        </a>
+      </div>
+    </header>
+
+    <!-- Drift Reconciliation Banner (Shows when stage total differs from verified ledger) -->
+    <div id="drift-banner" class="surface-card" style="display: none; border-color: var(--color-warning); background: rgba(251, 191, 36, 0.08); margin-bottom: var(--space-6); padding: var(--space-4);">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);">
+        <div>
+          <div style="font-size: var(--text-sm); font-weight: 800; color: var(--color-warning);">
+            ⚠️ Ballroom Screen Total Drift Notice
+          </div>
+          <div style="font-size: var(--text-xs); color: var(--ink-primary); margin-top: 2px;" id="drift-desc">
+            The ballroom screen is holding at $0 while the true verified ledger is $0.
+          </div>
+        </div>
+        <button type="button" id="btn-reconcile-resync" class="btn-primary" style="min-height: 40px; font-size: var(--text-xs);">
+          Resync Ballroom Total →
+        </button>
+      </div>
+    </div>
+
+    <!-- High-Level Financial Metric Cards -->
+    <section class="grid-metrics" style="margin-bottom: var(--space-6);">
+      <div class="metric-card" style="border-left: 4px solid var(--brand-accent);">
+        <div class="metric-label">Total Raised</div>
+        <div class="metric-val" id="ctrl-total-raised">$0</div>
+        <div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: var(--space-1);" id="ctrl-goal-progress">0% of $500k goal</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Direct Pledges</div>
+        <div class="metric-val" id="ctrl-direct-raised">$0</div>
+        <div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: var(--space-1);" id="ctrl-active-count">0 active pledges</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Matching Grant Pool</div>
+        <div class="metric-val" id="ctrl-match-applied" style="color: var(--color-success);">$0</div>
+        <div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: var(--space-1);" id="ctrl-match-status">Match Inactive</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Ballroom Screen State</div>
+        <div class="metric-val" id="ctrl-display-status" style="font-size: 1.25rem; color: var(--color-success); margin-top: 4px;">● LIVE ON-AIR</div>
+        <div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: var(--space-1);">Odometer connected</div>
+      </div>
+    </section>
+
+    <!-- Persistent Transport Action Bar -->
+    <section class="surface-card elevated" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-6); padding: var(--space-4) var(--space-5);">
+      <div style="display: flex; align-items: center; gap: var(--space-2);">
+        <span style="font-size: var(--text-sm); font-weight: 800; color: var(--ink-muted); text-transform: uppercase;">Live Actions:</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;">
+        <button type="button" id="btn-toggle-freeze" class="btn-secondary" style="min-height: 44px;">
+          Pause Ballroom Screen
+        </button>
+        <button type="button" id="btn-fire-confetti" class="btn-primary" style="min-height: 44px;">
+          Launch Stage Confetti
+        </button>
+        <button type="button" id="btn-resync-odometer" class="btn-secondary" style="min-height: 44px;">
+          Resync Screen Total
+        </button>
+        <button type="button" id="btn-set-override" class="btn-secondary" style="min-height: 44px;">
+          Adjust Screen Total
+        </button>
+      </div>
+    </section>
+
+    <!-- 3-Tab Operational Navigation Bar -->
+    <nav class="tab-bar">
+      <button type="button" class="tab-btn active" data-tab="queue">1. Live Stage Queue (8s Review)</button>
+      <button type="button" class="tab-btn" data-tab="donations">2. Donation List & Adjustments</button>
+      <button type="button" class="tab-btn" data-tab="setup">3. Event Setup & Rehearsal</button>
+    </nav>
+
+    <!-- TAB 1: Live Stage Queue (8-Second Delay & Hold Actions) -->
+    <main id="tab-pane-queue">
+      <div class="surface-card" style="margin-bottom: var(--space-6);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4); flex-wrap: wrap; gap: var(--space-2);">
           <div>
-            <h2 style="font-size: 18px; font-weight: 800; color: var(--text-primary);">
-              Chyron Broadcast Delay Buffer
-            </h2>
-            <p style="font-size: 12px; color: var(--text-muted);">
-              8-Second staging queue — Click <strong>YANK</strong> to pull typos before ballroom display
+            <h2 style="font-size: var(--text-lg); font-weight: 800;">Stage Review Queue (8-Second Delay Buffer)</h2>
+            <p style="font-size: var(--text-xs); color: var(--ink-muted);">
+              Pledges count down for 8 seconds before going live on the ballroom screen. Click <strong>Hold from Stage</strong> to prevent typos.
             </p>
           </div>
-          <span style="font-size: 11px; font-weight: 800; background: rgba(251, 191, 36, 0.15); color: var(--amber-400); padding: 4px 10px; border-radius: 6px;">
-            8s Delay Active
-          </span>
+          <span class="badge badge-staged">8s Buffer Active</span>
         </div>
 
-        <!-- Delay Queue List -->
-        <div id="chyron-queue-container" style="max-height: 520px; overflow-y: auto; padding-right: 4px;">
-          <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+        <div id="chyron-queue-container" style="max-height: 600px; overflow-y: auto;">
+          <div style="text-align: center; color: var(--ink-muted); padding: var(--space-10);">
             No recent pledge transactions in buffer.
           </div>
         </div>
       </div>
-    </section>
+    </main>
 
-    <!-- RIGHT COLUMN: Emergency Overrides, Rehearsal, & Setup -->
-    <div style="display: flex; flex-direction: column; gap: 24px;">
-      
-      <!-- Live Stage Actions Card -->
-      <section class="double-bezel-card">
-        <div class="double-bezel-inner">
-          <h2 style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 16px;">
-            Live Emergency & Stage Cues
-          </h2>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <button type="button" id="btn-toggle-freeze" class="btn-secondary" style="height: 48px; font-weight: 700;">
-              ⏸️ Freeze Stage Screen
-            </button>
-            <button type="button" id="btn-fire-confetti" class="btn-primary" style="height: 48px;">
-              🎉 Trigger Confetti Burst
-            </button>
-            <button type="button" id="btn-resync-odometer" class="btn-secondary" style="height: 48px;">
-              🔄 Force Odometer Resync
-            </button>
-            <button type="button" id="btn-set-override" class="btn-secondary" style="height: 48px;">
-              ⚡ Manual Override Total
-            </button>
+    <!-- TAB 2: Donation List & Ledger Adjustments -->
+    <main id="tab-pane-donations" style="display: none;">
+      <div class="surface-card" style="margin-bottom: var(--space-6);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4);">
+          <div>
+            <h2 style="font-size: var(--text-lg); font-weight: 800;">Verified Event Ledger & Activity Trail</h2>
+            <p style="font-size: var(--text-xs); color: var(--ink-muted);">
+              Append-only audit stream (last 50 events) — Source of truth
+            </p>
           </div>
         </div>
-      </section>
 
-      <!-- Rehearsal Simulation Mode Card -->
-      <section class="double-bezel-card">
-        <div class="double-bezel-inner">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
-            <h2 style="font-size: 18px; font-weight: 800; color: var(--text-primary);">
-              Gala Tech Rehearsal Simulator
-            </h2>
-            <span style="font-size: 11px; font-weight: 800; background: rgba(56, 189, 248, 0.15); color: var(--cyan-400); padding: 4px 8px; border-radius: 6px;">
-              Mock Stream
-            </span>
-          </div>
-          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
-            Inject realistic mock gala pledges to test venue projection, odometer rolls, and AV cue timing.
-          </p>
-
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-            <button type="button" class="btn-secondary" data-sim="single">
-              + 1 Random Pledge
-            </button>
-            <button type="button" class="btn-secondary" data-sim="burst">
-              ⚡ Rapid Burst (7 Pledges)
-            </button>
-            <button type="button" class="btn-secondary" data-sim="typo" style="color: var(--amber-400);">
-              ⚠️ Inject Typo (Test Yank)
-            </button>
-            <button type="button" class="btn-secondary" data-sim="milestone" style="color: var(--emerald-400);">
-              ⭐ Cross Milestone
-            </button>
-          </div>
+        <div style="overflow-x: auto;">
+          <table class="table-luxury" id="ledger-audit-table">
+            <thead>
+              <tr>
+                <th>Seq</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Donor</th>
+                <th>Display Name</th>
+                <th>Method</th>
+                <th>Source</th>
+                <th>Card #</th>
+                <th>Clerk</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ledger-table-body">
+              <tr>
+                <td colspan="10" style="text-align: center; color: var(--ink-muted); padding: var(--space-6);">
+                  Loading ledger events...
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </section>
+      </div>
+    </main>
 
-      <!-- Event Config & Matching Grant Setup -->
-      <section class="double-bezel-card">
-        <div class="double-bezel-inner">
-          <h2 style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 16px;">
-            Event Goal & Matching Setup
+    <!-- TAB 3: Event Setup & Rehearsal Simulator -->
+    <main id="tab-pane-setup" style="display: none;">
+      <div class="grid-2">
+        
+        <!-- Zero-Code In-App Settings Form -->
+        <section class="surface-card">
+          <h2 style="font-size: var(--text-lg); font-weight: 800; margin-bottom: var(--space-4);">
+            ⚙️ Event Setup & Branding (Zero Code)
           </h2>
 
-          <div style="display: flex; flex-direction: column; gap: 14px;">
+          <form id="settings-form" onsubmit="return false;" style="display: flex; flex-direction: column; gap: var(--space-4);">
             
-            <!-- Goal -->
-            <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: flex-end;">
-              <div>
-                <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px;">
-                  Gala Fundraising Goal (USD)
-                </label>
-                <input type="number" id="input-goal-dollars" class="input-dark" value="500000" step="1000">
-              </div>
-              <button type="button" id="btn-save-goal" class="btn-secondary" style="height: 46px;">
-                Update Goal
-              </button>
+            <!-- Event Title & Subtitle -->
+            <div>
+              <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-title">
+                Event Title
+              </label>
+              <input type="text" id="input-set-title" class="input-dark" value="Annual Gala & Benefit Auction">
             </div>
 
-            <!-- Match Active & Pool -->
-            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-subtitle">
+                Event Subtitle / Beneficiary
+              </label>
+              <input type="text" id="input-set-subtitle" class="input-dark" value="Supporting Community Programs & Education">
+            </div>
+
+            <!-- Fundraising Goal -->
+            <div>
+              <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-goal">
+                Fundraising Goal (USD)
+              </label>
+              <input type="number" id="input-set-goal" class="input-dark mono" value="500000" step="1000">
+            </div>
+
+            <!-- Theme Preset Swatches -->
+            <div>
+              <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);">
+                Ballroom Screen Theme Palette
+              </label>
+              <div class="swatch-group">
+                <button type="button" class="theme-swatch active" data-preset="champagne" data-hue="85">
+                  <span class="swatch-circle" style="background: #E2B755;"></span> Champagne Gold
+                </button>
+                <button type="button" class="theme-swatch" data-preset="sapphire" data-hue="235">
+                  <span class="swatch-circle" style="background: #38BDF8;"></span> Royal Sapphire
+                </button>
+                <button type="button" class="theme-swatch" data-preset="emerald" data-hue="152">
+                  <span class="swatch-circle" style="background: #4ADE80;"></span> Forest Emerald
+                </button>
+                <button type="button" class="theme-swatch" data-preset="ruby" data-hue="25">
+                  <span class="swatch-circle" style="background: #F87171;"></span> Ruby Red
+                </button>
+              </div>
+            </div>
+
+            <!-- Matching Donor Setup -->
+            <div class="surface-card elevated" style="padding: var(--space-4);">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
                 <div>
-                  <div style="font-size: 14px; font-weight: 700; color: var(--text-primary);">Matching Grant Active</div>
-                  <div style="font-size: 12px; color: var(--text-muted);">Displays top matching banner on stage</div>
+                  <div style="font-size: var(--text-sm); font-weight: 700;">Matching Donor Grant</div>
+                  <div style="font-size: var(--text-xs); color: var(--ink-muted);">Displays top matching banner on ballroom screen</div>
                 </div>
-                <input type="checkbox" id="input-match-active" style="width: 20px; height: 20px; accent-color: var(--gold-400); cursor: pointer;">
+                <input type="checkbox" id="input-set-match-active" style="width: 24px; height: 24px; accent-color: var(--brand-accent); cursor: pointer;">
               </div>
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-bottom: var(--space-3);">
                 <div>
-                  <label style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px;">
-                    Match Pool Remaining ($)
+                  <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-match-pool">
+                    Matching Pool ($)
                   </label>
-                  <input type="number" id="input-match-pool" class="input-dark" placeholder="100000">
+                  <input type="number" id="input-set-match-pool" class="input-dark mono" placeholder="100000">
                 </div>
                 <div>
-                  <label style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px;">
-                    Match Ratio (e.g. 1.0 = 1:1)
+                  <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-match-ratio">
+                    Match Ratio (1.0 = 1:1)
                   </label>
-                  <input type="number" id="input-match-ratio" class="input-dark" value="1.0" step="0.5">
+                  <input type="number" id="input-set-match-ratio" class="input-dark mono" value="1.0" step="0.5">
                 </div>
               </div>
 
               <div>
-                <label style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px;">
+                <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-match-sponsor">
                   Matching Sponsor Title
                 </label>
-                <input type="text" id="input-match-title" class="input-dark" value="Board of Directors Matching Grant">
+                <input type="text" id="input-set-match-sponsor" class="input-dark" value="Board of Directors Matching Grant">
               </div>
-
-              <button type="button" id="btn-save-match" class="btn-secondary" style="width: 100%; margin-top: 10px; height: 42px;">
-                Save Matching Configuration
-              </button>
             </div>
 
-            <!-- QR Code URL -->
-            <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: flex-end;">
+            <!-- Stage QR Target URL -->
+            <div>
+              <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-qr-url">
+                Stage QR Target URL
+              </label>
+              <input type="text" id="input-set-qr-url" class="input-dark" value="https://give.hope.org/donate">
+            </div>
+
+            <!-- Passcode Protection -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
               <div>
-                <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px;">
-                  Stage QR Target URL
+                <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-control-pin">
+                  Control Room PIN
                 </label>
-                <input type="text" id="input-qr-url" class="input-dark" value="https://example.org/donate?source=stage-qr">
+                <input type="password" id="input-set-control-pin" class="input-dark mono" placeholder="9999">
               </div>
-              <button type="button" id="btn-save-qr" class="btn-secondary" style="height: 46px;">
-                Update QR
-              </button>
+              <div>
+                <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: var(--space-1);" for="input-set-entry-pin">
+                  Volunteer Pad PIN
+                </label>
+                <input type="password" id="input-set-entry-pin" class="input-dark mono" placeholder="None (Open)">
+              </div>
             </div>
 
-          </div>
-        </div>
-      </section>
+            <button type="button" id="btn-save-all-settings" class="btn-primary" style="width: 100%; min-height: 52px; margin-top: var(--space-2);">
+              Save Event Settings
+            </button>
+          </form>
+        </section>
 
+        <!-- Rehearsal Simulator & Safety Tools -->
+        <div style="display: flex; flex-direction: column; gap: var(--space-6);">
+          
+          <section class="surface-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
+              <h2 style="font-size: var(--text-lg); font-weight: 800;">Gala Tech Rehearsal Simulator</h2>
+              <span class="badge badge-staged">Mock Stream</span>
+            </div>
+            <p style="font-size: var(--text-xs); color: var(--ink-muted); line-height: 1.5; margin-bottom: var(--space-4);">
+              Inject test pledges to verify stage projection, 8-second delay holds, odometer rolls, and emcee confidence cues before doors open.
+            </p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+              <button type="button" class="btn-secondary" data-sim="single">
+                + 1 Random Pledge ($5k)
+              </button>
+              <button type="button" class="btn-secondary" data-sim="burst">
+                Test 7-Pledge Burst
+              </button>
+              <button type="button" class="btn-secondary" data-sim="typo" style="color: var(--color-warning);">
+                Inject Test Typo (Test Hold)
+              </button>
+              <button type="button" class="btn-secondary" data-sim="milestone" style="color: var(--color-success);">
+                Cross Milestone Goal
+              </button>
+            </div>
+          </section>
+
+          <!-- Danger Zone: Reset Event Ledger -->
+          <section class="surface-card" style="border-color: var(--color-danger); background: rgba(239, 68, 68, 0.04);">
+            <h2 style="font-size: var(--text-base); font-weight: 800; color: var(--color-danger); margin-bottom: var(--space-2);">
+              ⚠️ Reset Ledger Data (Fresh Gala Event)
+            </h2>
+            <p style="font-size: var(--text-xs); color: var(--ink-muted); line-height: 1.4; margin-bottom: var(--space-4);">
+              Permanently wipes all test transactions and resets the odometer floor to zero.
+            </p>
+            <button type="button" id="btn-wipe-ledger" class="btn-danger" style="font-size: var(--text-xs); min-height: 44px;">
+              Reset All Event Data
+            </button>
+          </section>
+
+        </div>
+
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Non-Blocking Action Modal (Replaces window.alert / prompt) -->
+  <div id="cockpit-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-dialog">
+      <div id="cockpit-modal-icon" style="font-size: 2rem; margin-bottom: var(--space-2);">⚡</div>
+      <h3 id="cockpit-modal-title" style="font-size: var(--text-xl); margin-bottom: var(--space-2);">Action Title</h3>
+      <p id="cockpit-modal-desc" style="font-size: var(--text-sm); color: var(--ink-secondary); line-height: 1.5; margin-bottom: var(--space-4);">Action description</p>
+      
+      <div id="cockpit-modal-input-wrap" style="margin-bottom: var(--space-4); display: none;">
+        <input type="text" id="cockpit-modal-input" class="input-dark" style="font-size: var(--text-lg); text-align: center;">
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <button type="button" id="btn-cockpit-confirm" class="btn-primary" style="width: 100%; min-height: 48px;">Confirm</button>
+        <button type="button" id="btn-cockpit-cancel" class="btn-secondary" style="width: 100%; min-height: 44px;">Cancel</button>
+      </div>
     </div>
   </div>
 
-  <!-- Raw Append-Only Ledger Audit Table -->
-  <section class="double-bezel-card" style="margin-top: 24px;">
-    <div class="double-bezel-inner">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
-        <div>
-          <h2 style="font-size: 18px; font-weight: 800; color: var(--text-primary);">
-            Authoritative Event Ledger Audit Trail
-          </h2>
-          <p style="font-size: 12px; color: var(--text-muted);">
-            Append-only event stream (last 50 events) — Source of truth
-          </p>
-        </div>
-        <button type="button" id="btn-wipe-ledger" class="btn-danger" style="font-size: 12px;">
-          ⚠️ Wipe All Ledger Data
-        </button>
-      </div>
-
-      <div style="overflow-x: auto;">
-        <table class="table-luxury" id="ledger-audit-table">
-          <thead>
-            <tr>
-              <th>Seq</th>
-              <th>Type</th>
-              <th>Amount</th>
-              <th>Donor</th>
-              <th>Display Name</th>
-              <th>Method</th>
-              <th>Source</th>
-              <th>Card #</th>
-              <th>Clerk</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="ledger-table-body">
-            <tr>
-              <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 24px;">
-                Loading ledger events...
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- Non-Blocking Action Modal (Replaces blocking browser prompt/confirm) -->
-  <div id="cockpit-modal" class="modal-backdrop" role="dialog" aria-modal="true" style="display: none;">
-    <div class="guardrail-modal-card" style="border-color: var(--gold-400); box-shadow: 0 25px 60px rgba(0,0,0,0.9), 0 0 35px var(--gold-glow); background: #0E131E;">
-      <div id="cockpit-modal-icon" class="guardrail-icon-badge" style="border-color: var(--gold-400); color: var(--gold-400); background: rgba(226, 183, 85, 0.15);">⚡</div>
-      <h3 id="cockpit-modal-title" style="font-size: 22px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">Action Title</h3>
-      <p id="cockpit-modal-desc" style="font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 18px;">Action description</p>
-      <div id="cockpit-modal-input-wrap" style="margin-bottom: 20px; display: none;">
-        <input type="text" id="cockpit-modal-input" class="input-dark" style="font-size: 18px; font-weight: 700; text-align: center;" placeholder="Enter value">
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button type="button" id="btn-cockpit-confirm" class="btn-primary" style="height: 48px; font-size: 15px;">Confirm</button>
-        <button type="button" id="btn-cockpit-cancel" class="btn-secondary" style="height: 42px;">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="js/mock-backend.js"></script>
   <script src="js/control.js"></script>
 </body>
 </html>

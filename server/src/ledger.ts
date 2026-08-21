@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 
 export interface LedgerEvent {
   seq: number;
-  event_type: "create" | "amend" | "void" | "match_apply";
+  event_type: "create" | "amend" | "void" | "match_apply" | "match_release";
   donation_id: string;
   supersedes_seq: number | null;
   amount_cents: number;
@@ -15,6 +15,8 @@ export interface LedgerEvent {
   card_number: string | null;
   entered_by: string | null;
   notes: string | null;
+  donor_phonetic?: string | null;
+  table_number?: string | null;
   created_at: number;
 }
 
@@ -30,14 +32,18 @@ export interface DonationRecord {
   card_number: string | null;
   entered_by: string | null;
   notes: string | null;
+  donor_phonetic?: string | null;
+  table_number?: string | null;
   created_at: number;
   updated_at: number;
   is_voided: boolean;
+  matched_amount_cents: number;
 }
 
 export interface EventStateRecord {
   id: number;
   event_name: string;
+  event_subtitle: string;
   goal_cents: number;
   match_pool_cents: number;
   match_total_cents: number;
@@ -52,17 +58,33 @@ export interface EventStateRecord {
   milestones_json: string;
   odometer_floor_cents: number;
   confetti_trigger: number;
+  theme_preset: string;
+  brand_hue: number;
+  brand_chroma: number;
+  brand_accent_hex: string;
+  brand_radius_px: number;
+  major_gift_threshold_cents: number;
+  stage_delay_ms: number;
+  confetti_on_milestone: number;
+  settings_seq: number;
   updated_at: number;
+}
+
+export interface FoldOptions {
+  maxCreatedAt?: number;
+  excludeDonationIds?: Set<string>;
 }
 
 export interface FoldedLedger {
   direct_raised_cents: number;
   match_applied_cents: number;
+  derived_match_pool_cents: number;
   total_raised_cents: number;
   active_donation_count: number;
   void_count: number;
   active_donations: Map<string, DonationRecord>;
   all_records: Map<string, DonationRecord>;
+  match_by_parent: Map<string, number>;
   latest_seq: number;
   last_event_at: number;
 }
@@ -79,6 +101,8 @@ export interface CreateDonationInput {
   card_number?: string;
   entered_by?: string;
   notes?: string;
+  donor_phonetic?: string;
+  table_number?: string;
 }
 
 export class CardSerialCollisionError extends Error {
@@ -86,25 +110,46 @@ export class CardSerialCollisionError extends Error {
   public prior_donation_id: string;
   public prior_entered_by: string | null;
   public prior_created_at: number;
+  public prior_amount_cents: number;
+  public prior_donor_name: string;
 
-  constructor(cardNumber: string, priorDonationId: string, priorEnteredBy: string | null, priorCreatedAt: number) {
+  constructor(
+    cardNumber: string,
+    priorDonationId: string,
+    priorEnteredBy: string | null,
+    priorCreatedAt: number,
+    priorAmountCents: number = 0,
+    priorDonorName: string = ""
+  ) {
     super(`Physical pledge card #${cardNumber} was already entered by ${priorEnteredBy || "another clerk"}.`);
     this.name = "CardSerialCollisionError";
     this.card_number = cardNumber;
     this.prior_donation_id = priorDonationId;
     this.prior_entered_by = priorEnteredBy;
     this.prior_created_at = priorCreatedAt;
+    this.prior_amount_cents = priorAmountCents;
+    this.prior_donor_name = priorDonorName;
   }
+}
+
+export function normalizeCard(card?: string | null): string | null {
+  if (!card) return null;
+  const trimmed = card.trim().replace(/^#/, "").toUpperCase();
+  return trimmed === "" ? null : trimmed;
 }
 
 /**
  * Deterministic fold over the immutable event ledger.
+ * Pure function: supports time horizons and exclusions for delayed projections.
  */
-export function foldLedger(db: Database): FoldedLedger {
+export function foldLedger(db: Database, options?: FoldOptions): FoldedLedger {
   const events = db.query<LedgerEvent, []>(`SELECT * FROM ledger ORDER BY seq ASC`).all();
+  const eventState = getEventState(db);
 
   const activeDonations = new Map<string, DonationRecord>();
   const allRecords = new Map<string, DonationRecord>();
+  const matchByParent = new Map<string, number>();
+
   let directRaisedCents = 0;
   let matchAppliedCents = 0;
   let voidCount = 0;
@@ -112,14 +157,48 @@ export function foldLedger(db: Database): FoldedLedger {
   let lastEventAt = 0;
 
   for (const event of events) {
-    latestSeq = event.seq;
-    lastEventAt = event.created_at;
-
-    if (event.event_type === "match_apply") {
-      matchAppliedCents += event.amount_cents;
+    // Respect time horizon if specified
+    if (options?.maxCreatedAt && event.created_at > options.maxCreatedAt) {
       continue;
     }
 
+    latestSeq = event.seq;
+    lastEventAt = event.created_at;
+
+    // 1. Matching Events (Apply / Release)
+    if (event.event_type === "match_apply") {
+      const parentId = event.donation_id.replace(/^match_/, "");
+      // Skip match if parent is excluded
+      if (options?.excludeDonationIds?.has(parentId)) {
+        continue;
+      }
+      matchAppliedCents += event.amount_cents;
+      matchByParent.set(parentId, (matchByParent.get(parentId) || 0) + event.amount_cents);
+      continue;
+    }
+
+    if (event.event_type === "match_release") {
+      const parentId = event.donation_id.replace(/^match_/, "");
+      if (options?.excludeDonationIds?.has(parentId)) {
+        continue;
+      }
+      matchAppliedCents = Math.max(0, matchAppliedCents - event.amount_cents);
+      const currentParentMatch = matchByParent.get(parentId) || 0;
+      const updatedParentMatch = Math.max(0, currentParentMatch - event.amount_cents);
+      if (updatedParentMatch === 0) {
+        matchByParent.delete(parentId);
+      } else {
+        matchByParent.set(parentId, updatedParentMatch);
+      }
+      continue;
+    }
+
+    // Skip donation if explicitly excluded
+    if (options?.excludeDonationIds?.has(event.donation_id)) {
+      continue;
+    }
+
+    // 2. Core Donation Events
     if (event.event_type === "create") {
       const record: DonationRecord = {
         donation_id: event.donation_id,
@@ -133,9 +212,12 @@ export function foldLedger(db: Database): FoldedLedger {
         card_number: event.card_number,
         entered_by: event.entered_by,
         notes: event.notes,
+        donor_phonetic: event.donor_phonetic,
+        table_number: event.table_number,
         created_at: event.created_at,
         updated_at: event.created_at,
-        is_voided: false
+        is_voided: false,
+        matched_amount_cents: 0
       };
       activeDonations.set(event.donation_id, record);
       allRecords.set(event.donation_id, record);
@@ -151,6 +233,8 @@ export function foldLedger(db: Database): FoldedLedger {
         existing.card_number = event.card_number;
         existing.entered_by = event.entered_by || existing.entered_by;
         existing.notes = event.notes;
+        existing.donor_phonetic = event.donor_phonetic ?? existing.donor_phonetic;
+        existing.table_number = event.table_number ?? existing.table_number;
         existing.updated_at = event.created_at;
         activeDonations.set(event.donation_id, existing);
       }
@@ -166,21 +250,26 @@ export function foldLedger(db: Database): FoldedLedger {
     }
   }
 
-  // Calculate direct raised from active donations
+  // Calculate direct raised from active donations and attach matched amounts
   for (const record of activeDonations.values()) {
     directRaisedCents += record.amount_cents;
+    record.matched_amount_cents = matchByParent.get(record.donation_id) || 0;
   }
 
+  // Pure derived remaining matching pool
+  const derivedPoolRemaining = Math.max(0, eventState.match_total_cents - matchAppliedCents);
   const totalRaisedCents = directRaisedCents + matchAppliedCents;
 
   return {
     direct_raised_cents: directRaisedCents,
     match_applied_cents: matchAppliedCents,
+    derived_match_pool_cents: derivedPoolRemaining,
     total_raised_cents: totalRaisedCents,
     active_donation_count: activeDonations.size,
     void_count: voidCount,
     active_donations: activeDonations,
     all_records: allRecords,
+    match_by_parent: matchByParent,
     latest_seq: latestSeq,
     last_event_at: lastEventAt
   };
@@ -188,7 +277,7 @@ export function foldLedger(db: Database): FoldedLedger {
 
 /**
  * Record a new donation into the append-only ledger with idempotency,
- * collision prevention, and automatic matching grant calculation.
+ * O(1) active card collision prevention, and automatic matching grant calculation.
  */
 export function recordDonation(db: Database, input: CreateDonationInput): { seq: number; donation_id: string; is_duplicate: boolean } {
   // 1. Check idempotency by source and source_txn_id
@@ -202,7 +291,7 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
     }
   }
 
-  // 2. Check idempotency by donation_id
+  // Check idempotency by donation_id
   const existingId = db.query<LedgerEvent, [string]>(
     `SELECT * FROM ledger WHERE donation_id = ? LIMIT 1`
   ).get(input.donation_id);
@@ -211,19 +300,27 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
     return { seq: existingId.seq, donation_id: existingId.donation_id, is_duplicate: true };
   }
 
-  // 3. Card serial collision check
-  const normalizedCard = input.card_number ? input.card_number.trim().replace(/^#/, "") : null;
+  // 2. Validate amount
+  if (input.amount_cents <= 0) {
+    throw new Error(`Invalid donation amount: ${input.amount_cents}. Must be greater than 0.`);
+  }
+
+  // 3. O(1) Physical Card Collision Detection
+  const normalizedCard = normalizeCard(input.card_number);
   if (normalizedCard) {
-    const folded = foldLedger(db);
-    for (const record of folded.active_donations.values()) {
-      if (record.card_number && record.card_number.trim().replace(/^#/, "") === normalizedCard) {
-        throw new CardSerialCollisionError(
-          normalizedCard,
-          record.donation_id,
-          record.entered_by,
-          record.created_at
-        );
-      }
+    const activeCard = db.query<{ card_number: string; donation_id: string; entered_by: string; created_at: number; amount_cents: number; donor_name: string }, [string]>(
+      `SELECT * FROM active_card WHERE card_number = ? LIMIT 1`
+    ).get(normalizedCard);
+
+    if (activeCard && activeCard.donation_id !== input.donation_id) {
+      throw new CardSerialCollisionError(
+        normalizedCard,
+        activeCard.donation_id,
+        activeCard.entered_by,
+        activeCard.created_at,
+        activeCard.amount_cents,
+        activeCard.donor_name
+      );
     }
   }
 
@@ -235,7 +332,6 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
     : (input.display_name?.trim() || rawDonorName);
 
   const now = Date.now();
-
   let insertedSeq = 0;
 
   db.transaction(() => {
@@ -243,11 +339,13 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
       INSERT INTO ledger (
         event_type, donation_id, supersedes_seq, amount_cents,
         donor_name, display_name, is_anonymous, payment_method,
-        source, source_txn_id, card_number, entered_by, notes, created_at
+        source, source_txn_id, card_number, entered_by, notes,
+        donor_phonetic, table_number, created_at
       ) VALUES (
         'create', ?, NULL, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?,
+        ?, ?, ?
       )
     `);
 
@@ -263,16 +361,28 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
       normalizedCard ? `#${normalizedCard}` : null,
       input.entered_by || null,
       input.notes || null,
+      input.donor_phonetic || null,
+      input.table_number || null,
       now
     );
 
     insertedSeq = Number(result.lastInsertRowid);
 
-    // 5. Handle matching grant if active
+    // Register active card in lookup table
+    if (normalizedCard) {
+      db.query(`
+        INSERT OR REPLACE INTO active_card (card_number, donation_id, entered_by, amount_cents, donor_name, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(normalizedCard, input.donation_id, input.entered_by || null, input.amount_cents, rawDonorName, now);
+    }
+
+    // 5. Handle matching grant if active (Pure fold calculation)
     const eventState = getEventState(db);
-    if (eventState.is_match_active === 1 && eventState.match_pool_cents > 0 && input.amount_cents > 0) {
+    const folded = foldLedger(db);
+
+    if (eventState.is_match_active === 1 && folded.derived_match_pool_cents > 0 && input.amount_cents > 0) {
       const matchPotential = Math.floor(input.amount_cents * eventState.match_ratio);
-      const matchApplied = Math.min(matchPotential, eventState.match_pool_cents);
+      const matchApplied = Math.min(matchPotential, folded.derived_match_pool_cents);
 
       if (matchApplied > 0) {
         db.query(`
@@ -294,18 +404,16 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
           `Match applied for pledge ${input.donation_id}`,
           now
         );
-
-        // Deduct from matching pool
-        const remainingPool = eventState.match_pool_cents - matchApplied;
-        db.query(`
-          UPDATE event_state
-          SET match_pool_cents = ?, updated_at = ?
-          WHERE id = 1
-        `).run(remainingPool, now);
       }
     }
 
-    db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
+    // Advance odometer floor if total increased and display is not frozen
+    const updatedFold = foldLedger(db);
+    if (updatedFold.total_raised_cents > eventState.odometer_floor_cents && !eventState.is_frozen) {
+      db.query(`UPDATE event_state SET odometer_floor_cents = ?, updated_at = ? WHERE id = 1`).run(updatedFold.total_raised_cents, now);
+    } else {
+      db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
+    }
   })();
 
   return { seq: insertedSeq, donation_id: input.donation_id, is_duplicate: false };
@@ -313,6 +421,7 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
 
 /**
  * Amend an existing donation in the ledger.
+ * Recomputes matching grants and updates active card table.
  */
 export function amendDonation(db: Database, donationId: string, input: Partial<CreateDonationInput>): number {
   const folded = foldLedger(db);
@@ -328,37 +437,133 @@ export function amendDonation(db: Database, donationId: string, input: Partial<C
     ? "Anonymous Supporter"
     : (input.display_name?.trim() || (input.donor_name ? donorName : existing.display_name));
 
+  const newAmount = input.amount_cents !== undefined ? input.amount_cents : existing.amount_cents;
+  const newNormalizedCard = input.card_number !== undefined ? normalizeCard(input.card_number) : normalizeCard(existing.card_number);
+
+  // Check card collision if card number changed
+  if (newNormalizedCard && newNormalizedCard !== normalizeCard(existing.card_number)) {
+    const activeCard = db.query<{ card_number: string; donation_id: string; entered_by: string; created_at: number; amount_cents: number; donor_name: string }, [string]>(
+      `SELECT * FROM active_card WHERE card_number = ? LIMIT 1`
+    ).get(newNormalizedCard);
+
+    if (activeCard && activeCard.donation_id !== donationId) {
+      throw new CardSerialCollisionError(
+        newNormalizedCard,
+        activeCard.donation_id,
+        activeCard.entered_by,
+        activeCard.created_at,
+        activeCard.amount_cents,
+        activeCard.donor_name
+      );
+    }
+  }
+
   let insertedSeq = 0;
 
   db.transaction(() => {
+    // 1. Insert amend event (Correct argument ordering!)
     const result = db.query(`
       INSERT INTO ledger (
         event_type, donation_id, supersedes_seq, amount_cents,
         donor_name, display_name, is_anonymous, payment_method,
-        source, source_txn_id, card_number, entered_by, notes, created_at
+        source, source_txn_id, card_number, entered_by, notes,
+        donor_phonetic, table_number, created_at
       ) VALUES (
         'amend', ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?,
+        ?, ?, ?
       )
     `).run(
       donationId,
       existing.latest_seq,
-      input.amount_cents !== undefined ? input.amount_cents : existing.amount_cents,
+      newAmount,
       donorName,
       displayName,
       isAnonymous,
       input.payment_method || existing.payment_method,
       existing.source,
-      existing.card_number,
-      input.card_number ? input.card_number.trim() : existing.card_number,
+      null, // source_txn_id is null for manual amendments
+      newNormalizedCard ? `#${newNormalizedCard}` : null,
       input.entered_by || existing.entered_by,
       input.notes !== undefined ? input.notes : existing.notes,
+      input.donor_phonetic !== undefined ? input.donor_phonetic : existing.donor_phonetic || null,
+      input.table_number !== undefined ? input.table_number : existing.table_number || null,
       now
     );
 
     insertedSeq = Number(result.lastInsertRowid);
-    db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
+
+    // 2. Update active card index
+    const oldNormalizedCard = normalizeCard(existing.card_number);
+    if (oldNormalizedCard && oldNormalizedCard !== newNormalizedCard) {
+      db.query(`DELETE FROM active_card WHERE card_number = ?`).run(oldNormalizedCard);
+    }
+    if (newNormalizedCard) {
+      db.query(`
+        INSERT OR REPLACE INTO active_card (card_number, donation_id, entered_by, amount_cents, donor_name, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(newNormalizedCard, donationId, input.entered_by || existing.entered_by, newAmount, donorName, now);
+    }
+
+    // 3. Recalculate matching grant (Release old match and apply new match)
+    const existingMatch = folded.match_by_parent.get(donationId) || 0;
+    if (existingMatch > 0) {
+      db.query(`
+        INSERT INTO ledger (
+          event_type, donation_id, supersedes_seq, amount_cents,
+          donor_name, display_name, is_anonymous, payment_method,
+          source, source_txn_id, card_number, entered_by, notes, created_at
+        ) VALUES (
+          'match_release', ?, ?, ?,
+          'Matching Grant', 'Matching Grant', 0, 'match',
+          'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
+        )
+      `).run(
+        `match_${donationId}`,
+        insertedSeq,
+        existingMatch,
+        `Match released on amendment for pledge ${donationId}`,
+        now
+      );
+    }
+
+    const eventState = getEventState(db);
+    const refreshedFold = foldLedger(db);
+    if (eventState.is_match_active === 1 && refreshedFold.derived_match_pool_cents > 0 && newAmount > 0) {
+      const matchPotential = Math.floor(newAmount * eventState.match_ratio);
+      const matchApplied = Math.min(matchPotential, refreshedFold.derived_match_pool_cents);
+
+      if (matchApplied > 0) {
+        db.query(`
+          INSERT INTO ledger (
+            event_type, donation_id, supersedes_seq, amount_cents,
+            donor_name, display_name, is_anonymous, payment_method,
+            source, source_txn_id, card_number, entered_by, notes, created_at
+          ) VALUES (
+            'match_apply', ?, ?, ?,
+            ?, ?, 0, 'match',
+            'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
+          )
+        `).run(
+          `match_${donationId}`,
+          insertedSeq,
+          matchApplied,
+          eventState.match_sponsor_title || "Matching Grant",
+          eventState.match_sponsor_title || "Matching Grant",
+          `Match reapplied on amendment for pledge ${donationId}`,
+          now
+        );
+      }
+    }
+
+    // Advance floor if total increased
+    const postAmendFold = foldLedger(db);
+    if (postAmendFold.total_raised_cents > eventState.odometer_floor_cents && !eventState.is_frozen) {
+      db.query(`UPDATE event_state SET odometer_floor_cents = ?, updated_at = ? WHERE id = 1`).run(postAmendFold.total_raised_cents, now);
+    } else {
+      db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
+    }
   })();
 
   return insertedSeq;
@@ -366,6 +571,7 @@ export function amendDonation(db: Database, donationId: string, input: Partial<C
 
 /**
  * Void a donation in the ledger.
+ * Emits compensating match_release event and frees up active card serial.
  */
 export function voidDonation(db: Database, donationId: string, enteredBy?: string, reason?: string): number {
   const folded = foldLedger(db);
@@ -384,31 +590,55 @@ export function voidDonation(db: Database, donationId: string, enteredBy?: strin
         donor_name, display_name, is_anonymous, payment_method,
         source, source_txn_id, card_number, entered_by, notes, created_at
       ) VALUES (
-        'void', ?, ?, 0,
+        'void', ?, ?, ?,
         ?, ?, ?, ?,
-        ?, NULL, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?
       )
     `).run(
       donationId,
       existing.latest_seq,
+      existing.amount_cents,
       existing.donor_name,
       existing.display_name,
       existing.is_anonymous ? 1 : 0,
       existing.payment_method,
       existing.source,
+      null,
       existing.card_number,
       enteredBy || existing.entered_by,
-      reason || "Voided by user",
+      reason || "Voided by operator",
       now
     );
 
     insertedSeq = Number(result.lastInsertRowid);
 
-    // Also auto-yank from stage chyrons
-    db.query(`
-      INSERT OR REPLACE INTO yanked_chyrons (donation_id, yanked_at, yanked_by, reason)
-      VALUES (?, ?, ?, ?)
-    `).run(donationId, now, enteredBy || "SYSTEM", "Donation voided");
+    // Free up active card so it can be reused
+    const normalizedCard = normalizeCard(existing.card_number);
+    if (normalizedCard) {
+      db.query(`DELETE FROM active_card WHERE card_number = ?`).run(normalizedCard);
+    }
+
+    // Release matching grant if any was applied
+    const appliedMatch = folded.match_by_parent.get(donationId) || 0;
+    if (appliedMatch > 0) {
+      db.query(`
+        INSERT INTO ledger (
+          event_type, donation_id, supersedes_seq, amount_cents,
+          donor_name, display_name, is_anonymous, payment_method,
+          source, source_txn_id, card_number, entered_by, notes, created_at
+        ) VALUES (
+          'match_release', ?, ?, ?,
+          'Matching Grant', 'Matching Grant', 0, 'match',
+          'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
+        )
+      `).run(
+        `match_${donationId}`,
+        insertedSeq,
+        appliedMatch,
+        `Match released on void of pledge ${donationId}`,
+        now
+      );
+    }
 
     db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
   })();
@@ -417,355 +647,124 @@ export function voidDonation(db: Database, donationId: string, enteredBy?: strin
 }
 
 /**
- * Yank a donation chyron from appearing on the stage HUD.
+ * Hold a donation from stage projection (1-click hold).
  */
-export function yankChyron(db: Database, donationId: string, yankedBy?: string, reason?: string): void {
+export function holdDonation(db: Database, donationId: string, heldBy?: string, reason?: string): void {
   const now = Date.now();
   db.query(`
-    INSERT OR REPLACE INTO yanked_chyrons (donation_id, yanked_at, yanked_by, reason)
+    INSERT OR REPLACE INTO held_donations (donation_id, held_at, held_by, reason)
     VALUES (?, ?, ?, ?)
-  `).run(donationId, now, yankedBy || "ADMIN", reason || "Yanked by AV Director");
-
+  `).run(donationId, now, heldBy || "AV Director", reason || "Held from stage");
   db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
 }
 
 /**
- * Un-yank a donation chyron.
+ * Release a held donation back onto the stage.
  */
-export function unyankChyron(db: Database, donationId: string): void {
-  db.query(`DELETE FROM yanked_chyrons WHERE donation_id = ?`).run(donationId);
+export function releaseHeldDonation(db: Database, donationId: string): void {
+  db.query(`DELETE FROM held_donations WHERE donation_id = ?`).run(donationId);
   db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(Date.now());
 }
 
 /**
- * Fetch current Event State configuration.
+ * Get current event state with derived match pool.
  */
 export function getEventState(db: Database): EventStateRecord {
-  const state = db.query<EventStateRecord, []>(`SELECT * FROM event_state WHERE id = 1`).get();
-  if (!state) {
-    throw new Error("event_state row missing. Run migrations.");
+  const row = db.query<EventStateRecord, []>(`SELECT * FROM event_state WHERE id = 1`).get();
+  if (!row) {
+    throw new Error("Event state record not found in database.");
   }
-  return state;
+
+  // Derive remaining matching pool from the ledger
+  const matchRow = db.query<{ total_applied: number; total_released: number }, []>(`
+    SELECT 
+      COALESCE(SUM(CASE WHEN event_type = 'match_apply' THEN amount_cents ELSE 0 END), 0) as total_applied,
+      COALESCE(SUM(CASE WHEN event_type = 'match_release' THEN amount_cents ELSE 0 END), 0) as total_released
+    FROM ledger
+  `).get();
+  const netMatch = matchRow ? Math.max(0, matchRow.total_applied - matchRow.total_released) : 0;
+  row.match_pool_cents = Math.max(0, row.match_total_cents - netMatch);
+
+  return row;
 }
 
 /**
- * Update event configuration.
+ * Update event state settings.
  */
-export function updateEventState(db: Database, updates: Partial<EventStateRecord>): EventStateRecord {
+export function updateEventState(db: Database, patch: Partial<EventStateRecord>): EventStateRecord {
   const current = getEventState(db);
   const now = Date.now();
+  const nextSeq = (current.settings_seq || 1) + 1;
 
-  const next = {
+  const updated: EventStateRecord = {
     ...current,
-    ...updates,
+    ...patch,
+    settings_seq: nextSeq,
     updated_at: now
   };
 
   db.query(`
-    UPDATE event_state SET
-      event_name = ?,
-      goal_cents = ?,
-      match_pool_cents = ?,
-      match_total_cents = ?,
-      match_ratio = ?,
-      is_match_active = ?,
-      match_sponsor_title = ?,
-      is_frozen = ?,
-      manual_override_cents = ?,
-      qr_donate_url = ?,
-      entry_pin = ?,
-      control_pin = ?,
-      milestones_json = ?,
-      odometer_floor_cents = ?,
-      confetti_trigger = ?,
-      updated_at = ?
+    UPDATE event_state
+    SET event_name = ?,
+        event_subtitle = ?,
+        goal_cents = ?,
+        match_pool_cents = ?,
+        match_total_cents = ?,
+        match_ratio = ?,
+        is_match_active = ?,
+        match_sponsor_title = ?,
+        is_frozen = ?,
+        manual_override_cents = ?,
+        qr_donate_url = ?,
+        entry_pin = ?,
+        control_pin = ?,
+        milestones_json = ?,
+        odometer_floor_cents = ?,
+        confetti_trigger = ?,
+        theme_preset = ?,
+        brand_hue = ?,
+        brand_chroma = ?,
+        brand_accent_hex = ?,
+        brand_radius_px = ?,
+        major_gift_threshold_cents = ?,
+        stage_delay_ms = ?,
+        confetti_on_milestone = ?,
+        settings_seq = ?,
+        updated_at = ?
     WHERE id = 1
   `).run(
-    next.event_name,
-    next.goal_cents,
-    next.match_pool_cents,
-    next.match_total_cents,
-    next.match_ratio,
-    next.is_match_active,
-    next.match_sponsor_title,
-    next.is_frozen,
-    next.manual_override_cents,
-    next.qr_donate_url,
-    next.entry_pin,
-    next.control_pin,
-    next.milestones_json,
-    next.odometer_floor_cents,
-    next.confetti_trigger,
+    updated.event_name,
+    updated.event_subtitle,
+    updated.goal_cents,
+    updated.match_pool_cents,
+    updated.match_total_cents,
+    updated.match_ratio,
+    updated.is_match_active,
+    updated.match_sponsor_title,
+    updated.is_frozen,
+    updated.manual_override_cents,
+    updated.qr_donate_url,
+    updated.entry_pin,
+    updated.control_pin,
+    updated.milestones_json,
+    updated.odometer_floor_cents,
+    updated.confetti_trigger,
+    updated.theme_preset,
+    updated.brand_hue,
+    updated.brand_chroma,
+    updated.brand_accent_hex,
+    updated.brand_radius_px,
+    updated.major_gift_threshold_cents,
+    updated.stage_delay_ms,
+    updated.confetti_on_milestone,
+    updated.settings_seq,
     now
   );
 
-  return next;
+  return updated;
 }
 
-/**
- * Stage HUD state projection (/stage)
- * - Strips all real donor names for anonymous gifts (Strict Privacy Shield).
- * - Applies 8-second delay buffer for chyrons.
- * - Filters out yanked chyrons.
- * - Supports no-backward-odometer tracking.
- */
-export function getStageState(db: Database, sinceSeq: number = 0) {
-  const eventState = getEventState(db);
-  const folded = foldLedger(db);
-  const now = Date.now();
-
-  // Determine effective total
-  const trueTotal = folded.total_raised_cents;
-  const effectiveTotal = eventState.manual_override_cents !== null && eventState.manual_override_cents !== undefined
-    ? eventState.manual_override_cents
-    : trueTotal;
-
-  // No-backward-odometer floor check: if total went below floor, keep floor unless manually resynced
-  const displayTotal = Math.max(effectiveTotal, eventState.odometer_floor_cents);
-
-  // Update odometer floor if new total is higher
-  if (displayTotal > eventState.odometer_floor_cents && !eventState.is_frozen) {
-    db.query(`UPDATE event_state SET odometer_floor_cents = ? WHERE id = 1`).run(displayTotal);
-  }
-
-  // Parse milestones
-  let milestones: Array<{ cents: number; label: string }> = [];
-  try {
-    milestones = JSON.parse(eventState.milestones_json);
-  } catch {
-    milestones = [
-      { cents: 10000000, label: "Foundation" },
-      { cents: 25000000, label: "Staffing" },
-      { cents: 50000000, label: "Legal Clinic" },
-      { cents: 100000000, label: "Expansion" }
-    ];
-  }
-
-  // Fetch yanked set
-  const yankedRows = db.query<{ donation_id: string }, []>(`SELECT donation_id FROM yanked_chyrons`).all();
-  const yankedSet = new Set(yankedRows.map(r => r.donation_id));
-
-  // Build chyron stream: delayed by 8 seconds, not yanked, anonymized
-  const chyronBufferMs = 8000;
-  const chyrons: Array<{
-    donation_id: string;
-    display_name: string;
-    amount_cents: number;
-    created_at: number;
-  }> = [];
-
-  // Sort active donations by created_at DESC
-  const sortedDonations = Array.from(folded.active_donations.values())
-    .filter(d => !d.is_voided && !yankedSet.has(d.donation_id))
-    .sort((a, b) => b.created_at - a.created_at);
-
-  for (const d of sortedDonations) {
-    // Only include if past the 8-second delay buffer
-    if (now - d.created_at >= chyronBufferMs) {
-      chyrons.push({
-        donation_id: d.donation_id,
-        display_name: d.is_anonymous ? "Anonymous Supporter" : d.display_name,
-        amount_cents: d.amount_cents,
-        created_at: d.created_at
-      });
-    }
-  }
-
-  const percent = eventState.goal_cents > 0
-    ? Math.min(100, Math.round((displayTotal / eventState.goal_cents) * 1000) / 10)
-    : 0;
-
-  return {
-    seq: folded.latest_seq,
-    event_name: eventState.event_name,
-    total_raised_cents: displayTotal,
-    true_total_raised_cents: trueTotal,
-    goal_cents: eventState.goal_cents,
-    percent,
-    is_match_active: Boolean(eventState.is_match_active),
-    match_sponsor_title: eventState.match_sponsor_title,
-    match_pool_cents: eventState.match_pool_cents,
-    match_total_cents: eventState.match_total_cents,
-    is_frozen: Boolean(eventState.is_frozen),
-    qr_donate_url: eventState.qr_donate_url,
-    milestones,
-    chyrons: chyrons.slice(0, 30), // Latest 30 verified chyrons
-    confetti_trigger: eventState.confetti_trigger,
-    server_time: now
-  };
-}
-
-/**
- * Emcee Confidence Monitor state projection (/emcee)
- */
-export function getEmceeState(db: Database) {
-  const eventState = getEventState(db);
-  const folded = foldLedger(db);
-  const now = Date.now();
-
-  const totalRaised = eventState.manual_override_cents !== null ? eventState.manual_override_cents : folded.total_raised_cents;
-
-  // Parse milestones and find next milestone distance
-  let milestones: Array<{ cents: number; label: string }> = [];
-  try {
-    milestones = JSON.parse(eventState.milestones_json);
-  } catch {
-    milestones = [];
-  }
-
-  milestones.sort((a, b) => a.cents - b.cents);
-  let nextMilestone: { target_cents: number; remaining_cents: number; label: string } | null = null;
-  for (const m of milestones) {
-    if (m.cents > totalRaised) {
-      nextMilestone = {
-        target_cents: m.cents,
-        remaining_cents: m.cents - totalRaised,
-        label: m.label
-      };
-      break;
-    }
-  }
-
-  // Top 5 largest gifts for shoutouts
-  const topGifts = Array.from(folded.active_donations.values())
-    .sort((a, b) => b.amount_cents - a.amount_cents)
-    .slice(0, 5)
-    .map(d => ({
-      donation_id: d.donation_id,
-      display_name: d.is_anonymous ? "Anonymous Supporter" : d.donor_name,
-      amount_cents: d.amount_cents,
-      is_anonymous: d.is_anonymous,
-      notes: d.notes,
-      entered_by: d.entered_by
-    }));
-
-  // Recent 10 gifts
-  const recentGifts = Array.from(folded.active_donations.values())
-    .sort((a, b) => b.created_at - a.created_at)
-    .slice(0, 10)
-    .map(d => ({
-      donation_id: d.donation_id,
-      display_name: d.is_anonymous ? "Anonymous Supporter" : d.donor_name,
-      amount_cents: d.amount_cents,
-      is_anonymous: d.is_anonymous,
-      notes: d.notes,
-      created_at: d.created_at,
-      seconds_ago: Math.max(0, Math.floor((now - d.created_at) / 1000))
-    }));
-
-  const percent = eventState.goal_cents > 0
-    ? Math.min(100, Math.round((totalRaised / eventState.goal_cents) * 1000) / 10)
-    : 0;
-
-  return {
-    seq: folded.latest_seq,
-    event_name: eventState.event_name,
-    total_raised_cents: totalRaised,
-    direct_raised_cents: folded.direct_raised_cents,
-    match_applied_cents: folded.match_applied_cents,
-    goal_cents: eventState.goal_cents,
-    percent,
-    active_donation_count: folded.active_donation_count,
-    next_milestone: nextMilestone,
-    is_match_active: Boolean(eventState.is_match_active),
-    match_pool_cents: eventState.match_pool_cents,
-    match_total_cents: eventState.match_total_cents,
-    match_sponsor_title: eventState.match_sponsor_title,
-    top_gifts: topGifts,
-    recent_gifts: recentGifts,
-    is_frozen: Boolean(eventState.is_frozen),
-    server_time: now
-  };
-}
-
-/**
- * AV & Admin Control Deck state projection (/control)
- */
-export function getControlState(db: Database) {
-  const eventState = getEventState(db);
-  const folded = foldLedger(db);
-  const now = Date.now();
-
-  const yankedRows = db.query<{ donation_id: string; yanked_at: number; yanked_by: string; reason: string }, []>(
-    `SELECT * FROM yanked_chyrons`
-  ).all();
-  const yankedMap = new Map(yankedRows.map(r => [r.donation_id, r]));
-
-  // Staging Buffer: All active donations from the last 60 seconds
-  const chyronBufferMs = 8000;
-  const stagedChyrons = Array.from(folded.active_donations.values())
-    .sort((a, b) => b.created_at - a.created_at)
-    .slice(0, 40)
-    .map(d => {
-      const elapsedMs = now - d.created_at;
-      const isLiveOnStage = elapsedMs >= chyronBufferMs;
-      const remainingDelaySec = isLiveOnStage ? 0 : Math.ceil((chyronBufferMs - elapsedMs) / 1000);
-      const yankInfo = yankedMap.get(d.donation_id);
-
-      return {
-        donation_id: d.donation_id,
-        donor_name: d.donor_name,
-        display_name: d.display_name,
-        amount_cents: d.amount_cents,
-        is_anonymous: d.is_anonymous,
-        payment_method: d.payment_method,
-        source: d.source,
-        card_number: d.card_number,
-        entered_by: d.entered_by,
-        notes: d.notes,
-        created_at: d.created_at,
-        elapsed_sec: Math.floor(elapsedMs / 1000),
-        remaining_delay_sec: remainingDelaySec,
-        is_live_on_stage: isLiveOnStage,
-        is_yanked: Boolean(yankInfo),
-        yank_info: yankInfo || null
-      };
-    });
-
-  // Recent 50 raw ledger events for audit log
-  const recentEvents = db.query<LedgerEvent, []>(
-    `SELECT * FROM ledger ORDER BY seq DESC LIMIT 50`
-  ).all();
-
-  return {
-    seq: folded.latest_seq,
-    event_state: eventState,
-    folded: {
-      total_raised_cents: folded.total_raised_cents,
-      direct_raised_cents: folded.direct_raised_cents,
-      match_applied_cents: folded.match_applied_cents,
-      active_donation_count: folded.active_donation_count,
-      void_count: folded.void_count
-    },
-    staged_chyrons: stagedChyrons,
-    recent_events: recentEvents,
-    server_time: now
-  };
-}
-
-/**
- * Volunteer Entry Terminal state projection (/entry)
- */
-export function getVolunteerState(db: Database, volunteerId?: string) {
-  const eventState = getEventState(db);
-  const folded = foldLedger(db);
-  const now = Date.now();
-
-  // Get volunteer's personal audit log (last 15 submissions)
-  let personalLog: DonationRecord[] = [];
-  if (volunteerId) {
-    personalLog = Array.from(folded.all_records.values())
-      .filter(d => d.entered_by === volunteerId)
-      .sort((a, b) => b.created_at - a.created_at)
-      .slice(0, 15);
-  }
-
-  return {
-    seq: folded.latest_seq,
-    event_name: eventState.event_name,
-    total_raised_cents: eventState.manual_override_cents !== null ? eventState.manual_override_cents : folded.total_raised_cents,
-    goal_cents: eventState.goal_cents,
-    personal_log: personalLog,
-    server_time: now
-  };
-}
+// Re-export projections and backwards compatibility aliases
+export const yankChyron = holdDonation;
+export const unyankChyron = releaseHeldDonation;
+export { getStageState, getEmceeState, getControlState, getVolunteerState } from "./projection";

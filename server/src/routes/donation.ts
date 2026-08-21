@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { recordDonation, amendDonation, voidDonation, CardSerialCollisionError, type CreateDonationInput } from "../ledger";
+import { recordDonation, amendDonation, voidDonation, getEventState, CardSerialCollisionError, type CreateDonationInput } from "../ledger";
 
 export async function handleDonationRequest(req: Request, db: Database, pathParts: string[]): Promise<Response> {
   const method = req.method.toUpperCase();
@@ -7,7 +7,7 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
   // Route: POST /api/donation or PUT /api/donation/:id
   if ((method === "POST" && pathParts.length === 2) || (method === "PUT" && pathParts.length === 3)) {
     try {
-      const body = await req.json() as Partial<CreateDonationInput>;
+      const body = await req.json() as Partial<CreateDonationInput & { confirmed_major_gift?: boolean }>;
       
       const donationId = (method === "PUT" ? pathParts[2] : body.donation_id) || crypto.randomUUID();
       const amountCents = typeof body.amount_cents === "number" ? Math.round(body.amount_cents) : 0;
@@ -25,6 +25,18 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
         return Response.json({ error: "VALIDATION_ERROR", message: "donor_name is required" }, { status: 400 });
       }
 
+      // Check Server-Enforced Major Gift Guardrail (ADR-03)
+      const eventState = getEventState(db);
+      const threshold = eventState.major_gift_threshold_cents || 950000;
+      if (amountCents >= threshold && body.confirmed_major_gift !== true) {
+        return Response.json({
+          error: "MAJOR_GIFT_CONFIRMATION_REQUIRED",
+          message: `Gifts of $${Math.floor(threshold / 100).toLocaleString("en-US")} or more require explicit confirmation.`,
+          amount_cents: amountCents,
+          threshold_cents: threshold
+        }, { status: 428 });
+      }
+
       const input: CreateDonationInput = {
         donation_id: donationId,
         amount_cents: amountCents,
@@ -36,7 +48,9 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
         source_txn_id: body.source_txn_id,
         card_number: body.card_number,
         entered_by: body.entered_by,
-        notes: body.notes
+        notes: body.notes,
+        donor_phonetic: body.donor_phonetic,
+        table_number: body.table_number
       };
 
       const result = recordDonation(db, input);
@@ -54,7 +68,9 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
           card_number: err.card_number,
           prior_donation_id: err.prior_donation_id,
           prior_entered_by: err.prior_entered_by,
-          prior_created_at: err.prior_created_at
+          prior_created_at: err.prior_created_at,
+          prior_amount_cents: err.prior_amount_cents,
+          prior_donor_name: err.prior_donor_name
         }, { status: 409 });
       }
       const message = err instanceof Error ? err.message : "Internal error";

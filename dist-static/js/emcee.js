@@ -1,5 +1,6 @@
 /**
- * Givebar — Emcee Confidence Monitor Controller
+ * Givebar — Podium Screen Controller (/emcee)
+ * High-contrast OLED monitor, 3-second glance hierarchy, vocal shoutout cards
  */
 
 (function () {
@@ -17,52 +18,78 @@
 
       const data = await res.json();
 
-      // 1. Authoritative Total
-      const totalDollars = Math.floor(data.total_raised_cents / 100);
-      document.getElementById('emcee-total-raised').textContent = `$${totalDollars.toLocaleString('en-US')}`;
+      // 1. Total Raised & Goal Percentage
+      const totalEl = document.getElementById('emcee-total-raised');
+      const percentEl = document.getElementById('emcee-percent');
+      const goalEl = document.getElementById('emcee-goal');
+      const countEl = document.getElementById('emcee-active-count');
+      const subTitleEl = document.getElementById('emcee-subtitle');
 
-      // 2. Goal & Percent
-      const goalDollars = Math.floor(data.goal_cents / 100);
-      document.getElementById('emcee-goal').textContent = `$${goalDollars.toLocaleString('en-US')}`;
-      document.getElementById('emcee-percent').textContent = `${data.percent}%`;
-      document.getElementById('emcee-active-count').textContent = data.active_donation_count || 0;
+      if (totalEl && data.total_raised_cents !== undefined) {
+        totalEl.textContent = `$${Math.floor(data.total_raised_cents / 100).toLocaleString('en-US')}`;
+      }
 
-      // 3. Matching Pool Badge
+      if (percentEl && data.percent !== undefined) {
+        percentEl.textContent = `${data.percent}%`;
+      }
+
+      if (goalEl && data.goal_cents) {
+        goalEl.textContent = `$${Math.floor(data.goal_cents / 100).toLocaleString('en-US')}`;
+      }
+
+      if (countEl && data.active_donation_count !== undefined) {
+        countEl.textContent = data.active_donation_count.toLocaleString('en-US');
+      }
+
+      if (subTitleEl && data.event_name) {
+        subTitleEl.textContent = `${data.event_name} • ${data.event_subtitle || 'Live Appeal'}`;
+      }
+
+      // 2. Next Milestone Target
+      const gapEl = document.getElementById('emcee-milestone-gap');
+      const nameEl = document.getElementById('emcee-milestone-name');
+
+      if (gapEl && nameEl) {
+        if (data.next_milestone) {
+          const remainingDollars = Math.floor(data.next_milestone.remaining_cents / 100);
+          gapEl.textContent = `$${remainingDollars.toLocaleString('en-US')} to go`;
+          nameEl.textContent = `Goal: ${data.next_milestone.label} ($${Math.floor(data.next_milestone.target_cents / 100).toLocaleString('en-US')})`;
+        } else {
+          gapEl.textContent = '🎉 All Milestones Cleared!';
+          nameEl.textContent = 'Fundraising goal achieved';
+        }
+      }
+
+      // 3. Active Matching Grant Badge
       const matchBadge = document.getElementById('emcee-match-badge');
-      const matchPoolEl = document.getElementById('emcee-match-pool');
-      if (data.is_match_active) {
-        matchBadge.style.display = 'inline-block';
-        matchPoolEl.textContent = `$${Math.floor(data.match_pool_cents / 100).toLocaleString('en-US')}`;
-      } else {
-        matchBadge.style.display = 'none';
+      const matchPool = document.getElementById('emcee-match-pool');
+
+      if (matchBadge && matchPool) {
+        if (data.is_match_active && data.match_pool_cents > 0) {
+          matchPool.textContent = `$${Math.floor(data.match_pool_cents / 100).toLocaleString('en-US')}`;
+          matchBadge.style.display = 'inline-flex';
+        } else {
+          matchBadge.style.display = 'none';
+        }
       }
 
-      // 4. Next Milestone Gap
-      const milestoneGapEl = document.getElementById('emcee-milestone-gap');
-      const milestoneNameEl = document.getElementById('emcee-milestone-name');
-
-      if (data.next_milestone) {
-        const remainingDollars = Math.floor(data.next_milestone.remaining_cents / 100);
-        const targetDollars = Math.floor(data.next_milestone.target_cents / 100);
-        milestoneGapEl.textContent = `$${remainingDollars.toLocaleString('en-US')} needed`;
-        milestoneNameEl.textContent = `to reach $${targetDollars.toLocaleString('en-US')} (${data.next_milestone.label})`;
-      } else {
-        milestoneGapEl.textContent = '🎉 All Milestones Reached!';
-        milestoneNameEl.textContent = 'Gala goal has been achieved or surpassed.';
+      // 4. Apply Live Theme Tokens
+      if (data.theme) {
+        document.documentElement.style.setProperty('--brand-hue', data.theme.hue);
+        document.documentElement.style.setProperty('--brand-chroma', data.theme.chroma);
+        if (data.theme.radius_px) {
+          document.documentElement.style.setProperty('--brand-radius', `${data.theme.radius_px}px`);
+        }
       }
 
-      // 5. Render Top 5 Largest Gifts
+      // 5. Render Top 5 Largest Gifts & Recent Stream
       renderTopGifts(data.top_gifts || []);
-
-      // 6. Render Recent Pledges
       renderRecentGifts(data.recent_gifts || []);
 
     } catch {
-      // Flapping tolerance
+      // Ignore network hiccup
     }
   }
-
-  let knownTopGiftIds = new Set();
 
   function renderTopGifts(gifts) {
     const container = document.getElementById('top-gifts-container');
@@ -70,7 +97,7 @@
 
     if (gifts.length === 0) {
       container.innerHTML = `
-        <div style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 24px;">
+        <div style="color: var(--ink-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6);">
           Awaiting first major gift...
         </div>
       `;
@@ -79,39 +106,34 @@
 
     let html = '';
     gifts.forEach((item, index) => {
-      const amountStr = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
-      const isNewMajor = !knownTopGiftIds.has(item.donation_id) && item.amount_cents >= 1000000;
-      
-      let noteBadge = '';
-      if (item.notes) {
-        const tableMatch = item.notes.match(/Table\s*#?\s*(\d+)/i);
-        if (tableMatch) {
-          noteBadge = `<span class="table-badge">TABLE ${tableMatch[1]}</span> <span style="font-size: 14px; font-weight: 700; color: var(--text-secondary); margin-left: 6px;">${escapeHTML(item.notes.replace(tableMatch[0], '').trim())}</span>`;
-        } else {
-          noteBadge = `<span style="font-size: 14px; font-weight: 700; color: var(--gold-300);">${escapeHTML(item.notes)}</span>`;
-        }
-      } else {
-        noteBadge = `<span style="font-size: 13px; font-weight: 600; color: var(--text-muted);">General Gala Pledge</span>`;
-      }
+      const dollars = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
+      const phoneticGuide = item.donor_phonetic
+        ? `<div style="font-size: var(--text-xs); color: var(--color-warning); font-style: italic;">Pronounce: ${escapeHTML(item.donor_phonetic)}</div>`
+        : '';
+      const tableTag = item.table_number
+        ? `<span class="badge" style="background: var(--bg-canvas); color: var(--ink-secondary);">Table ${escapeHTML(item.table_number)}</span>`
+        : '';
 
       html += `
-        <div class="shoutout-card ${isNewMajor ? 'new-major-gift' : ''}">
-          <div style="display: flex; align-items: center; gap: 14px;">
-            <span style="font-size: 16px; font-weight: 900; color: var(--gold-400); min-width: 28px;">#${index + 1}</span>
-            <div>
-              <div style="font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">${escapeHTML(item.display_name)}</div>
-              <div style="margin-top: 4px; display: flex; align-items: center; gap: 6px;">
-                ${noteBadge}
-              </div>
+        <div class="shoutout-card">
+          <div>
+            <div style="font-size: var(--text-base); font-weight: 800; color: var(--ink-primary);">
+              #${index + 1} • ${escapeHTML(item.display_name)}
+            </div>
+            ${phoneticGuide}
+            ${item.notes ? `<div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: 2px;">${escapeHTML(item.notes)}</div>` : ''}
+          </div>
+
+          <div style="display: flex; align-items: center; gap: var(--space-2);">
+            ${tableTag}
+            <div style="font-size: var(--text-lg); font-weight: 900; color: var(--brand-accent);" class="tabular">
+              ${dollars}
             </div>
           </div>
-          <div style="font-size: 24px; font-weight: 900; color: var(--gold-300); letter-spacing: -0.02em;">${amountStr}</div>
         </div>
       `;
     });
 
-    // Track known IDs so beacon animation triggers only when fresh gifts enter top stack
-    knownTopGiftIds = new Set(gifts.map(g => g.donation_id));
     container.innerHTML = html;
   }
 
@@ -121,38 +143,29 @@
 
     if (gifts.length === 0) {
       container.innerHTML = `
-        <div style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 24px;">
-          Awaiting live pledges...
+        <div style="color: var(--ink-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6);">
+          Awaiting incoming gifts...
         </div>
       `;
       return;
     }
 
     let html = '';
-    gifts.forEach(item => {
-      const amountStr = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
-      const timeAgo = item.seconds_ago < 5 ? 'Just now' : `${item.seconds_ago}s ago`;
-
-      let noteSnippet = '';
-      if (item.notes) {
-        const tableMatch = item.notes.match(/Table\s*#?\s*(\d+)/i);
-        if (tableMatch) {
-          noteSnippet = `<span class="table-badge" style="font-size: 10px; padding: 2px 6px;">T${tableMatch[1]}</span>`;
-        }
-      }
+    gifts.forEach((item) => {
+      const dollars = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
+      const timeStr = item.seconds_ago < 60
+        ? `${item.seconds_ago}s ago`
+        : `${Math.floor(item.seconds_ago / 60)}m ago`;
 
       html += `
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04);">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            ${noteSnippet}
-            <div>
-              <div style="font-size: 15px; font-weight: 700; color: var(--text-primary);">${escapeHTML(item.display_name)}</div>
-              <div style="font-size: 12px; color: var(--text-muted);">${item.notes ? escapeHTML(item.notes) : 'Live Table Pledge'}</div>
-            </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle);">
+          <div>
+            <div style="font-size: var(--text-sm); font-weight: 700;">${escapeHTML(item.display_name)}</div>
+            ${item.donor_phonetic ? `<div style="font-size: var(--text-xs); color: var(--color-warning);">${escapeHTML(item.donor_phonetic)}</div>` : ''}
+            <div style="font-size: var(--text-xs); color: var(--ink-muted);">${timeStr}</div>
           </div>
-          <div style="text-align: right;">
-            <div style="font-size: 16px; font-weight: 800; color: var(--gold-300);">${amountStr}</div>
-            <div style="font-size: 11px; color: var(--text-muted);">${timeAgo}</div>
+          <div style="font-size: var(--text-base); font-weight: 900; color: var(--brand-accent);" class="tabular">
+            ${dollars}
           </div>
         </div>
       `;
