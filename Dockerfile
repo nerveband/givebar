@@ -8,9 +8,10 @@ COPY package.json tsconfig.json ./
 # Install dependencies if any
 RUN bun install --production
 
-# Copy source code and client assets
+# Copy source code, client assets, and static distribution
 COPY server/ ./server/
 COPY client/ ./client/
+COPY dist-static/ ./dist-static/
 
 # Ensure SQLite data volume directory exists
 RUN mkdir -p /app/data
