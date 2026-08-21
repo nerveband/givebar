@@ -144,7 +144,8 @@ export const server = Bun.serve({
 });
 
 console.log(`[Givebar] Live fundraising server active on http://${HOST}:${PORT}`);
-console.log(`  - Stage HUD:             http://localhost:${PORT}/stage`);
-console.log(`  - Volunteer Terminal:    http://localhost:${PORT}/entry`);
-console.log(`  - AV & Admin Cockpit:    http://localhost:${PORT}/control`);
-console.log(`  - Emcee Confidence View: http://localhost:${PORT}/emcee`);
+console.log(`  - Suite Launcher:        http://localhost:${PORT}/`);
+console.log(`  - Main Ballroom Screen:  http://localhost:${PORT}/stage`);
+console.log(`  - Event Control Room:    http://localhost:${PORT}/control`);
+console.log(`  - Podium Screen:         http://localhost:${PORT}/emcee`);
+console.log(`  - Volunteer Pledge Pad:  http://localhost:${PORT}/entry`);
