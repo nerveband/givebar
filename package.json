@@ -21,6 +21,10 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/qrcode": "^1.5.6"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }

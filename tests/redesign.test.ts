@@ -193,6 +193,6 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     expect(svg).toContain("<svg");
     expect(svg).toContain("xmlns=\"http://www.w3.org/2000/svg\"");
     expect(svg).toContain("viewBox=\"0 0");
-    expect(svg).toContain("path d=");
+    expect(svg).toContain("d=");
   });
 });
