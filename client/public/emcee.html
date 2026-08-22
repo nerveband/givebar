@@ -4,11 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Givebar — Podium Screen (Emcee View)</title>
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
-  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
-  <link rel="stylesheet" href="css/app.css?v=3.0.0">
+  <script src="js/icons.js?v=4.0.0"></script>
+  <link rel="stylesheet" href="css/app.css?v=4.0.0">
   <style>
     body {
       padding: var(--space-6) var(--space-5);
@@ -58,8 +55,9 @@
     </div>
 
     <!-- Active Match Badge -->
-    <div id="emcee-match-badge" class="badge badge-live" style="display: none; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
-      <i class="ph-fill ph-sparkle"></i> MATCH ACTIVE: <span id="emcee-match-pool" class="tabular">$0</span> REMAINING
+    <div id="emcee-match-badge" class="badge badge-live" style="display: none; font-size: var(--text-xs); padding: var(--space-2) var(--space-4); display: flex; align-items: center; gap: var(--space-2);">
+      <svg class="icon" viewBox="0 0 256 256"><path d="M208,128a80.09,80.09,0,0,1-80,80,80.09,80.09,0,0,1-80-80,80.09,80.09,0,0,1,80-80A80.09,80.09,0,0,1,208,128Z"/></svg>
+      MATCH ACTIVE: <span id="emcee-match-pool" class="tabular">$0</span> REMAINING
     </div>
   </header>
 
@@ -98,8 +96,9 @@
 
       <!-- Top 5 Largest Gifts (Vocal Shoutouts) -->
       <div class="surface-card">
-        <div style="font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-accent); margin-bottom: var(--space-4);">
-          <i class="ph-fill ph-star"></i> Top 5 Largest Gifts (For Vocal Shoutouts)
+        <div style="font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-accent); margin-bottom: var(--space-4); display: flex; align-items: center; gap: var(--space-2);">
+          <svg class="icon" viewBox="0 0 256 256"><path d="M239.2,97.29a16,16,0,0,0-13.81-11L166,81.17,142.72,25.81a15.95,15.95,0,0,0-29.44,0L90.07,81.17,30.61,86.32a16,16,0,0,0-9.1,27.87l45.06,39.41L53.77,212.1a16,16,0,0,0,23.84,17.34L128,196.48l50.39,32.96A16,16,0,0,0,202.23,212.1L189.43,153.6l45.06-39.41A16,16,0,0,0,239.2,97.29Z"/></svg>
+          Top 5 Largest Gifts (For Vocal Shoutouts)
         </div>
         <div id="top-gifts-container">
           <div style="color: var(--ink-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6);">
@@ -113,8 +112,9 @@
     <!-- RIGHT: Live Incoming Stream with Seconds-Ago Pacing -->
     <div>
       <div class="surface-card">
-        <div style="font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: var(--space-4);">
-          <i class="ph-fill ph-lightning"></i> Live Incoming Stream
+        <div style="font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: var(--space-4); display: flex; align-items: center; gap: var(--space-2);">
+          <svg class="icon" viewBox="0 0 256 256"><path d="M215.79,118.17a8,8,0,0,0-7.79-6.17H144V32a8,8,0,0,0-13.66-5.66l-96,96a8,8,0,0,0,5.66,13.66H96v80a8,8,0,0,0,13.66,5.66l96-96A8,8,0,0,0,215.79,118.17Z"/></svg>
+          Live Incoming Stream
         </div>
         <div id="recent-gifts-container" style="max-height: 540px; overflow-y: auto;">
           <div style="color: var(--ink-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6);">
@@ -126,6 +126,6 @@
 
   </div>
 
-  <script src="js/emcee.js?v=3.0.0"></script>
+  <script src="js/emcee.js?v=4.0.0"></script>
 </body>
 </html>

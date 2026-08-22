@@ -2,6 +2,18 @@
    Givebar — Single-Surface Components & Interaction States
    ========================================================================= */
 
+/* Vector SVG Icon System */
+.icon,
+.ph-icon,
+svg.icon {
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  vertical-align: -0.18em;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
 /* Surface Cards (Flat, Single Boundary, Zero Double-Bezel Waste) */
 .surface-card {
   position: relative;

@@ -502,8 +502,8 @@
     });
 
     container.innerHTML = html;
+    if (window.renderPhosphorIcons) window.renderPhosphorIcons(container);
   }
-
   function renderAuditLog(events) {
     const tbody = document.getElementById('ledger-table-body');
     if (!tbody) return;
@@ -539,8 +539,8 @@
         </tr>
       `;
     });
-
     tbody.innerHTML = html;
+    if (window.renderPhosphorIcons) window.renderPhosphorIcons(tbody);
   }
 
   function populateSettingsInputs(state) {

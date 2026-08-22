@@ -4,11 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Givebar — Main Ballroom Screen</title>
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
-  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
-  <link rel="stylesheet" href="css/app.css?v=3.0.0">
+  <script src="js/icons.js?v=4.0.0"></script>
+  <link rel="stylesheet" href="css/app.css?v=4.0.0">
   <style>
     body {
       display: flex;
@@ -114,16 +111,17 @@
 
       <!-- Active Matching Grant Banner -->
       <div id="match-banner" class="match-pill" style="display: none;">
-        <i class="ph-fill ph-sparkle"></i>
+        <svg class="icon" viewBox="0 0 256 256"><path d="M208,128a80.09,80.09,0,0,1-80,80,80.09,80.09,0,0,1-80-80,80.09,80.09,0,0,1,80-80A80.09,80.09,0,0,1,208,128Z"/></svg>
         <span id="match-banner-text">
           $100K MATCH ACTIVE — EVERY DOLLAR DOUBLED
         </span>
-        <i class="ph-fill ph-sparkle"></i>
+        <svg class="icon" viewBox="0 0 256 256"><path d="M208,128a80.09,80.09,0,0,1-80,80,80.09,80.09,0,0,1-80-80,80.09,80.09,0,0,1,80-80A80.09,80.09,0,0,1,208,128Z"/></svg>
       </div>
 
       <!-- Stage Frozen / Blackout Notice -->
       <div id="freeze-indicator" style="display: none; background: rgba(239, 68, 68, 0.2); border: 1px solid var(--color-danger); padding: var(--space-2) var(--space-4); border-radius: 9999px; color: var(--color-danger); font-weight: 800; font-size: var(--text-xs); letter-spacing: 0.06em; text-transform: uppercase;">
-        <i class="ph-bold ph-pause"></i> Display Paused
+        <svg class="icon" viewBox="0 0 256 256"><path d="M208,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h32A16,16,0,0,1,208,48ZM96,32H64A16,16,0,0,0,48,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z"/></svg>
+        Display Paused
       </div>
     </header>
 
@@ -165,7 +163,7 @@
           Recent Supporter Recognition
         </div>
         <div id="chyron-host" class="chyron-box">
-          <i class="ph-fill ph-star" style="color: var(--brand-accent); font-size: 1.5rem;"></i>
+          <svg class="icon" viewBox="0 0 256 256" style="color: var(--brand-accent); width: 32px; height: 32px;"><path d="M239.2,97.29a16,16,0,0,0-13.81-11L166,81.17,142.72,25.81a15.95,15.95,0,0,0-29.44,0L90.07,81.17,30.61,86.32a16,16,0,0,0-9.1,27.87l45.06,39.41L53.77,212.1a16,16,0,0,0,23.84,17.34L128,196.48l50.39,32.96A16,16,0,0,0,202.23,212.1L189.43,153.6l45.06-39.41A16,16,0,0,0,239.2,97.29Z"/></svg>
           <div>
             <div id="chyron-donor" style="font-size: var(--text-lg); font-weight: 800; color: var(--ink-primary);">Welcome to the Live Appeal</div>
             <div id="chyron-meta" style="font-size: var(--text-xs); color: var(--ink-muted);">Live verified donations will appear here</div>
@@ -175,15 +173,16 @@
 
       <!-- Apple-Style Adaptive Glassmorphic QR Card -->
       <div class="glass-qr-card">
-        <img id="stage-qr-img" src="api/qr?url=https://give.hope.org/donate&style=dots&center=star&size=160" alt="Scan to Pledge" style="width: 140px; height: 140px; border-radius: 8px; display: block;">
+        <img id="stage-qr-img" src="api/qr?url=https://give.hope.org/donate&center=star&size=160" alt="Scan to Pledge" style="width: 140px; height: 140px; border-radius: 8px; display: block;">
         <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--ink-muted); margin-top: var(--space-1); letter-spacing: 0.06em; display: flex; align-items: center; justify-content: center; gap: 4px;">
-          <i class="ph-bold ph-qr-code"></i> Scan to Pledge
+          <svg class="icon" viewBox="0 0 256 256"><path d="M104,40H48A16,16,0,0,0,32,56v56a16,16,0,0,0,16,16h56a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40ZM48,112V56h56v56Zm160-72H152a16,16,0,0,0-16,16v56a16,16,0,0,0,16,16h56a16,16,0,0,0,16-16V56A16,16,0,0,0,208,40ZM152,112V56h56v56ZM104,144H48a16,16,0,0,0-16,16v56a16,16,0,0,0,16,16h56a16,16,0,0,0,16-16V160A16,16,0,0,0,104,144ZM48,216V160h56v56Zm168-56v16a8,8,0,0,1-16,0V160a8,8,0,0,1,16,0Zm-32,32v24a8,8,0,0,1-16,0V192a8,8,0,0,1,16,0Zm32,16v8a8,8,0,0,1-16,0v-8a8,8,0,0,1,16,0Zm-48-48v8a8,8,0,0,1-16,0v-8a8,8,0,0,1,16,0Zm32-8h8a8,8,0,0,1,0,16h-8a8,8,0,0,1,0-16Z"/></svg>
+          Scan to Pledge
         </div>
       </div>
     </footer>
   </main>
 
-  <script src="js/odometer.js?v=3.0.0"></script>
-  <script src="js/stage.js?v=3.0.0"></script>
+  <script src="js/odometer.js?v=4.0.0"></script>
+  <script src="js/stage.js?v=4.0.0"></script>
 </body>
 </html>

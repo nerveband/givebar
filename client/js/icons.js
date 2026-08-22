@@ -1,6 +1,6 @@
 /**
  * Givebar — Zero-Dependency Phosphor Vector SVG Engine
- * Automatically renders crisp, scalable vector SVG icons for any <i class="ph..."> element.
+ * Directly renders crisp, scalable vector SVG icons for any <i class="ph..."> element.
  * Zero external font requests, zero CORS issues, zero missing glyph boxes.
  */
 
@@ -40,7 +40,14 @@
     "backspace": `<svg viewBox="0 0 256 256" width="1em" height="1em" fill="currentColor"><path d="M216,48H85.34a15.86,15.86,0,0,0-11.31,4.69L18.69,108a16,16,0,0,0,0,22.63l55.34,55.31A15.86,15.86,0,0,0,85.34,190.63H216a16,16,0,0,0,16-16V64A16,16,0,0,0,216,48ZM216,174.63H85.34L30,119.31,85.34,64H216ZM165.66,90.34a8,8,0,0,0-11.32,0L136,108.69l-18.34-18.35a8,8,0,0,0-11.32,11.32L124.69,120l-18.35,18.34a8,8,0,0,0,11.32,11.32L136,131.31l18.34,18.35a8,8,0,0,0,11.32-11.32L147.31,120l18.35-18.34A8,8,0,0,0,165.66,90.34Z"/></svg>`
   };
 
+  function getIconSvg(name, className = "icon") {
+    const raw = ICONS[name];
+    if (!raw) return "";
+    return raw.replace('<svg ', `<svg class="${className}" `);
+  }
+
   function replaceIcons(root = document) {
+    if (!root || !root.querySelectorAll) return;
     const elements = root.querySelectorAll('i[class*="ph-"], i.ph, [data-ph]');
     elements.forEach(el => {
       const classList = el.className || '';
@@ -54,18 +61,17 @@
       }
 
       if (iconName && ICONS[iconName]) {
-        const span = document.createElement('span');
-        span.className = `ph-svg ph-${iconName}`;
-        span.style.display = 'inline-flex';
-        span.style.alignItems = 'center';
-        span.style.justifyContent = 'center';
-        span.style.verticalAlign = '-0.125em';
-        span.innerHTML = ICONS[iconName];
-        el.parentNode?.replaceChild(span, el);
+        const temp = document.createElement('div');
+        temp.innerHTML = getIconSvg(iconName, 'icon');
+        const svgEl = temp.firstElementChild;
+        if (svgEl && el.parentNode) {
+          el.parentNode.replaceChild(svgEl, el);
+        }
       }
     });
   }
 
+  window.getIconSvg = getIconSvg;
   window.renderPhosphorIcons = replaceIcons;
 
   if (document.readyState === 'loading') {

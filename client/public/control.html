@@ -4,11 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Givebar — Event Control Room</title>
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
-  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
-  <link rel="stylesheet" href="css/app.css?v=3.0.0">
+  <script src="js/icons.js?v=4.0.0"></script>
+  <link rel="stylesheet" href="css/app.css?v=4.0.0">
   <style>
     .control-shell {
       max-width: 1440px;
@@ -131,26 +128,33 @@
       <div>
         <div style="display: flex; align-items: center; gap: var(--space-3);">
           <h1 style="font-size: var(--text-2xl); font-weight: 900; letter-spacing: -0.03em;">Givebar Control Room</h1>
-          <span class="badge badge-live"><i class="ph-bold ph-broadcast"></i> Master Console</span>
+          <span class="badge badge-live">
+            <svg class="icon" viewBox="0 0 256 256"><path d="M128,112a28,28,0,1,0,28,28A28,28,0,0,0,128,112Zm0,40a12,12,0,1,1,12-12A12,12,0,0,1,128,152ZM72.63,94.63a8,8,0,0,0-11.31-11.31,104,104,0,0,0,0,147.08,8,8,0,0,0,11.31-11.31,88,88,0,0,1,0-124.46Zm122.06,0a88,88,0,0,1,0,124.46,8,8,0,0,0,11.31,11.31,104,104,0,0,0,0-147.08,8,8,0,0,0-11.31,11.31Z"/></svg>
+            Master Console
+          </span>
         </div>
         <div id="event-name-sub" style="font-size: var(--text-sm); color: var(--ink-muted); margin-top: var(--space-1);">
           Annual Gala & Benefit Auction
         </div>
       </div>
 
-      <!-- Quick Surface Navigation (Phosphor Icons) -->
+      <!-- Quick Surface Navigation (Phosphor Vector Icons) -->
       <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
         <a href="stage" target="_blank" class="btn-secondary" style="font-size: var(--text-xs); min-height: 40px;">
-          <i class="ph-bold ph-monitor"></i> Main Ballroom Screen
+          <svg class="icon" viewBox="0 0 256 256"><path d="M216,40H40A16,16,0,0,0,24,56V168a16,16,0,0,0,16,16H96v16H80a8,8,0,0,0,0,16h96a8,8,0,0,0,0-16H160V184h56a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,168V56H216V168H40Zm72,32h32v16H112Z"/></svg>
+          Main Ballroom Screen
         </a>
         <a href="emcee" target="_blank" class="btn-secondary" style="font-size: var(--text-xs); min-height: 40px;">
-          <i class="ph-bold ph-microphone"></i> Podium Screen
+          <svg class="icon" viewBox="0 0 256 256"><path d="M128,176a48.05,48.05,0,0,0,48-48V64a48,48,0,0,0-96,0v64A48.05,48.05,0,0,0,128,176ZM96,64a32,32,0,0,1,64,0v64a32,32,0,0,1-64,0Zm112,64a8,8,0,0,0-16,0,64,64,0,0,1-128,0,8,8,0,0,0-16,0,80.11,80.11,0,0,0,72,79.6V224H104a8,8,0,0,0,0,16h48a8,8,0,0,0,0-16H136V207.6A80.11,80.11,0,0,0,208,128Z"/></svg>
+          Podium Screen
         </a>
         <a href="entry" target="_blank" class="btn-secondary" style="font-size: var(--text-xs); min-height: 40px;">
-          <i class="ph-bold ph-device-mobile"></i> Volunteer Pad
+          <svg class="icon" viewBox="0 0 256 256"><path d="M176,16H80A24,24,0,0,0,56,40V216a24,24,0,0,0,24,24h96a24,24,0,0,0,24-24V40A24,24,0,0,0,176,16ZM72,40a8,8,0,0,1,8-8h96a8,8,0,0,1,8,8V184H72ZM184,216a8,8,0,0,1-8,8H80a8,8,0,0,1-8-8V200H184Zm-56-16a8,8,0,1,0,8,8A8,8,0,0,0,128,200Z"/></svg>
+          Volunteer Pad
         </a>
         <a id="link-export-csv" href="api/export/csv" class="btn-primary" style="font-size: var(--text-xs); min-height: 40px;">
-          <i class="ph-bold ph-file-csv"></i> Download Finance CSV
+          <svg class="icon" viewBox="0 0 256 256"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM152,40l48,48H152ZM200,216H56V40h80V96a8,8,0,0,0,8,8h56V216Zm-64-56a8,8,0,0,1-8,8H104a8,8,0,0,1,0-16h24A8,8,0,0,1,136,160Zm0-32a8,8,0,0,1-8,8H80a8,8,0,0,1,0-16h48A8,8,0,0,1,136,128Z"/></svg>
+          Download Finance CSV
         </a>
       </div>
     </header>
@@ -159,15 +163,17 @@
     <div id="drift-banner" class="surface-card" style="display: none; border-color: var(--color-warning); background: rgba(251, 191, 36, 0.08); margin-bottom: var(--space-6); padding: var(--space-4);">
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);">
         <div>
-          <div style="font-size: var(--text-sm); font-weight: 800; color: var(--color-warning);">
-            <i class="ph-bold ph-warning"></i> Ballroom Screen Total Drift Notice
+          <div style="font-size: var(--text-sm); font-weight: 800; color: var(--color-warning); display: flex; align-items: center; gap: var(--space-2);">
+            <svg class="icon" viewBox="0 0 256 256"><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM120,104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm8,88a12,12,0,1,1,12-12A12,12,0,0,1,128,192Z"/></svg>
+            Ballroom Screen Total Drift Notice
           </div>
           <div style="font-size: var(--text-xs); color: var(--ink-primary); margin-top: 2px;" id="drift-desc">
             The ballroom screen is holding at $0 while the true verified ledger is $0.
           </div>
         </div>
         <button type="button" id="btn-reconcile-resync" class="btn-primary" style="min-height: 40px; font-size: var(--text-xs);">
-          <i class="ph-bold ph-arrows-clockwise"></i> Resync Ballroom Total
+          <svg class="icon" viewBox="0 0 256 256"><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h30.82l-24.35-24.35A88,88,0,1,0,216,128a8,8,0,0,1,16,0,104,104,0,1,1-35.08-78.53L224,76.69V48a8,8,0,0,1,16,0Z"/></svg>
+          Resync Ballroom Total
         </button>
       </div>
     </div>
@@ -199,23 +205,27 @@
       </div>
     </section>
 
-    <!-- Persistent Transport Action Bar (Phosphor Icons) -->
+    <!-- Persistent Transport Action Bar (Vector SVGs) -->
     <section class="surface-card elevated" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-6); padding: var(--space-4) var(--space-5);">
       <div style="display: flex; align-items: center; gap: var(--space-2);">
         <span style="font-size: var(--text-xs); font-weight: 800; color: var(--ink-muted); text-transform: uppercase;">Live Controls:</span>
       </div>
       <div style="display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;">
         <button type="button" id="btn-toggle-freeze" class="btn-secondary" style="min-height: 44px;">
-          <i class="ph-bold ph-pause"></i> Pause Ballroom Screen
+          <svg class="icon" viewBox="0 0 256 256"><path d="M208,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h32A16,16,0,0,1,208,48ZM96,32H64A16,16,0,0,0,48,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z"/></svg>
+          Pause Ballroom Screen
         </button>
         <button type="button" id="btn-fire-confetti" class="btn-primary" style="min-height: 44px;">
-          <i class="ph-fill ph-confetti"></i> Launch Stage Confetti
+          <svg class="icon" viewBox="0 0 256 256"><path d="M216.49,104.49l-64,64a8,8,0,0,1-11.32,0L98.34,125.66a8,8,0,0,1,0-11.32l64-64a8,8,0,0,1,11.32,0l42.83,42.83A8,8,0,0,1,216.49,104.49ZM88,56A8,8,0,0,0,80,48H32a8,8,0,0,0,0,16H80A8,8,0,0,0,88,56Zm136,136H176a8,8,0,0,0,0,16h48a8,8,0,0,0,0-16ZM56,96a8,8,0,0,0-8-8,8,8,0,0,0-8,8v48a8,8,0,0,0,16,0ZM192,208a8,8,0,0,0-8,8v16a8,8,0,0,0,16,0V216A8,8,0,0,0,192,208Z"/></svg>
+          Launch Stage Confetti
         </button>
         <button type="button" id="btn-resync-odometer" class="btn-secondary" style="min-height: 44px;">
-          <i class="ph-bold ph-arrows-clockwise"></i> Resync Screen Total
+          <svg class="icon" viewBox="0 0 256 256"><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h30.82l-24.35-24.35A88,88,0,1,0,216,128a8,8,0,0,1,16,0,104,104,0,1,1-35.08-78.53L224,76.69V48a8,8,0,0,1,16,0Z"/></svg>
+          Resync Screen Total
         </button>
         <button type="button" id="btn-set-override" class="btn-secondary" style="min-height: 44px;">
-          <i class="ph-bold ph-pencil-simple"></i> Adjust Screen Total
+          <svg class="icon" viewBox="0 0 256 256"><path d="M227.32,73.37,182.63,28.69a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.32,96A16,16,0,0,0,227.32,73.37ZM48,163.31l88-88L180.69,120l-88,88H48ZM216,84.69,192,108.69,147.31,64,171.31,40Z"/></svg>
+          Adjust Screen Total
         </button>
       </div>
     </section>
@@ -223,13 +233,16 @@
     <!-- 3-Tab Operational Navigation Bar -->
     <nav class="tab-bar">
       <button type="button" class="tab-btn active" data-tab="queue">
-        <i class="ph-bold ph-clock"></i> 1. Live Stage Queue (8s Review)
+        <svg class="icon" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg>
+        1. Live Stage Queue (8s Review)
       </button>
       <button type="button" class="tab-btn" data-tab="donations">
-        <i class="ph-bold ph-list-numbers"></i> 2. Donation List & Ledger
+        <svg class="icon" viewBox="0 0 256 256"><path d="M88,64a8,8,0,0,1,8-8H216a8,8,0,0,1,0,16H96A8,8,0,0,1,88,64Zm128,56H96a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Zm0,64H96a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16ZM40,48h8a8,8,0,0,1,8,8V88a8,8,0,0,1-16,0V64H40a8,8,0,0,1,0-16Z"/></svg>
+        2. Donation List & Ledger
       </button>
       <button type="button" class="tab-btn" data-tab="setup">
-        <i class="ph-bold ph-gear"></i> 3. Event Setup & QR Customizer
+        <svg class="icon" viewBox="0 0 256 256"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-4.22l-23.41-3.69q-1.54-1.52-3.18-2.94L185.25,44.7a8,8,0,0,0-6.84-2.26,107.82,107.82,0,0,0-26.25,10.88,8,8,0,0,0-4.22,6L144.25,82.73q-2.16-.06-4.32,0L121.29,67.81a8,8,0,0,0-7.06-1.48,107.21,107.21,0,0,0-26.25,10.88,8,8,0,0,0-4.22,6L80,106.62q-1.52,1.54-2.94,3.18L53.7,113.48a8,8,0,0,0-2.26,6.84,107.82,107.82,0,0,0,10.88,26.25,8,8,0,0,0,6,4.22l23.41,3.69q1.54,1.52,3.18,2.94l-3.69,23.41a8,8,0,0,0,2.26,6.84,107.82,107.82,0,0,0,26.25,10.88,8,8,0,0,0,7.06-1.48l18.64-14.92q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,4.22-6l3.69-23.41q1.52-1.54,2.94-3.18l23.41-3.69a8,8,0,0,0,6-4.22,107.82,107.82,0,0,0,10.88-26.25,8,8,0,0,0-1.48-7.06Z"/></svg>
+        3. Event Setup & QR Customizer
       </button>
     </nav>
 
@@ -243,7 +256,10 @@
               Pledges count down for 8 seconds before going live on the ballroom screen. Click <strong>Hold from Stage</strong> to prevent typos.
             </p>
           </div>
-          <span class="badge badge-staged"><i class="ph-bold ph-shield-check"></i> 8s Review Active</span>
+          <span class="badge badge-staged">
+            <svg class="icon" viewBox="0 0 256 256"><path d="M208,40H48A16,16,0,0,0,32,56v56c0,70.52,56.84,116.59,92.47,133.72a8,8,0,0,0,7.06,0C167.16,228.59,224,182.52,224,112V56A16,16,0,0,0,208,40ZM173.66,109.66l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35a8,8,0,0,1,11.32,11.32Z"/></svg>
+            8s Review Active
+          </span>
         </div>
 
         <div id="chyron-queue-container" style="max-height: 600px; overflow-y: auto;">
@@ -300,8 +316,9 @@
         
         <!-- Left: Zero-Code In-App Settings Form -->
         <section class="surface-card">
-          <h2 style="font-size: var(--text-lg); font-weight: 800; margin-bottom: var(--space-4);">
-            <i class="ph-bold ph-sliders"></i> Event Setup & Branding
+          <h2 style="font-size: var(--text-lg); font-weight: 800; margin-bottom: var(--space-4); display: flex; align-items: center; gap: var(--space-2);">
+            <svg class="icon" viewBox="0 0 256 256"><path d="M120,40a8,8,0,0,0-8,8V80H40a8,8,0,0,0,0,16h72v32a8,8,0,0,0,16,0V48A8,8,0,0,0,120,40Zm96,48H152a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16ZM40,168h64a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16Zm176-24H184V112a8,8,0,0,0-16,0v80a8,8,0,0,0,16,0V160h32a8,8,0,0,0,0-16Z"/></svg>
+            Event Setup & Branding
           </h2>
 
           <form id="settings-form" onsubmit="return false;" style="display: flex; flex-direction: column; gap: var(--space-4);">
@@ -400,7 +417,8 @@
             </div>
 
             <button type="button" id="btn-save-all-settings" class="btn-primary" style="width: 100%; min-height: 52px; margin-top: var(--space-2);">
-              <i class="ph-bold ph-check"></i> Save Event Settings
+              <svg class="icon" viewBox="0 0 256 256"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg>
+              Save Event Settings
             </button>
           </form>
         </section>
@@ -411,19 +429,20 @@
           <!-- Live Interactive QR Code Customizer Card -->
           <section class="surface-card">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
-              <h2 style="font-size: var(--text-lg); font-weight: 800;">
-                <i class="ph-bold ph-qr-code"></i> Ballroom QR Customizer
+              <h2 style="font-size: var(--text-lg); font-weight: 800; display: flex; align-items: center; gap: var(--space-2);">
+                <svg class="icon" viewBox="0 0 256 256"><path d="M104,40H48A16,16,0,0,0,32,56v56a16,16,0,0,0,16,16h56a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40ZM48,112V56h56v56Zm160-72H152a16,16,0,0,0-16,16v56a16,16,0,0,0,16,16h56a16,16,0,0,0,16-16V56A16,16,0,0,0,208,40ZM152,112V56h56v56ZM104,144H48a16,16,0,0,0-16,16v56a16,16,0,0,0,16,16h56a16,16,0,0,0,16-16V160A16,16,0,0,0,104,144ZM48,216V160h56v56Zm168-56v16a8,8,0,0,1-16,0V160a8,8,0,0,1,16,0Zm-32,32v24a8,8,0,0,1-16,0V192a8,8,0,0,1,16,0Zm32,16v8a8,8,0,0,1-16,0v-8a8,8,0,0,1,16,0Zm-48-48v8a8,8,0,0,1-16,0v-8a8,8,0,0,1,16,0Zm32-8h8a8,8,0,0,1,0,16h-8a8,8,0,0,1,0-16Z"/></svg>
+                Ballroom QR Customizer
               </h2>
               <span class="badge badge-live">Adaptive SVG</span>
             </div>
             <p style="font-size: var(--text-xs); color: var(--ink-muted); line-height: 1.5; margin-bottom: var(--space-4);">
-              Customize the ballroom projection QR code with modern module styles, center badges, and adaptive color themes.
+              Customize the ballroom projection QR code with modern center badges and adaptive color themes.
             </p>
 
             <div style="display: grid; grid-template-columns: 180px 1fr; gap: var(--space-5); align-items: center; margin-bottom: var(--space-5);">
               <!-- Live Interactive Preview -->
               <div class="qr-preview-box">
-                <img id="qr-customizer-preview" src="api/qr?url=https://give.hope.org/donate&style=dots&center=star&size=160" alt="QR Preview" style="width: 140px; height: 140px; border-radius: 8px; display: block;">
+                <img id="qr-customizer-preview" src="api/qr?url=https://give.hope.org/donate&center=star&size=160" alt="QR Preview" style="width: 140px; height: 140px; border-radius: 8px; display: block;">
                 <div style="font-size: 11px; font-weight: 800; color: var(--ink-muted); margin-top: var(--space-2);">
                   Live Preview
                 </div>
@@ -431,24 +450,6 @@
 
               <!-- Controls -->
               <div style="display: flex; flex-direction: column; gap: var(--space-3);">
-                <!-- Style Selector -->
-                <div>
-                  <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: 4px;">
-                    Module Style
-                  </label>
-                  <div class="selector-grid">
-                    <button type="button" class="selector-btn active" data-qr-style="dots">
-                      <i class="ph-bold ph-circles-four"></i> Dots
-                    </button>
-                    <button type="button" class="selector-btn" data-qr-style="squircle">
-                      <i class="ph-bold ph-square"></i> Squircle
-                    </button>
-                    <button type="button" class="selector-btn" data-qr-style="squares">
-                      <i class="ph-bold ph-grid-four"></i> Square
-                    </button>
-                  </div>
-                </div>
-
                 <!-- Center Badge Selector -->
                 <div>
                   <label style="display: block; font-size: var(--text-xs); font-weight: 700; color: var(--ink-secondary); margin-bottom: 4px;">
@@ -456,16 +457,20 @@
                   </label>
                   <div class="selector-grid">
                     <button type="button" class="selector-btn active" data-qr-badge="star">
-                      <i class="ph-fill ph-star"></i> Star
+                      <svg class="icon" viewBox="0 0 256 256"><path d="M239.2,97.29a16,16,0,0,0-13.81-11L166,81.17,142.72,25.81a15.95,15.95,0,0,0-29.44,0L90.07,81.17,30.61,86.32a16,16,0,0,0-9.1,27.87l45.06,39.41L53.77,212.1a16,16,0,0,0,23.84,17.34L128,196.48l50.39,32.96A16,16,0,0,0,202.23,212.1L189.43,153.6l45.06-39.41A16,16,0,0,0,239.2,97.29Z"/></svg>
+                      Star
                     </button>
                     <button type="button" class="selector-btn" data-qr-badge="heart">
-                      <i class="ph-fill ph-heart"></i> Heart
+                      <svg class="icon" viewBox="0 0 256 256"><path d="M240,102c0,70-103.79,126.66-108.21,129a8,8,0,0,1-7.58,0C119.79,228.66,16,172,16,102A62.07,62.07,0,0,1,78,40c20.65,0,38.73,8.88,50,23.89C139.27,48.88,157.35,40,178,40A62.07,62.07,0,0,1,240,102Z"/></svg>
+                      Heart
                     </button>
                     <button type="button" class="selector-btn" data-qr-badge="gift">
-                      <i class="ph-fill ph-gift"></i> Gift
+                      <svg class="icon" viewBox="0 0 256 256"><path d="M216,72H180.49A36,36,0,0,0,128,34.08,36,36,0,0,0,75.51,72H40A16,16,0,0,0,24,88v32a16,16,0,0,0,16,16v72a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V136a16,16,0,0,0,16-16V88A16,16,0,0,0,216,72ZM144,52a20,20,0,0,1,34.14,14.14A20.08,20.08,0,0,1,164,72H136V59.49A20,20,0,0,1,144,52ZM77.86,66.14A20,20,0,0,1,112,52a20,20,0,0,1,8,7.49V72H92A20.08,20.08,0,0,1,77.86,66.14ZM40,88H120v32H40Zm16,48h64v72H56Zm144,72H136V136h64Zm16-88H136V88h80Z"/></svg>
+                      Gift
                     </button>
                     <button type="button" class="selector-btn" data-qr-badge="sparkle">
-                      <i class="ph-fill ph-sparkle"></i> Sparkle
+                      <svg class="icon" viewBox="0 0 256 256"><path d="M208,128a80.09,80.09,0,0,1-80,80,80.09,80.09,0,0,1-80-80,80.09,80.09,0,0,1,80-80A80.09,80.09,0,0,1,208,128Z"/></svg>
+                      Sparkle
                     </button>
                     <button type="button" class="selector-btn" data-qr-badge="none">
                       None
@@ -512,8 +517,9 @@
 
           <!-- Danger Zone: Reset Event Ledger -->
           <section class="surface-card" style="border-color: var(--color-danger); background: rgba(239, 68, 68, 0.04);">
-            <h2 style="font-size: var(--text-base); font-weight: 800; color: var(--color-danger); margin-bottom: var(--space-2);">
-              <i class="ph-bold ph-trash"></i> Reset Ledger Data (Fresh Gala Event)
+            <h2 style="font-size: var(--text-base); font-weight: 800; color: var(--color-danger); margin-bottom: var(--space-2); display: flex; align-items: center; gap: var(--space-2);">
+              <svg class="icon" viewBox="0 0 256 256"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></svg>
+              Reset Ledger Data (Fresh Gala Event)
             </h2>
             <p style="font-size: var(--text-xs); color: var(--ink-muted); line-height: 1.4; margin-bottom: var(--space-4);">
               Permanently wipes all test transactions and resets the odometer floor to zero for the live event.
@@ -530,11 +536,11 @@
 
   </div>
 
-  <!-- Non-Blocking Action Modal (Phosphor Icons) -->
+  <!-- Non-Blocking Action Modal (Vector SVGs) -->
   <div id="cockpit-modal" class="modal-backdrop" style="display: none;">
     <div class="modal-dialog">
       <div id="cockpit-modal-icon" style="font-size: 2rem; color: var(--brand-accent); margin-bottom: var(--space-2);">
-        <i class="ph-bold ph-lightning"></i>
+        <svg class="icon" viewBox="0 0 256 256" style="width: 40px; height: 40px;"><path d="M215.79,118.17a8,8,0,0,0-7.79-6.17H144V32a8,8,0,0,0-13.66-5.66l-96,96a8,8,0,0,0,5.66,13.66H96v80a8,8,0,0,0,13.66,5.66l96-96A8,8,0,0,0,215.79,118.17Z"/></svg>
       </div>
       <h3 id="cockpit-modal-title" style="font-size: var(--text-xl); margin-bottom: var(--space-2);">Action Title</h3>
       <p id="cockpit-modal-desc" style="font-size: var(--text-sm); color: var(--ink-secondary); line-height: 1.5; margin-bottom: var(--space-4);">Action description</p>
@@ -550,6 +556,6 @@
     </div>
   </div>
 
-  <script src="js/control.js?v=3.0.0"></script>
+  <script src="js/control.js?v=4.0.0"></script>
 </body>
 </html>

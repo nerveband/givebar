@@ -3,9 +3,6 @@
    ========================================================================= */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap');
-@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css');
-@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css');
-@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css');
 
 :root {
   /* ---- 4 Customer-Facing Brand Customization Variables ---- */
