@@ -66,7 +66,7 @@ export function migrateSchema(db: Database): void {
         event_name TEXT NOT NULL DEFAULT 'Annual Gala & Benefit Auction',
         event_subtitle TEXT NOT NULL DEFAULT 'Supporting Community Programs & Education',
         goal_cents INTEGER NOT NULL DEFAULT 50000000,          -- $500,000.00
-        match_pool_cents INTEGER NOT NULL DEFAULT 0,           -- Historical field, derived in v2
+        match_pool_cents INTEGER NOT NULL DEFAULT 0,           -- Historical field, derived dynamically
         match_total_cents INTEGER NOT NULL DEFAULT 0,          -- Total original matching fund
         match_ratio REAL NOT NULL DEFAULT 1.0,                 -- 1.0 = 1:1 match
         is_match_active INTEGER NOT NULL DEFAULT 0,            -- 0 = disabled, 1 = active on stage
@@ -89,8 +89,15 @@ export function migrateSchema(db: Database): void {
         brand_accent_hex TEXT NOT NULL DEFAULT '',
         brand_radius_px INTEGER NOT NULL DEFAULT 12,
         major_gift_threshold_cents INTEGER NOT NULL DEFAULT 950000,
-        stage_delay_ms INTEGER NOT NULL DEFAULT 0,
+        stage_delay_ms INTEGER NOT NULL DEFAULT 8000,
         confetti_on_milestone INTEGER NOT NULL DEFAULT 1,
+        countdown_seconds INTEGER NOT NULL DEFAULT 300,
+        timer_status TEXT NOT NULL DEFAULT 'stopped',
+        timer_ends_at INTEGER DEFAULT NULL,
+        thermometer_visual_mode TEXT NOT NULL DEFAULT 'classic',
+        embed_media_url TEXT DEFAULT '',
+        trust_badge_text TEXT NOT NULL DEFAULT '501(c)(3) Tax-Deductible Contribution',
+        pinned_donation_id TEXT DEFAULT NULL,
         settings_seq INTEGER NOT NULL DEFAULT 1,
         updated_at INTEGER NOT NULL
       );
@@ -106,18 +113,22 @@ export function migrateSchema(db: Database): void {
           manual_override_cents, qr_donate_url, qr_style, qr_center_icon, qr_fg_color, qr_bg_color,
           entry_pin, control_pin, milestones_json, odometer_floor_cents, confetti_trigger,
           theme_preset, brand_hue, brand_chroma, brand_accent_hex, brand_radius_px,
-          major_gift_threshold_cents, stage_delay_ms, confetti_on_milestone, settings_seq, updated_at
+          major_gift_threshold_cents, stage_delay_ms, confetti_on_milestone,
+          countdown_seconds, timer_status, timer_ends_at, thermometer_visual_mode,
+          embed_media_url, trust_badge_text, pinned_donation_id,
+          settings_seq, updated_at
         ) VALUES (
           1, 'Annual Gala & Benefit Auction', 'Supporting Community Programs & Education',
           50000000, 0, 0, 1.0, 0, 'Board of Directors Matching Grant', 0,
           NULL, 'https://give.hope.org/donate', 'dots', 'star', '', '#FFFFFF',
           '1234', '9999',
           '[{"cents":10000000,"label":"Foundation"},{"cents":25000000,"label":"Staffing"},{"cents":50000000,"label":"Legal Clinic"},{"cents":100000000,"label":"Expansion"}]',
-          0, 0, 'champagne', 85, 0.12, '', 12, 950000, 0, 1, 1, ?
+          0, 0, 'champagne', 85, 0.12, '', 12, 950000, 8000, 1,
+          300, 'stopped', NULL, 'classic', '', '501(c)(3) Tax-Deductible Contribution', NULL,
+          1, ?
         )
       `).run(Date.now());
     }
-
     // 3. Held / Staged Items
     db.exec(`
       CREATE TABLE IF NOT EXISTS held_donations (

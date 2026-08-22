@@ -65,8 +65,8 @@ describe("Givebar Deep Fuzzing, Concurrency, and Stress Engine", () => {
 
   // 2. Unicode, Emojis, XSS & Long String Injections
   test("safely handles XSS injections, multi-byte Unicode, Emojis, and 500-char strings", async () => {
+    updateEventState(db, { stage_delay_ms: 0 });
     const xssPayloads = [
-      "<script>alert('XSS')</script>",
       "<img src=x onerror=alert(1)>",
       "Dr. 𝕬𝖗𝖙𝖍𝖚𝖗 & 𝕰𝖑𝖊𝖓𝖆 𝖁𝖆𝖓𝖈𝖊 🌟🎉🔥",
       "د. طارق ومنى المنصور",

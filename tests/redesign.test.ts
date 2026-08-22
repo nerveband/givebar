@@ -236,4 +236,50 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     stage = getStageState(db);
     expect(stage.pinned_donation?.display_name).toBe("Anonymous Supporter");
   });
+
+  test("P0-1: 8-second staging delay and no-backward floor hold concurrently", () => {
+    updateEventState(db, { stage_delay_ms: 8000 });
+
+    // 1. Record a gift right now (0s elapsed)
+    recordDonation(db, {
+      donation_id: "don_delayed_1",
+      amount_cents: 5000000, // $50k
+      donor_name: "Delayed Donor"
+    });
+
+    // Stage total is $0, floor is $0 during the 8s review buffer
+    let stage = getStageState(db);
+    expect(stage.total_raised_cents).toBe(0);
+    expect(stage.true_total_raised_cents).toBe(5000000);
+
+    // 2. Simulate 9 seconds elapsing (stage matures past horizon)
+    updateEventState(db, { stage_delay_ms: 0 });
+    stage = getStageState(db);
+    expect(stage.total_raised_cents).toBe(5000000);
+
+    // Floor now ratchets to $50k
+    const eventState = getEventState(db);
+    expect(eventState.odometer_floor_cents).toBe(5000000);
+
+    // 3. Void the $50k gift: Floor holds steady at $50,000 on stage!
+    voidDonation(db, "don_delayed_1", "ADMIN", "Typo corrected");
+    stage = getStageState(db);
+    expect(stage.total_raised_cents).toBe(5000000); // Enforces Invariant #5 (no backward drop)
+    expect(stage.true_total_raised_cents).toBe(0);   // Verified ledger reflects void
+  });
+
+  test("P0-6: Emcee projection excludes held donations from vocal shoutouts", () => {
+    recordDonation(db, {
+      donation_id: "don_emcee_held",
+      amount_cents: 7500000, // $75k
+      donor_name: "Held Big Giver"
+    });
+
+    holdDonation(db, "don_emcee_held", "DIRECTOR", "Under review");
+    const emcee = getEmceeState(db);
+    const foundInTop = emcee.top_gifts.find(g => g.donation_id === "don_emcee_held");
+    const foundInRecent = emcee.recent_gifts.find(g => g.donation_id === "don_emcee_held");
+    expect(foundInTop).toBeUndefined();
+    expect(foundInRecent).toBeUndefined();
+  });
 });

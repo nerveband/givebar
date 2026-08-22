@@ -7,6 +7,7 @@ import { handleExportCSV } from "../server/src/routes/export";
 import { handleRehearsalRequest } from "../server/src/routes/rehearsal";
 import { handleWebhookRequest } from "../server/src/routes/webhook";
 import { handleQRRequest } from "../server/src/routes/qr";
+import { updateEventState } from "../server/src/ledger";
 import type { Database } from "bun:sqlite";
 
 describe("Givebar HTTP API Endpoints & Safety Rails", () => {
@@ -152,6 +153,7 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
   });
 
   test("POST /api/rehearsal generates realistic mock gala events", async () => {
+    updateEventState(db, { stage_delay_ms: 0 });
     const burstReq = new Request("http://localhost:3000/api/rehearsal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -170,6 +172,7 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
   });
 
   test("POST /api/webhooks/bloomerang and /stripe ingest transactions cleanly", async () => {
+    updateEventState(db, { stage_delay_ms: 0 });
     // Bloomerang webhook
     const bloomReq = new Request("http://localhost:3000/api/webhooks/bloomerang", {
       method: "POST",

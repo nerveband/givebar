@@ -167,4 +167,5 @@ class RollingOdometer {
 // Export for browser global
 if (typeof window !== 'undefined') {
   window.RollingOdometer = RollingOdometer;
+  window.GivebarOdometer = RollingOdometer;
 }

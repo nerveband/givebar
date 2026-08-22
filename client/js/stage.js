@@ -28,12 +28,15 @@
     const el = document.getElementById('main-odometer');
     if (!el) return;
 
-    if (typeof window.GivebarOdometer !== 'undefined') {
-      odometer = new window.GivebarOdometer({
-        el: el,
-        value: 0,
-        format: '(,ddd)',
-        theme: 'minimal'
+    if (typeof window.RollingOdometer !== 'undefined') {
+      odometer = new window.RollingOdometer(el, {
+        initialValue: 0,
+        currency: '$'
+      });
+    } else if (typeof window.GivebarOdometer !== 'undefined') {
+      odometer = new window.GivebarOdometer(el, {
+        initialValue: 0,
+        currency: '$'
       });
     } else {
       el.textContent = '$0';

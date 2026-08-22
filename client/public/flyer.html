@@ -51,12 +51,19 @@
       }
     }
 
+    @page {
+      size: letter portrait;
+      margin: 0;
+    }
+
     @media print {
-      body {
+      html, body {
         background: #FFFFFF !important;
         color: #000000 !important;
-        margin: 0;
-        padding: 0;
+        margin: 0 !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
 
       .no-print-bar {
@@ -68,14 +75,14 @@
       }
 
       .sheet {
-        width: 100vw;
-        height: 100vh;
+        width: 8.5in !important;
+        height: 11in !important;
         page-break-after: always;
-        padding: 0.6in;
-        box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
+        padding: 0.6in !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
         background: #FFFFFF !important;
         color: #000000 !important;
       }

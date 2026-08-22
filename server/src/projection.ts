@@ -146,8 +146,11 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
     ? eventState.manual_override_cents
     : stagedCalculated;
 
-  // Floor ratchet applies only to delayed/staged total
+  // Floor ratchet applies dynamically to staged total
   const stageTotal = Math.max(rawStageTotal, eventState.odometer_floor_cents);
+  if (stagedCalculated > eventState.odometer_floor_cents && !eventState.is_frozen) {
+    db.query(`UPDATE event_state SET odometer_floor_cents = ? WHERE id = 1`).run(stagedCalculated);
+  }
 
   // Milestones
   const milestones = getMilestones(db, eventState.goal_cents);
@@ -254,8 +257,12 @@ export function getEmceeState(db: Database) {
     }
   }
 
-  // Top 5 largest gifts for vocal shoutouts (includes table number & phonetic guide)
+  const heldRows = db.query<{ donation_id: string }, []>(`SELECT donation_id FROM held_donations`).all();
+  const heldSet = new Set(heldRows.map(r => r.donation_id));
+
+  // Top 5 largest gifts for vocal shoutouts (excludes held items, includes table number & phonetic guide)
   const topGifts = Array.from(fullFold.active_donations.values())
+    .filter(d => !heldSet.has(d.donation_id) && !d.is_voided)
     .sort((a, b) => b.amount_cents - a.amount_cents)
     .slice(0, 5)
     .map(d => ({
@@ -269,8 +276,9 @@ export function getEmceeState(db: Database) {
       entered_by: d.entered_by
     }));
 
-  // Recent 10 gifts for stream pacing
+  // Recent 10 gifts for stream pacing (excludes held items)
   const recentGifts = Array.from(fullFold.active_donations.values())
+    .filter(d => !heldSet.has(d.donation_id) && !d.is_voided)
     .sort((a, b) => b.created_at - a.created_at)
     .slice(0, 10)
     .map(d => ({

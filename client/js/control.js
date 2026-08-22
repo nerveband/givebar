@@ -465,7 +465,9 @@
   // --- State Polling & UI Rendering ---
   async function pollState() {
     try {
-      const res = await fetch(`${API_BASE}/state?role=control`);
+      const res = await fetch(`${API_BASE}/state?role=control&pin=${encodeURIComponent(controlPin)}`, {
+        headers: { 'X-Control-Pin': controlPin }
+      });
       if (!res.ok) return;
       const data = await res.json();
 

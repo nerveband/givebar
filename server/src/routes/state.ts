@@ -16,9 +16,16 @@ export function handleStateRequest(req: Request, db: Database): Response {
     case "emcee":
       payload = getEmceeState(db);
       break;
-    case "control":
+    case "control": {
+      const eventState = getEventState(db);
+      const isAuthDisabled = process.env.GIVEBAR_DISABLE_AUTH === "1" || process.env.NODE_ENV === "test";
+      const pin = req.headers.get("X-Control-Pin") || url.searchParams.get("pin") || "";
+      if (!isAuthDisabled && eventState.control_pin && eventState.control_pin.trim() !== "" && pin !== eventState.control_pin) {
+        return Response.json({ error: "UNAUTHORIZED", message: "Control Room PIN required" }, { status: 401 });
+      }
       payload = getControlState(db);
       break;
+    }
     case "entry":
       payload = getVolunteerState(db, volunteerId);
       break;

@@ -154,6 +154,7 @@ describe("Givebar Ledger & Deterministic Fold Engine", () => {
   });
 
   test("strict privacy shield masks real donor names for anonymous donations", () => {
+    updateEventState(db, { stage_delay_ms: 0 });
     recordDonation(db, {
       donation_id: "don_anon_1",
       amount_cents: 2500000, // $25,000
@@ -193,6 +194,7 @@ describe("Givebar Ledger & Deterministic Fold Engine", () => {
   });
 
   test("enforces no-backward-odometer rule across downward corrections", () => {
+    updateEventState(db, { stage_delay_ms: 0 });
     recordDonation(db, {
       donation_id: "don_peak",
       amount_cents: 10000000, // $100,000
