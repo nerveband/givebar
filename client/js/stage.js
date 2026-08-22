@@ -105,33 +105,17 @@
       const res = await fetch(`${API_BASE}/state?role=stage`);
       if (!res.ok) return;
       const data = await res.json();
-
-      // 1. Update Title Header & Trust Badge
-      const eventNameEl = document.getElementById('event-name');
-      const eventSubEl = document.getElementById('event-subtitle');
-      const trustBadge = document.getElementById('stage-trust-badge');
-      const trustText = document.getElementById('stage-trust-text');
-
-      if (eventNameEl && data.event_name) eventNameEl.textContent = data.event_name;
-      if (eventSubEl && data.event_subtitle) eventSubEl.textContent = data.event_subtitle;
-
-      if (trustBadge && trustText) {
-        if (data.trust_badge_text) {
-          trustText.textContent = data.trust_badge_text;
-          trustBadge.style.display = 'inline-flex';
-        } else {
-          trustBadge.style.display = 'none';
-        }
-      }
-
-      // 2. Countdown Appeal Clock Pill
+      // 2. Countdown Appeal Clock Pill (Synchronized with server_time)
       const clockPill = document.getElementById('stage-clock-pill');
       const clockText = document.getElementById('stage-clock-text');
+      const serverOffset = data.server_time ? data.server_time - Date.now() : 0;
+      const currentSyncedNow = Date.now() + serverOffset;
+
       if (clockPill && clockText) {
         if (data.timer_status === 'running' || data.timer_status === 'paused') {
           let rem = data.countdown_seconds || 300;
           if (data.timer_status === 'running' && data.timer_ends_at) {
-            rem = Math.max(0, Math.ceil((data.timer_ends_at - Date.now()) / 1000));
+            rem = Math.max(0, Math.ceil((data.timer_ends_at - currentSyncedNow) / 1000));
           }
           const mins = Math.floor(rem / 60);
           const secs = rem % 60;
@@ -146,6 +130,7 @@
           clockPill.style.display = 'none';
         }
       }
+
 
       // 3. Update Odometer Total
       if (odometer && data.total_raised_cents !== undefined) {
@@ -200,11 +185,16 @@
       if (mediaWrap && mediaFrame) {
         if (data.thermometer_visual_mode === 'split_media' && data.embed_media_url) {
           mediaWrap.style.display = 'block';
-          if (mediaFrame.src !== data.embed_media_url) {
+          if (mediaFrame.getAttribute('data-active-url') !== data.embed_media_url) {
+            mediaFrame.setAttribute('data-active-url', data.embed_media_url);
             mediaFrame.src = data.embed_media_url;
           }
         } else {
           mediaWrap.style.display = 'none';
+          if (mediaFrame.getAttribute('data-active-url')) {
+            mediaFrame.removeAttribute('data-active-url');
+            mediaFrame.src = 'about:blank';
+          }
         }
       }
 

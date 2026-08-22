@@ -15,7 +15,7 @@
   /* ---- Apple-Grade 3-Step Translucent Glass Scale ---- */
   --bg-canvas:        oklch(0.12 0.010 var(--brand-hue));
   --bg-surface:       oklch(0.18 0.012 var(--brand-hue));
-  --bg-glass:         rgba(25, 30, 42, 0.75);
+  --bg-glass:         oklch(0.21 0.014 var(--brand-hue) / 0.75);
   --bg-elevated:      oklch(0.24 0.015 var(--brand-hue));
   --bg-hover:         oklch(0.28 0.018 var(--brand-hue));
 
@@ -33,7 +33,7 @@
   /* ---- Semantic Inks (WCAG AAA Compliant) ---- */
   --color-success: oklch(0.76 0.17 152);      /* Emerald */
   --color-warning: oklch(0.80 0.16  75);      /* Amber */
-  --color-danger:  oklch(0.55 0.22  27);      /* Deep red (#DC2626: 4.83:1 with white) */
+  --color-danger:  oklch(0.50 0.22  27);      /* High-contrast Ruby Red */
   --color-info:    oklch(0.75 0.14 235);      /* Cyan/Sky */
 
   /* ---- Strict 4pt Spacing Scale ---- */
@@ -56,11 +56,11 @@
   --text-sm: 0.875rem;    /* 14px */
   --text-base: 1rem;      /* 16px */
   --text-lg: 1.25rem;     /* 20px */
-  --text-xl: 1.5rem;      /* 24px */
-  --text-2xl: 2rem;       /* 32px */
-  --text-3xl: 2.75rem;    /* 44px */
-  --text-odometer: clamp(3.5rem, 8.5vw, 7.5rem);
-
+  --text-xl:       1.25rem;   /* 20px */
+  --text-2xl:      1.5rem;    /* 24px */
+  --text-3xl:      2rem;      /* 32px */
+  --text-4xl:      2.75rem;   /* 44px */
+  --text-odometer: clamp(5rem, 9.5vw, 8.125rem); /* 130px */
   /* ---- Physics & Springs ---- */
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);

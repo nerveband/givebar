@@ -54,9 +54,13 @@
       let iconName = el.getAttribute('data-ph');
       
       if (!iconName) {
-        const match = classList.match(/ph-(?:bold-|fill-|regular-)?([a-z0-9-]+)/);
-        if (match && match[1]) {
-          iconName = match[1];
+        const tokens = classList.split(/\s+/);
+        for (const token of tokens) {
+          const cleanName = token.replace(/^ph-(?:bold-|fill-|regular-)?/, '');
+          if (ICONS[cleanName]) {
+            iconName = cleanName;
+            break;
+          }
         }
       }
 

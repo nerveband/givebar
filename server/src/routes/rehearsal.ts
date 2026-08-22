@@ -79,7 +79,8 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
           source: "rehearsal" as const,
           card_number: `#${rehearsalCardCounter}`,
           entered_by: "REHEARSAL_BOT",
-          notes: "Table 99 - Test typo for 8s stage review buffer"
+          notes: "Table 99 - Test typo for 8s stage review buffer",
+          confirmed_major_gift: true
         };
         const result = recordDonation(db, typoDonation);
         return Response.json({ ok: true, mode: "typo", donation: typoDonation, result });
@@ -119,7 +120,8 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
           source: "rehearsal" as const,
           card_number: `#${rehearsalCardCounter}`,
           entered_by: "REHEARSAL_BOT",
-          notes: "Milestone celebration trigger test"
+          notes: "Milestone celebration trigger test",
+          confirmed_major_gift: true
         };
 
         const result = recordDonation(db, milestoneDonation);
@@ -152,6 +154,7 @@ function generateRandomDonation() {
     source: "rehearsal" as const,
     card_number: `#0${rehearsalCardCounter}`,
     entered_by: `CLERK_${Math.floor(Math.random() * 3) + 1}`,
-    notes: `Table ${tableNum}`
+    notes: `Table ${tableNum}`,
+    confirmed_major_gift: true
   };
 }

@@ -69,10 +69,38 @@ class RollingOdometer {
    * @param {boolean} animate 
    */
   updateReels(formattedStr, animate = true) {
+    const chars = formattedStr.split('');
+    
+    // Check if existing structure matches for smooth continuous roll
+    const existingElements = this.digitsContainer.querySelectorAll('.odometer-digit-reel, .odometer-separator');
+    const structureMatches = existingElements.length === chars.length && Array.from(existingElements).every((el, i) => {
+      const isDigit = /\d/.test(chars[i]);
+      return isDigit ? el.classList.contains('odometer-digit-reel') : (el.classList.contains('odometer-separator') && el.textContent === chars[i]);
+    });
+
+    if (structureMatches && this.digitTracks.length > 0) {
+      let digitIdx = 0;
+      const digitCount = chars.filter(c => /\d/.test(c)).length;
+      chars.forEach((char) => {
+        if (/\d/.test(char)) {
+          const targetDigit = parseInt(char, 10);
+          const trackInfo = this.digitTracks[digitIdx];
+          if (trackInfo) {
+            trackInfo.targetDigit = targetDigit;
+            const staggerDelay = (digitCount - 1 - digitIdx) * 45;
+            trackInfo.track.style.transitionDelay = `${staggerDelay}ms`;
+            trackInfo.track.style.transform = `translateY(-${targetDigit * 1.15}em)`;
+          }
+          digitIdx++;
+        }
+      });
+      return;
+    }
+
+    // Otherwise perform full build
     this.digitsContainer.innerHTML = '';
     this.digitTracks = [];
 
-    const chars = formattedStr.split('');
     const digitCount = chars.filter(c => /\d/.test(c)).length;
     let digitIndex = 0;
 
@@ -115,7 +143,6 @@ class RollingOdometer {
         this.digitsContainer.appendChild(sep);
       }
     });
-
     // Force layout reflow before triggering transform
     if (animate) {
       requestAnimationFrame(() => {

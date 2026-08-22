@@ -27,8 +27,7 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
 
     const isAuthDisabled = process.env.GIVEBAR_DISABLE_AUTH === "1";
     const providedPin = String(body.pin || req.headers.get("X-Control-Pin") || "");
-    const isControlPinValid = isAuthDisabled || !currentState.control_pin || providedPin === currentState.control_pin;
-
+    const isControlPinValid = isAuthDisabled || (currentState.control_pin && currentState.control_pin.trim() !== "" && providedPin === currentState.control_pin);
     if (!isControlPinValid && action !== "auth_check") {
       return Response.json({ error: "UNAUTHORIZED", message: "Invalid or missing Control Room PIN" }, { status: 401 });
     }
@@ -211,10 +210,18 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
       case "update_pins": {
         const updates: Partial<EventStateRecord> = {};
         if (typeof body.entry_pin === "string") {
-          updates.entry_pin = body.entry_pin.trim();
+          const ep = body.entry_pin.trim();
+          if (ep && (ep.length < 4 || ep.length > 12)) {
+            return Response.json({ error: "INVALID_PIN", message: "Entry PIN must be between 4 and 12 characters" }, { status: 400 });
+          }
+          updates.entry_pin = ep;
         }
         if (typeof body.control_pin === "string") {
-          updates.control_pin = body.control_pin.trim();
+          const cp = body.control_pin.trim();
+          if (cp.length < 4 || cp.length > 12) {
+            return Response.json({ error: "INVALID_PIN", message: "Control PIN must be between 4 and 12 characters" }, { status: 400 });
+          }
+          updates.control_pin = cp;
         }
         updateEventState(db, updates);
         break;
@@ -257,6 +264,18 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         }
         break;
       }
+      case "purge_rehearsal": {
+        db.transaction(() => {
+          db.exec("DELETE FROM ledger WHERE source = 'rehearsal';");
+          db.exec("DELETE FROM active_card WHERE entered_by LIKE 'CLERK_%';");
+          const folded = foldLedger(db);
+          updateEventState(db, {
+            odometer_floor_cents: folded.total_raised_cents
+          });
+        })();
+        break;
+      }
+
       case "reset_ledger": {
         if (body.confirm_wipe !== true) {
           return Response.json({

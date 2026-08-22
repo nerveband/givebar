@@ -12,12 +12,11 @@
     volunteerId = `V-${Math.floor(Math.random() * 899 + 100)}`;
     localStorage.setItem('givebar_volunteer_id', volunteerId);
   }
-
-  let currentAmountCents = 0;
   let activeDonationId = generateUUID();
-  let lastSubmittedDonation = null;
-  let undoTimeout = null;
   let pendingSubmission = null;
+  let undoTimeout = null;
+  let activeUndoDonationId = null;
+  let isFlushing = false;
   let isPresetSelected = false;
   let majorGiftThresholdCents = 950000;
   let outbox = JSON.parse(localStorage.getItem('givebar_outbox') || '[]');
@@ -270,95 +269,80 @@
   }
 
   async function executeSubmission(payload) {
-    // Hide collision card
     const collisionCard = document.getElementById('collision-card');
     if (collisionCard) collisionCard.style.display = 'none';
 
-    // Queue in outbox
-    outbox.push(payload);
-    saveOutbox();
+    try {
+      const res = await fetch(`${API_BASE}/donation/${payload.donation_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-    // Reset Form for next donor
-    resetForm();
+      if (res.status === 409) {
+        const collision = await res.json();
+        // Keep user on Pane 2 and keep input intact
+        const collisionTitle = document.getElementById('collision-title');
+        const collisionDesc = document.getElementById('collision-desc');
+        if (collisionCard && collisionTitle && collisionDesc) {
+          collisionTitle.innerHTML = `<svg class="icon" viewBox="0 0 256 256"><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM120,104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm8,88a12,12,0,1,1,12-12A12,12,0,0,1,128,192Z"/></svg> Card #${collision.card_number} Already Entered`;
+          collisionDesc.textContent = `Entered by ${collision.prior_entered_by || 'another volunteer'}. Please verify physical card.`;
+          collisionCard.style.display = 'block';
+        }
+        return;
+      }
 
-    // Switch back to Stage 1
-    const pane1 = document.getElementById('pane-stage-1');
-    const pane2 = document.getElementById('pane-stage-2');
-    if (pane1 && pane2) {
-      pane2.style.display = 'none';
-      pane1.style.display = 'flex';
+      if (res.ok) {
+        resetForm();
+        const pane1 = document.getElementById('pane-stage-1');
+        const pane2 = document.getElementById('pane-stage-2');
+        if (pane1 && pane2) {
+          pane2.style.display = 'none';
+          pane1.style.display = 'flex';
+        }
+        showUndoToast(payload);
+        return;
+      }
+    } catch {
+      // Offline fallback: Queue in outbox
+      outbox.push(payload);
+      saveOutbox();
+      resetForm();
+      const pane1 = document.getElementById('pane-stage-1');
+      const pane2 = document.getElementById('pane-stage-2');
+      if (pane1 && pane2) {
+        pane2.style.display = 'none';
+        pane1.style.display = 'flex';
+      }
     }
-
-    // Flush to server
-    await flushOutbox();
   }
 
-  function resetForm() {
-    activeDonationId = generateUUID();
-    currentAmountCents = 0;
-    isPresetSelected = false;
-    updateAmountDisplay();
-
-    const nameInput = document.getElementById('input-donor-name');
-    const phoneticInput = document.getElementById('input-donor-phonetic');
-    const anonInput = document.getElementById('input-is-anon');
-    const cardInput = document.getElementById('input-card-number');
-    const tableInput = document.getElementById('input-table-number');
-    const notesInput = document.getElementById('input-donor-notes');
-    if (nameInput) nameInput.value = '';
-    if (phoneticInput) phoneticInput.value = '';
-    if (anonInput) anonInput.checked = false;
-    if (cardInput) cardInput.value = '';
-    if (tableInput) tableInput.value = '';
-    if (notesInput) notesInput.value = '';
-    clearPresetHighlights();
-  }
-
-  // --- Outbox Flush & Duplicate Resolution ---
+  // --- Outbox Flush Loop (with Mutex) ---
   async function flushOutbox() {
-    if (outbox.length === 0) return;
+    if (isFlushing || outbox.length === 0) return;
+    isFlushing = true;
 
-    const queue = [...outbox];
-    for (const item of queue) {
-      try {
+    try {
+      const queue = [...outbox];
+      for (const item of queue) {
         const res = await fetch(`${API_BASE}/donation/${item.donation_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(item)
         });
 
-        if (res.status === 409) {
-          const collision = await res.json();
-          // Remove from outbox so it doesn't loop
+        if (res.ok || res.status === 409) {
           outbox = outbox.filter(i => i.donation_id !== item.donation_id);
           saveOutbox();
-
-          // Show non-destructive inline warning card
-          const collisionCard = document.getElementById('collision-card');
-          const collisionTitle = document.getElementById('collision-title');
-          const collisionDesc = document.getElementById('collision-desc');
-    clearTimeout(undoTimeout);
-          if (collisionCard && collisionTitle && collisionDesc) {
-            collisionTitle.innerHTML = `<i class="ph-bold ph-warning"></i> Card #${collision.card_number} Already Entered`;
-            collisionDesc.textContent = `Entered by ${collision.prior_entered_by || 'another volunteer'}. Please verify physical card.`;
-            collisionCard.style.display = 'block';
-          }
-          continue;
+          if (res.ok) showUndoToast(item);
         }
-
-        if (res.ok) {
-          outbox = outbox.filter(i => i.donation_id !== item.donation_id);
-          saveOutbox();
-
-          showUndoToast(item);
-        }
-      } catch {
-        // Network offline — will retry on next tick
-        break;
       }
+    } catch {
+      // Network offline
+    } finally {
+      isFlushing = false;
     }
   }
-
   // --- 8-Second Floating Undo Toast ---
   function showUndoToast(item) {
     lastSubmittedDonation = item;
@@ -444,10 +428,19 @@
           document.documentElement.style.setProperty('--brand-radius', `${data.theme.radius_px}px`);
         }
       }
+      // Render dynamic ask tiers if supplied
+      if (Array.isArray(data.ask_tiers) && data.ask_tiers.length > 0 && !isPresetSelected && currentAmountCents === 0) {
+        const tierGrid = document.getElementById('tier-grid');
+        if (tierGrid && tierGrid.children.length !== data.ask_tiers.length + 1) {
+          tierGrid.innerHTML = data.ask_tiers.map(t =>
+            `<button type="button" class="tier-btn" data-cents="${t.cents}">${escapeHTML(t.label)}</button>`
+          ).join('') + `<button type="button" class="tier-btn selected" data-cents="0">Custom</button>`;
+          setupTiers();
+        }
+      }
 
       // Render personal audit log
       renderPersonalLog(data.personal_log || []);
-
     } catch {
       const connDot = document.getElementById('conn-dot');
       if (connDot) connDot.style.background = 'var(--color-danger)';
@@ -493,7 +486,7 @@
           <td style="color: var(--ink-muted); font-size: var(--text-xs);">${timeStr}</td>
           <td style="font-weight: 800; color: var(--brand-accent);">${amountStr}</td>
           <td style="font-weight: 600;">${escapeHTML(item.donor_name)}</td>
-          <td class="mono" style="font-size: var(--text-xs);">${item.card_number || '-'}</td>
+          <td class="mono" style="font-size: var(--text-xs);">${escapeHTML(item.card_number || '-')}</td>
           <td>${statusBadge}</td>
         </tr>
       `;
@@ -504,9 +497,13 @@
   }
 
   function escapeHTML(str) {
-    const p = document.createElement('p');
-    p.textContent = str;
-    return p.innerHTML;
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function startPolling() {

@@ -75,11 +75,14 @@
       // 3.5. Countdown Appeal Clock
       const clockPill = document.getElementById('emcee-clock-pill');
       const clockText = document.getElementById('emcee-clock-text');
+      const serverOffset = data.server_time ? data.server_time - Date.now() : 0;
+      const currentSyncedNow = Date.now() + serverOffset;
+
       if (clockPill && clockText) {
         if (data.timer_status === 'running' || data.timer_status === 'paused') {
           let rem = data.countdown_seconds || 300;
           if (data.timer_status === 'running' && data.timer_ends_at) {
-            rem = Math.max(0, Math.ceil((data.timer_ends_at - Date.now()) / 1000));
+            rem = Math.max(0, Math.ceil((data.timer_ends_at - currentSyncedNow) / 1000));
           }
           const mins = Math.floor(rem / 60);
           const secs = rem % 60;
@@ -131,7 +134,7 @@
     gifts.forEach((item, index) => {
       const dollars = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
       const phoneticGuide = item.donor_phonetic
-        ? `<div style="font-size: var(--text-xs); color: var(--color-warning); font-style: italic;">Pronounce: ${escapeHTML(item.donor_phonetic)}</div>`
+        ? `<div style="font-size: 1.1rem; font-weight: 800; color: var(--color-warning); margin-top: 4px;">Pronounce: “${escapeHTML(item.donor_phonetic)}”</div>`
         : '';
       const tableTag = item.table_number
         ? `<span class="badge" style="background: var(--bg-canvas); color: var(--ink-secondary);">Table ${escapeHTML(item.table_number)}</span>`

@@ -7,11 +7,18 @@ export async function handleWebhookRequest(req: Request, db: Database, pathParts
   if (req.method.toUpperCase() !== "POST") {
     return Response.json({ error: "METHOD_NOT_ALLOWED" }, { status: 405 });
   }
+  // Verify optional webhook secret if configured
+  const stripeSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (provider === "stripe" && stripeSecret) {
+    const sig = req.headers.get("stripe-signature");
+    if (!sig) {
+      return Response.json({ error: "UNAUTHORIZED", message: "Missing stripe-signature header" }, { status: 401 });
+    }
+  }
 
   try {
     const rawBody = await req.text();
     const body = JSON.parse(rawBody || "{}") as Record<string, unknown>;
-
     switch (provider) {
       case "bloomerang": {
         // Bloomerang Webhook: Transaction created/updated

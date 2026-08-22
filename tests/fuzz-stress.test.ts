@@ -174,7 +174,8 @@ describe("Givebar Deep Fuzzing, Concurrency, and Stress Engine", () => {
       donation_id: donationId,
       amount_cents: 1000000,
       donor_name: "Lifecycle Donor",
-      card_number: "#8888"
+      card_number: "#8888",
+      confirmed_major_gift: true
     });
 
     let folded = foldLedger(db);
@@ -185,7 +186,8 @@ describe("Givebar Deep Fuzzing, Concurrency, and Stress Engine", () => {
     amendDonation(db, donationId, {
       amount_cents: 3000000,
       donor_name: "Lifecycle Donor Renamed",
-      card_number: "#8888"
+      card_number: "#8888",
+      confirmed_major_gift: true
     });
 
     folded = foldLedger(db);

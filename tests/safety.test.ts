@@ -63,7 +63,8 @@ describe("Givebar Live Safety Rails & Invariants", () => {
     recordDonation(db, {
       donation_id: "don_cap_1",
       amount_cents: 2500000, // $25k
-      donor_name: "Lead Donor"
+      donor_name: "Lead Donor",
+      confirmed_major_gift: true
     });
 
     const folded = foldLedger(db);
@@ -97,11 +98,11 @@ describe("Givebar Live Safety Rails & Invariants", () => {
     expect(foldLedger(db).total_raised_cents).toBe(500000);
 
     // 2. Amend to $15k
-    amendDonation(db, "don_seq", { amount_cents: 1500000, donor_name: "Dr. Upgraded" });
+    amendDonation(db, "don_seq", { amount_cents: 1500000, donor_name: "Dr. Upgraded", confirmed_major_gift: true });
     expect(foldLedger(db).total_raised_cents).toBe(1500000);
 
     // 3. Amend to $20k
-    amendDonation(db, "don_seq", { amount_cents: 2000000 });
+    amendDonation(db, "don_seq", { amount_cents: 2000000, confirmed_major_gift: true });
     expect(foldLedger(db).total_raised_cents).toBe(2000000);
 
     // 4. Void
@@ -124,7 +125,8 @@ describe("Givebar Live Safety Rails & Invariants", () => {
     recordDonation(db, {
       donation_id: "don_mile_1",
       amount_cents: 15000000,
-      donor_name: "Kickoff Donor"
+      donor_name: "Kickoff Donor",
+      confirmed_major_gift: true
     });
 
     const emceeState = getEmceeState(db);

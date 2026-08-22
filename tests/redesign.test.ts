@@ -63,9 +63,9 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     recordDonation(db, {
       donation_id: "don_matched_1",
       amount_cents: 5000000,
-      donor_name: "Match Donor"
+      donor_name: "Match Donor",
+      confirmed_major_gift: true
     });
-
     let folded = foldLedger(db);
     expect(folded.direct_raised_cents).toBe(5000000);
     expect(folded.match_applied_cents).toBe(5000000);
@@ -93,7 +93,8 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
       donation_id: "don_amend_1",
       amount_cents: 1000000, // $10,000
       donor_name: "Initial Donor",
-      card_number: "0412"
+      card_number: "0412",
+      confirmed_major_gift: true
     });
 
     let folded = foldLedger(db);
@@ -103,9 +104,9 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     amendDonation(db, "don_amend_1", {
       amount_cents: 2000000,
       donor_name: "Updated Donor Name",
-      card_number: "0412"
+      card_number: "0412",
+      confirmed_major_gift: true
     });
-
     folded = foldLedger(db);
     expect(folded.direct_raised_cents).toBe(2000000);
     expect(folded.match_applied_cents).toBe(2000000);
@@ -222,9 +223,9 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
       donation_id: "don_pin_1",
       amount_cents: 2500000,
       donor_name: "VIP Donor",
-      notes: "In honor of the volunteers"
+      notes: "In honor of the volunteers",
+      confirmed_major_gift: true
     });
-
     pinDonation(db, "don_pin_1");
     let stage = getStageState(db);
     expect(stage.pinned_donation_id).toBe("don_pin_1");
@@ -244,9 +245,9 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     recordDonation(db, {
       donation_id: "don_delayed_1",
       amount_cents: 5000000, // $50k
-      donor_name: "Delayed Donor"
+      donor_name: "Delayed Donor",
+      confirmed_major_gift: true
     });
-
     // Stage total is $0, floor is $0 during the 8s review buffer
     let stage = getStageState(db);
     expect(stage.total_raised_cents).toBe(0);
@@ -272,9 +273,9 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     recordDonation(db, {
       donation_id: "don_emcee_held",
       amount_cents: 7500000, // $75k
-      donor_name: "Held Big Giver"
+      donor_name: "Held Big Giver",
+      confirmed_major_gift: true
     });
-
     holdDonation(db, "don_emcee_held", "DIRECTOR", "Under review");
     const emcee = getEmceeState(db);
     const foundInTop = emcee.top_gifts.find(g => g.donation_id === "don_emcee_held");

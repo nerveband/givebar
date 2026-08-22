@@ -23,8 +23,8 @@
     setupQrCustomizer();
     setupTimerControls();
     setupTransportActions();
-    setupRehearsalActions();
-    setupSettingsForm();
+    setupModalListeners();
+    setupDelegatedQueueListeners();
     setupModalListeners();
 
     startPolling();
@@ -148,17 +148,19 @@
     });
   }
 
-  function renderCountdownClock(state) {
+  function renderCountdownClock(state, serverTime) {
     if (!state) return;
     const timerDisplay = document.getElementById('ctrl-timer-display');
     const timerBadge = document.getElementById('ctrl-timer-badge');
     const toggleBtn = document.getElementById('btn-timer-toggle');
 
+    const serverOffset = serverTime ? serverTime - Date.now() : 0;
+    const currentSyncedNow = Date.now() + serverOffset;
+
     let remainingSeconds = state.countdown_seconds || 300;
     if (state.timer_status === 'running' && state.timer_ends_at) {
-      remainingSeconds = Math.max(0, Math.ceil((state.timer_ends_at - Date.now()) / 1000));
+      remainingSeconds = Math.max(0, Math.ceil((state.timer_ends_at - currentSyncedNow) / 1000));
     }
-
     const mins = Math.floor(remainingSeconds / 60);
     const secs = remainingSeconds % 60;
     const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
@@ -415,9 +417,10 @@
       const matchRatioInput = document.getElementById('input-set-match-ratio');
       const matchSponsorInput = document.getElementById('input-set-match-sponsor');
       const qrUrlInput = document.getElementById('input-set-qr-url');
+      const delayInput = document.getElementById('input-set-delay-sec');
+      const thresholdInput = document.getElementById('input-set-major-threshold');
       const controlPinInput = document.getElementById('input-set-control-pin');
       const entryPinInput = document.getElementById('input-set-entry-pin');
-
       const payload = {
         action: 'update_settings',
         event_name: titleInput ? titleInput.value.trim() : 'Annual Gala & Benefit Auction',
@@ -432,7 +435,9 @@
         is_match_active: matchActiveInput ? matchActiveInput.checked : false,
         match_total_cents: matchPoolInput ? Math.round(parseFloat(matchPoolInput.value || '0') * 100) : 0,
         match_ratio: matchRatioInput ? parseFloat(matchRatioInput.value || '1.0') : 1.0,
-        match_sponsor_title: matchSponsorInput ? matchSponsorInput.value.trim() : 'Board of Directors Matching Grant'
+        match_sponsor_title: matchSponsorInput ? matchSponsorInput.value.trim() : 'Board of Directors Matching Grant',
+        stage_delay_ms: delayInput ? Math.max(0, parseInt(delayInput.value || '8', 10) * 1000) : 8000,
+        major_gift_threshold_cents: thresholdInput ? Math.max(100, parseInt(thresholdInput.value || '9500', 10) * 100) : 950000
       };
 
       if (controlPinInput && controlPinInput.value.trim()) {
@@ -480,10 +485,8 @@
       }
 
       // 2. Metrics & Drift Banner
-      renderMetrics(data);
-
-      // 3. Countdown Clock
-      renderCountdownClock(data.event_state);
+      // 3. Countdown Clock (Synchronized with server time)
+      renderCountdownClock(data.event_state, data.server_time);
 
       // 4. Staging Queue (Tab 1)
       if (Array.isArray(data.staged_chyrons)) {
@@ -595,18 +598,19 @@
 
       if (item.is_held) {
         statusBadge = `<span class="badge badge-held"><svg class="icon" viewBox="0 0 256 256"><path d="M208,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h32A16,16,0,0,1,208,48ZM96,32H64A16,16,0,0,0,48,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z"/></svg> HELD</span>`;
-        actionBtn = `<button type="button" class="btn-secondary" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarRelease('${item.donation_id}')">Release</button>`;
+        actionBtn = `<button type="button" class="btn-secondary" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="release" data-id="${escapeHTML(item.donation_id)}">Release</button>`;
       } else if (isStaged) {
         statusBadge = `<span class="badge badge-staged"><svg class="icon" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg> REVIEW (${item.remaining_delay_sec}s)</span>`;
-        actionBtn = `<button type="button" class="btn-danger" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarHold('${item.donation_id}')">Hold</button>`;
+        actionBtn = `<button type="button" class="btn-danger" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="hold" data-id="${escapeHTML(item.donation_id)}">Hold</button>`;
       } else {
         statusBadge = `<span class="badge badge-live"><span class="pulse-dot"></span> ON-AIR</span>`;
-        actionBtn = `<button type="button" class="btn-ghost" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarHold('${item.donation_id}')">Remove</button>`;
+        actionBtn = `<button type="button" class="btn-ghost" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="hold" data-id="${escapeHTML(item.donation_id)}">Remove</button>`;
       }
 
       const pinBadge = isPinned ? `<span class="badge badge-live">PINNED TOP</span>` : '';
-      const pinBtn = `<button type="button" class="btn-secondary" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarPin('${item.donation_id}')">${isPinned ? 'Unpin' : 'Pin'}</button>`;
-      const anonBtn = `<button type="button" class="btn-ghost" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" onclick="window.givebarToggleAnon('${item.donation_id}')">${item.is_anonymous ? 'De-Anon' : 'Anon'}</button>`;
+      const pinBtn = `<button type="button" class="btn-secondary" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="pin" data-id="${escapeHTML(item.donation_id)}">${isPinned ? 'Unpin' : 'Pin'}</button>`;
+      const anonBtn = `<button type="button" class="btn-ghost" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="anon" data-id="${escapeHTML(item.donation_id)}">${item.is_anonymous ? 'De-Anon' : 'Anon'}</button>`;
+
 
       const notesHtml = item.notes ? `<div style="font-size: 11px; color: var(--brand-accent); margin-top: 4px; font-style: italic;">“${escapeHTML(item.notes)}”</div>` : '';
 
@@ -656,7 +660,7 @@
 
       let actionHtml = '-';
       if (!isMatch && !isVoid) {
-        actionHtml = `<button type="button" class="btn-ghost" style="font-size: 11px; padding: 4px 8px;" onclick="window.givebarVoidPrompt('${ev.donation_id}')"><svg class="icon" viewBox="0 0 256 256"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></svg> Void</button>`;
+        actionHtml = `<button type="button" class="btn-ghost" style="font-size: 11px; padding: 4px 8px;" data-action="void" data-id="${escapeHTML(ev.donation_id)}"><svg class="icon" viewBox="0 0 256 256"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></svg> Void</button>`;
       }
 
       html += `
@@ -695,14 +699,17 @@
     if (subtitleInput && state.event_subtitle) subtitleInput.value = state.event_subtitle;
     if (trustBadgeInput && state.trust_badge_text) trustBadgeInput.value = state.trust_badge_text;
     if (visualModeSelect && state.thermometer_visual_mode) visualModeSelect.value = state.thermometer_visual_mode;
-    if (mediaUrlInput && state.embed_media_url) mediaUrlInput.value = state.embed_media_url;
+    const delayInput = document.getElementById('input-set-delay-sec');
+    const thresholdInput = document.getElementById('input-set-major-threshold');
+    if (delayInput && state.stage_delay_ms !== undefined) delayInput.value = Math.floor(state.stage_delay_ms / 1000);
+    if (thresholdInput && state.major_gift_threshold_cents !== undefined) thresholdInput.value = Math.floor(state.major_gift_threshold_cents / 100);
+
     if (goalInput && state.goal_cents) goalInput.value = Math.floor(state.goal_cents / 100);
     if (matchActiveInput) matchActiveInput.checked = Boolean(state.is_match_active);
     if (matchPoolInput && state.match_total_cents) matchPoolInput.value = Math.floor(state.match_total_cents / 100);
     if (matchRatioInput && state.match_ratio) matchRatioInput.value = state.match_ratio;
     if (matchSponsorInput && state.match_sponsor_title) matchSponsorInput.value = state.match_sponsor_title;
     if (qrUrlInput && state.qr_donate_url) qrUrlInput.value = state.qr_donate_url;
-
     if (state.theme_preset) {
       selectedThemePreset = state.theme_preset;
       document.querySelectorAll('.theme-swatch').forEach(s => {
@@ -763,10 +770,52 @@
   };
 
   function escapeHTML(str) {
-    if (!str) return '';
-    const p = document.createElement('p');
-    p.textContent = str;
-    return p.innerHTML;
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function setupDelegatedQueueListeners() {
+    const queueContainer = document.getElementById('chyron-queue-container');
+    if (queueContainer) {
+      queueContainer.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.getAttribute('data-action');
+        const donationId = btn.getAttribute('data-id');
+        if (!donationId) return;
+
+        if (action === 'hold') {
+          await postControl({ action: 'hold_donation', donation_id: donationId });
+          pollState();
+        } else if (action === 'release') {
+          await postControl({ action: 'release_donation', donation_id: donationId });
+          pollState();
+        } else if (action === 'pin') {
+          await postControl({ action: 'pin_donation', donation_id: donationId });
+          pollState();
+        } else if (action === 'anon') {
+          await postControl({ action: 'toggle_anonymity', donation_id: donationId });
+          pollState();
+        }
+      });
+    }
+
+    const tbody = document.getElementById('ledger-table-body');
+    if (tbody) {
+      tbody.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="void"]');
+        if (!btn) return;
+        const donationId = btn.getAttribute('data-id');
+        if (donationId) {
+          window.givebarVoidPrompt(donationId);
+        }
+      });
+    }
   }
 
   function startPolling() {

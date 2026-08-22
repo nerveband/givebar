@@ -114,8 +114,20 @@ export interface CreateDonationInput {
   notes?: string;
   donor_phonetic?: string;
   table_number?: string;
+  confirmed_major_gift?: boolean;
 }
 
+export class MajorGiftConfirmationRequiredError extends Error {
+  public amount_cents: number;
+  public threshold_cents: number;
+
+  constructor(amountCents: number, thresholdCents: number) {
+    super(`Pledges of $${Math.floor(thresholdCents / 100).toLocaleString("en-US")} or more require explicit confirmation.`);
+    this.name = "MajorGiftConfirmationRequiredError";
+    this.amount_cents = amountCents;
+    this.threshold_cents = thresholdCents;
+  }
+}
 export class CardSerialCollisionError extends Error {
   public card_number: string;
   public prior_donation_id: string;
@@ -311,11 +323,18 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
     return { seq: existingId.seq, donation_id: existingId.donation_id, is_duplicate: true };
   }
 
-  // 2. Validate amount
-  if (input.amount_cents <= 0) {
-    throw new Error(`Invalid donation amount: ${input.amount_cents}. Must be greater than 0.`);
+  // 2. Validate amount & donor name
+  if (typeof input.amount_cents !== "number" || !Number.isInteger(input.amount_cents) || input.amount_cents <= 0) {
+    throw new Error(`Invalid donation amount: ${input.amount_cents}. Must be a positive integer in cents.`);
   }
-
+  if (!input.donor_name || typeof input.donor_name !== "string" || !input.donor_name.trim()) {
+    throw new Error("Donor name is required.");
+  }
+  const eventState = getEventState(db);
+  const threshold = eventState.major_gift_threshold_cents || 950000;
+  if (input.amount_cents >= threshold && input.confirmed_major_gift !== true) {
+    throw new MajorGiftConfirmationRequiredError(input.amount_cents, threshold);
+  }
   // 3. O(1) Physical Card Collision Detection
   const normalizedCard = normalizeCard(input.card_number);
   if (normalizedCard) {
@@ -448,8 +467,16 @@ export function amendDonation(db: Database, donationId: string, input: Partial<C
     ? "Anonymous Supporter"
     : (input.display_name?.trim() || (existing.display_name === "Anonymous Supporter" ? donorName : existing.display_name));
   const newAmount = input.amount_cents !== undefined ? input.amount_cents : existing.amount_cents;
-  const newNormalizedCard = input.card_number !== undefined ? normalizeCard(input.card_number) : normalizeCard(existing.card_number);
+  if (typeof newAmount !== "number" || !Number.isInteger(newAmount) || newAmount <= 0) {
+    throw new Error(`Invalid amended amount: ${newAmount}. Must be a positive integer in cents.`);
+  }
+  const eventState = getEventState(db);
+  const threshold = eventState.major_gift_threshold_cents || 950000;
+  if (input.amount_cents !== undefined && input.amount_cents >= threshold && input.confirmed_major_gift !== true) {
+    throw new MajorGiftConfirmationRequiredError(input.amount_cents, threshold);
+  }
 
+  const newNormalizedCard = input.card_number !== undefined ? normalizeCard(input.card_number) : normalizeCard(existing.card_number);
   // Check card collision if card number changed
   if (newNormalizedCard && newNormalizedCard !== normalizeCard(existing.card_number)) {
     const activeCard = db.query<{ card_number: string; donation_id: string; entered_by: string; created_at: number; amount_cents: number; donor_name: string }, [string]>(

@@ -3,7 +3,11 @@ import { foldLedger, type LedgerEvent } from "../ledger";
 
 function escapeCSV(val: unknown): string {
   if (val === null || val === undefined) return "";
-  const str = String(val);
+  let str = String(val);
+  // Formula injection defense: prepend single quote if starting with =, +, -, @, \t
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
   if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -77,17 +81,14 @@ export function handleExportCSV(req: Request, db: Database): Response {
   rows.push(`Direct Raised (USD),${(folded.direct_raised_cents / 100).toFixed(2)},Direct Raised (Cents),${folded.direct_raised_cents}`);
   rows.push(`Match Applied (USD),${(folded.match_applied_cents / 100).toFixed(2)},Match Applied (Cents),${folded.match_applied_cents}`);
   rows.push(`Total Authoritative Raised (USD),${(folded.total_raised_cents / 100).toFixed(2)},Total Raised (Cents),${folded.total_raised_cents}`);
-  rows.push(`Active Donation Count,${folded.active_donation_count},Void Count,${folded.void_count}`);
-  rows.push(`Generated At ISO,${new Date().toISOString()}`);
-
-  const csvContent = rows.join("\r\n");
-  const filename = `givebar-audit-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
-
-  return new Response(csvContent, {
+  const csvBody = rows.join("\r\n");
+  return new Response("\uFEFF" + csvBody, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store, no-cache, must-revalidate"
+      "Content-Disposition": `attachment; filename="givebar-ledger-${Date.now()}.csv"`,
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0"
     }
   });
 }

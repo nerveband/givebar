@@ -108,9 +108,9 @@ describe("Givebar Ledger & Deterministic Fold Engine", () => {
       donation_id: "don_match_1",
       amount_cents: 1000000, // $10,000
       donor_name: "Major Benefactor",
-      source: "manual"
+      source: "manual",
+      confirmed_major_gift: true
     });
-
     const folded = foldLedger(db);
     expect(folded.direct_raised_cents).toBe(1000000); // $10k direct
     expect(folded.match_applied_cents).toBe(1000000); // $10k match applied
@@ -160,7 +160,8 @@ describe("Givebar Ledger & Deterministic Fold Engine", () => {
       amount_cents: 2500000, // $25,000
       donor_name: "Secret Billionaire",
       is_anonymous: true,
-      source: "manual"
+      source: "manual",
+      confirmed_major_gift: true
     });
 
     const stageState = getStageState(db);
@@ -199,7 +200,8 @@ describe("Givebar Ledger & Deterministic Fold Engine", () => {
       donation_id: "don_peak",
       amount_cents: 10000000, // $100,000
       donor_name: "Peak Donor",
-      source: "manual"
+      source: "manual",
+      confirmed_major_gift: true
     });
 
     // Stage sees $100k

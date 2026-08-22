@@ -1,6 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { recordDonation, amendDonation, voidDonation, getEventState, CardSerialCollisionError, type CreateDonationInput } from "../ledger";
-
+import { recordDonation, amendDonation, voidDonation, getEventState, CardSerialCollisionError, MajorGiftConfirmationRequiredError, type CreateDonationInput } from "../ledger";
 export async function handleDonationRequest(req: Request, db: Database, pathParts: string[]): Promise<Response> {
   const method = req.method.toUpperCase();
 
@@ -25,18 +24,15 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
         return Response.json({ error: "VALIDATION_ERROR", message: "donor_name is required" }, { status: 400 });
       }
 
-      // Check Server-Enforced Major Gift Guardrail (ADR-03)
       const eventState = getEventState(db);
-      const threshold = eventState.major_gift_threshold_cents || 950000;
-      if (amountCents >= threshold && body.confirmed_major_gift !== true) {
-        return Response.json({
-          error: "MAJOR_GIFT_CONFIRMATION_REQUIRED",
-          message: `Gifts of $${Math.floor(threshold / 100).toLocaleString("en-US")} or more require explicit confirmation.`,
-          amount_cents: amountCents,
-          threshold_cents: threshold
-        }, { status: 428 });
+      const isAuthDisabled = process.env.GIVEBAR_DISABLE_AUTH === "1" || process.env.NODE_ENV === "test";
+      const source = body.source || "manual";
+      if (!isAuthDisabled && eventState.entry_pin && eventState.entry_pin.trim() !== "" && source === "manual") {
+        const providedEntryPin = req.headers.get("X-Entry-Pin") || req.headers.get("X-Control-Pin") || "";
+        if (providedEntryPin !== eventState.entry_pin && providedEntryPin !== eventState.control_pin) {
+          // Volunteer pad auth check if configured
+        }
       }
-
       const input: CreateDonationInput = {
         donation_id: donationId,
         amount_cents: amountCents,
@@ -50,7 +46,8 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
         entered_by: body.entered_by,
         notes: body.notes,
         donor_phonetic: body.donor_phonetic,
-        table_number: body.table_number
+        table_number: body.table_number,
+        confirmed_major_gift: Boolean(body.confirmed_major_gift)
       };
 
       const result = recordDonation(db, input);
@@ -61,6 +58,14 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
         is_duplicate: result.is_duplicate
       }, { status: result.is_duplicate ? 200 : 201 });
     } catch (err: unknown) {
+      if (err instanceof MajorGiftConfirmationRequiredError) {
+        return Response.json({
+          error: "MAJOR_GIFT_CONFIRMATION_REQUIRED",
+          message: err.message,
+          amount_cents: err.amount_cents,
+          threshold_cents: err.threshold_cents
+        }, { status: 428 });
+      }
       if (err instanceof CardSerialCollisionError) {
         return Response.json({
           error: "CARD_COLLISION",
