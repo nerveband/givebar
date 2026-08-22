@@ -6,6 +6,12 @@ import {
   holdDonation,
   releaseHeldDonation,
   foldLedger,
+  startTimer,
+  pauseTimer,
+  resetTimer,
+  addTimerSeconds,
+  pinDonation,
+  toggleDonationAnonymity,
   type EventStateRecord
 } from "../ledger";
 
@@ -71,7 +77,18 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         if (typeof body.confetti_on_milestone === "boolean" || typeof body.confetti_on_milestone === "number") {
           patch.confetti_on_milestone = body.confetti_on_milestone ? 1 : 0;
         }
-
+        if (typeof body.thermometer_visual_mode === "string") {
+          patch.thermometer_visual_mode = body.thermometer_visual_mode.trim();
+        }
+        if (typeof body.embed_media_url === "string") {
+          patch.embed_media_url = body.embed_media_url.trim();
+        }
+        if (typeof body.trust_badge_text === "string") {
+          patch.trust_badge_text = body.trust_badge_text.trim();
+        }
+        if (typeof body.countdown_seconds === "number") {
+          patch.countdown_seconds = Math.max(0, Math.round(body.countdown_seconds));
+        }
         // Matching Grant settings
         if (typeof body.is_match_active === "boolean" || typeof body.is_match_active === "number") {
           patch.is_match_active = body.is_match_active ? 1 : 0;
@@ -202,7 +219,44 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         updateEventState(db, updates);
         break;
       }
+      case "start_timer": {
+        const sec = typeof body.seconds === "number" ? Math.round(body.seconds) : undefined;
+        startTimer(db, sec);
+        break;
+      }
 
+      case "pause_timer": {
+        pauseTimer(db);
+        break;
+      }
+
+      case "reset_timer": {
+        const sec = typeof body.seconds === "number" ? Math.round(body.seconds) : undefined;
+        resetTimer(db, sec);
+        break;
+      }
+
+      case "add_timer_time": {
+        const sec = typeof body.seconds === "number" ? Math.round(body.seconds) : 300;
+        addTimerSeconds(db, sec);
+        break;
+      }
+
+      case "pin_donation": {
+        const donationId = String(body.donation_id || "");
+        if (donationId) {
+          pinDonation(db, donationId);
+        }
+        break;
+      }
+
+      case "toggle_anonymity": {
+        const donationId = String(body.donation_id || "");
+        if (donationId) {
+          toggleDonationAnonymity(db, donationId);
+        }
+        break;
+      }
       case "reset_ledger": {
         if (body.confirm_wipe !== true) {
           return Response.json({

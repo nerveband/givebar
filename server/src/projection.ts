@@ -5,6 +5,8 @@ export interface PublicChyron {
   donation_id: string;
   display_name: string;
   amount_cents: number;
+  notes?: string | null;
+  is_pinned?: boolean;
   created_at: number;
 }
 
@@ -172,6 +174,21 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
     ? Math.min(100, Math.round((stageTotal / eventState.goal_cents) * 1000) / 10)
     : 0;
 
+  // Check pinned donation
+  let pinnedDonation = null;
+  if (eventState.pinned_donation_id) {
+    const pinned = fullFold.active_donations.get(eventState.pinned_donation_id);
+    if (pinned && !pinned.is_voided) {
+      pinnedDonation = {
+        donation_id: pinned.donation_id,
+        display_name: pinned.is_anonymous ? "Anonymous Supporter" : pinned.display_name,
+        amount_cents: pinned.amount_cents,
+        notes: pinned.notes || null,
+        created_at: pinned.created_at
+      };
+    }
+  }
+
   return {
     seq: fullFold.latest_seq,
     event_name: eventState.event_name,
@@ -186,6 +203,14 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
     match_pool_cents: fullFold.derived_match_pool_cents,
     match_total_cents: eventState.match_total_cents,
     is_frozen: Boolean(eventState.is_frozen),
+    countdown_seconds: eventState.countdown_seconds ?? 300,
+    timer_status: eventState.timer_status || "stopped",
+    timer_ends_at: eventState.timer_ends_at ?? null,
+    thermometer_visual_mode: eventState.thermometer_visual_mode || "classic",
+    embed_media_url: eventState.embed_media_url || "",
+    trust_badge_text: eventState.trust_badge_text || "501(c)(3) Tax-Deductible Contribution",
+    pinned_donation_id: eventState.pinned_donation_id ?? null,
+    pinned_donation: pinnedDonation,
     qr_donate_url: eventState.qr_donate_url,
     qr_style: eventState.qr_style || "dots",
     qr_center_icon: eventState.qr_center_icon || "star",
@@ -283,6 +308,10 @@ export function getEmceeState(db: Database) {
     top_gifts: topGifts,
     recent_gifts: recentGifts,
     is_frozen: Boolean(eventState.is_frozen),
+    countdown_seconds: eventState.countdown_seconds ?? 300,
+    timer_status: eventState.timer_status || "stopped",
+    timer_ends_at: eventState.timer_ends_at ?? null,
+    trust_badge_text: eventState.trust_badge_text || "501(c)(3) Tax-Deductible Contribution",
     server_time: now
   };
 }

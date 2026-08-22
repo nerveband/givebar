@@ -72,8 +72,31 @@
           matchBadge.style.display = 'none';
         }
       }
+      // 3.5. Countdown Appeal Clock
+      const clockPill = document.getElementById('emcee-clock-pill');
+      const clockText = document.getElementById('emcee-clock-text');
+      if (clockPill && clockText) {
+        if (data.timer_status === 'running' || data.timer_status === 'paused') {
+          let rem = data.countdown_seconds || 300;
+          if (data.timer_status === 'running' && data.timer_ends_at) {
+            rem = Math.max(0, Math.ceil((data.timer_ends_at - Date.now()) / 1000));
+          }
+          const mins = Math.floor(rem / 60);
+          const secs = rem % 60;
+          clockText.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+          clockPill.style.display = 'inline-flex';
+          if (rem <= 10 && data.timer_status === 'running') {
+            clockPill.className = 'badge badge-held';
+          } else if (rem <= 60 && data.timer_status === 'running') {
+            clockPill.className = 'badge badge-staged';
+          } else {
+            clockPill.className = 'badge badge-live';
+          }
+        } else {
+          clockPill.style.display = 'none';
+        }
+      }
 
-      // 4. Apply Live Theme Tokens
       if (data.theme) {
         document.documentElement.style.setProperty('--brand-hue', data.theme.hue);
         document.documentElement.style.setProperty('--brand-chroma', data.theme.chroma);

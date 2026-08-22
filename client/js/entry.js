@@ -185,7 +185,8 @@
       const cardNumber = (cardInput ? cardInput.value : '').trim();
       const tableInput = document.getElementById('input-table-number');
       const tableNumber = (tableInput ? tableInput.value : '').trim();
-
+      const notesInput = document.getElementById('input-donor-notes');
+      const notes = (notesInput ? notesInput.value : '').trim();
       const errorEl = document.getElementById('error-donor-name');
 
       if (!donorName) {
@@ -211,6 +212,7 @@
         payment_method: 'pledge',
         source: 'manual',
         card_number: cardNumber || null,
+        notes: notes || null,
         entered_by: volunteerId
       };
 

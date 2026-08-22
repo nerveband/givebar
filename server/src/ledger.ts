@@ -53,6 +53,10 @@ export interface EventStateRecord {
   is_frozen: number;
   manual_override_cents: number | null;
   qr_donate_url: string;
+  qr_style: string;
+  qr_center_icon: string;
+  qr_fg_color: string;
+  qr_bg_color: string;
   entry_pin: string;
   control_pin: string;
   milestones_json: string;
@@ -66,6 +70,13 @@ export interface EventStateRecord {
   major_gift_threshold_cents: number;
   stage_delay_ms: number;
   confetti_on_milestone: number;
+  countdown_seconds: number;
+  timer_status: string;
+  timer_ends_at: number | null;
+  thermometer_visual_mode: string;
+  embed_media_url: string;
+  trust_badge_text: string;
+  pinned_donation_id: string | null;
   settings_seq: number;
   updated_at: number;
 }
@@ -716,6 +727,10 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
         is_frozen = ?,
         manual_override_cents = ?,
         qr_donate_url = ?,
+        qr_style = ?,
+        qr_center_icon = ?,
+        qr_fg_color = ?,
+        qr_bg_color = ?,
         entry_pin = ?,
         control_pin = ?,
         milestones_json = ?,
@@ -729,6 +744,13 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
         major_gift_threshold_cents = ?,
         stage_delay_ms = ?,
         confetti_on_milestone = ?,
+        countdown_seconds = ?,
+        timer_status = ?,
+        timer_ends_at = ?,
+        thermometer_visual_mode = ?,
+        embed_media_url = ?,
+        trust_badge_text = ?,
+        pinned_donation_id = ?,
         settings_seq = ?,
         updated_at = ?
     WHERE id = 1
@@ -744,6 +766,10 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
     updated.is_frozen,
     updated.manual_override_cents,
     updated.qr_donate_url,
+    updated.qr_style || "dots",
+    updated.qr_center_icon || "star",
+    updated.qr_fg_color || "",
+    updated.qr_bg_color || "#FFFFFF",
     updated.entry_pin,
     updated.control_pin,
     updated.milestones_json,
@@ -757,11 +783,85 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
     updated.major_gift_threshold_cents,
     updated.stage_delay_ms,
     updated.confetti_on_milestone,
+    updated.countdown_seconds ?? 300,
+    updated.timer_status || "stopped",
+    updated.timer_ends_at ?? null,
+    updated.thermometer_visual_mode || "classic",
+    updated.embed_media_url || "",
+    updated.trust_badge_text || "501(c)(3) Tax-Deductible Contribution",
+    updated.pinned_donation_id ?? null,
     updated.settings_seq,
     now
   );
 
   return updated;
+}
+
+export function startTimer(db: Database, seconds?: number): EventStateRecord {
+  const current = getEventState(db);
+  const sec = seconds !== undefined ? seconds : (current.countdown_seconds || 300);
+  const endsAt = Date.now() + (sec * 1000);
+  return updateEventState(db, {
+    timer_status: "running",
+    countdown_seconds: sec,
+    timer_ends_at: endsAt
+  });
+}
+
+export function pauseTimer(db: Database): EventStateRecord {
+  const current = getEventState(db);
+  if (current.timer_status !== "running" || !current.timer_ends_at) {
+    return current;
+  }
+  const remaining = Math.max(0, Math.ceil((current.timer_ends_at - Date.now()) / 1000));
+  return updateEventState(db, {
+    timer_status: "paused",
+    countdown_seconds: remaining,
+    timer_ends_at: null
+  });
+}
+
+export function resetTimer(db: Database, seconds?: number): EventStateRecord {
+  const sec = seconds !== undefined ? seconds : 300;
+  return updateEventState(db, {
+    timer_status: "stopped",
+    countdown_seconds: sec,
+    timer_ends_at: null
+  });
+}
+
+export function addTimerSeconds(db: Database, addSeconds: number): EventStateRecord {
+  const current = getEventState(db);
+  if (current.timer_status === "running" && current.timer_ends_at) {
+    const newEndsAt = current.timer_ends_at + (addSeconds * 1000);
+    const newSec = Math.max(0, Math.ceil((newEndsAt - Date.now()) / 1000));
+    return updateEventState(db, {
+      countdown_seconds: newSec,
+      timer_ends_at: newEndsAt
+    });
+  } else {
+    const newSec = Math.max(0, (current.countdown_seconds || 300) + addSeconds);
+    return updateEventState(db, {
+      countdown_seconds: newSec
+    });
+  }
+}
+
+export function pinDonation(db: Database, donationId: string): EventStateRecord {
+  const current = getEventState(db);
+  const newPin = current.pinned_donation_id === donationId ? null : donationId;
+  return updateEventState(db, { pinned_donation_id: newPin });
+}
+
+export function toggleDonationAnonymity(db: Database, donationId: string): void {
+  const folded = foldLedger(db);
+  const existing = folded.active_donations.get(donationId);
+  if (!existing || existing.is_voided) return;
+  const newAnon = !existing.is_anonymous;
+  amendDonation(db, donationId, {
+    is_anonymous: newAnon,
+    display_name: newAnon ? "Anonymous Supporter" : existing.donor_name
+  });
 }
 
 // Re-export projections and backwards compatibility aliases

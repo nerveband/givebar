@@ -1,6 +1,6 @@
 /**
- * Givebar — Main Ballroom Screen Controller (/stage)
- * Hardware-accelerated rolling odometer, canvas confetti, live theme updates
+ * Givebar — 1080p Main Ballroom Screen HUD
+ * 130px Odometer, Countdown Appeal Clock, Trust Badges, Split Media, Pinned VIP Chyrons & Confetti
  */
 
 (function () {
@@ -8,125 +8,148 @@
   const API_BASE = (basePath === '/' || basePath === '') ? '/api' : `${basePath}/api`;
 
   let odometer = null;
-  let lastSeq = 0;
-  let lastConfettiTrigger = 0;
   let chyronList = [];
   let chyronIndex = 0;
+  let lastConfettiTrigger = 0;
   let currentQrUrl = '';
   let currentQrStyle = '';
   let currentQrBadge = '';
+  let currentPinnedDonation = null;
 
-  // Confetti Particle Engine
-  const confettiCanvas = document.getElementById('confetti-canvas');
-  const ctx = confettiCanvas?.getContext('2d');
-  let particles = [];
-  let confettiAnimationId = null;
-
-  function resizeCanvas() {
-    if (!confettiCanvas) return;
-    confettiCanvas.width = window.innerWidth;
-    confettiCanvas.height = window.innerHeight;
-  }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
-
-  function fireConfettiBurst() {
-    if (!confettiCanvas || !ctx) return;
-    const colors = ['#F3D78A', '#E2B755', '#4ADE80', '#38BDF8', '#FFFFFF', '#F87171'];
-    const count = 180;
-
-    for (let i = 0; i < count; i++) {
-      particles.push({
-        x: confettiCanvas.width * (0.2 + Math.random() * 0.6),
-        y: confettiCanvas.height * 0.4,
-        vx: (Math.random() - 0.5) * 18,
-        vy: -Math.random() * 16 - 6,
-        size: Math.random() * 8 + 4,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        rotation: Math.random() * 360,
-        rotationSpeed: (Math.random() - 0.5) * 12,
-        gravity: 0.35,
-        opacity: 1,
-        decay: Math.random() * 0.008 + 0.006
-      });
-    }
-
-    if (!confettiAnimationId) {
-      animateConfetti();
-    }
-  }
-
-  function animateConfetti() {
-    if (!ctx || !confettiCanvas) return;
-    ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
-
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += p.gravity;
-      p.rotation += p.rotationSpeed;
-      p.opacity -= p.decay;
-
-      if (p.opacity <= 0 || p.y > confettiCanvas.height + 20) {
-        particles.splice(i, 1);
-        continue;
-      }
-
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate((p.rotation * Math.PI) / 180);
-      ctx.globalAlpha = Math.max(0, p.opacity);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
-      ctx.restore();
-    }
-
-    if (particles.length > 0) {
-      confettiAnimationId = requestAnimationFrame(animateConfetti);
-    } else {
-      confettiAnimationId = null;
-      ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
-    }
-  }
-
-  // --- Initial Setup ---
   function init() {
-    const odoContainer = document.getElementById('main-odometer');
-    if (odoContainer && typeof window.RollingOdometer !== 'undefined') {
-      odometer = new window.RollingOdometer(odoContainer, {
-        currency: '$',
-        showCents: false,
-        allowBackward: false,
-        initialValue: 0
-      });
-    }
-
+    initOdometer();
+    initMilestones();
+    setupFullscreenShortcut();
     startPolling();
     startChyronRotator();
   }
 
-  // --- 1-Second State Polling ---
+  function initOdometer() {
+    const el = document.getElementById('main-odometer');
+    if (!el) return;
+
+    if (typeof window.GivebarOdometer !== 'undefined') {
+      odometer = new window.GivebarOdometer({
+        el: el,
+        value: 0,
+        format: '(,ddd)',
+        theme: 'minimal'
+      });
+    } else {
+      el.textContent = '$0';
+      odometer = {
+        set: (cents) => {
+          el.textContent = `$${Math.floor(cents / 100).toLocaleString('en-US')}`;
+        }
+      };
+    }
+  }
+
+  function initMilestones() {
+    const container = document.getElementById('milestones-container');
+    if (!container) return;
+
+    const defaultMilestones = [
+      { percent: 25, label: 'Foundation' },
+      { percent: 50, label: 'Staffing' },
+      { percent: 75, label: 'Legal Clinic' },
+      { percent: 100, label: 'Expansion' }
+    ];
+
+    container.innerHTML = defaultMilestones.map(m => `
+      <div class="milestone-marker" style="left: ${m.percent}%;">
+        <div class="milestone-pin"></div>
+        <div class="milestone-label">${m.label}</div>
+      </div>
+    `).join('');
+  }
+
+  function setupFullscreenShortcut() {
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'f' || e.key === 'F') {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    });
+  }
+
+  function renderMilestones(milestones, goalCents) {
+    const container = document.getElementById('milestones-container');
+    if (!container || !Array.isArray(milestones) || milestones.length === 0) return;
+
+    container.innerHTML = milestones.map(m => {
+      const pct = m.percent_of_goal !== null && m.percent_of_goal !== undefined
+        ? m.percent_of_goal
+        : (goalCents > 0 ? (m.cents / goalCents) * 100 : 0);
+
+      if (pct < 5 || pct > 100) return '';
+
+      return `
+        <div class="milestone-marker" style="left: ${pct}%;">
+          <div class="milestone-pin"></div>
+          <div class="milestone-label">${escapeHTML(m.label)}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // --- Live State Polling ---
   async function fetchState() {
     try {
-      const res = await fetch(`${API_BASE}/state?role=stage&since=${lastSeq}`);
+      const res = await fetch(`${API_BASE}/state?role=stage`);
       if (!res.ok) return;
-
       const data = await res.json();
-      lastSeq = data.seq;
 
-      // 1. Update Event Headers
+      // 1. Update Title Header & Trust Badge
       const eventNameEl = document.getElementById('event-name');
       const eventSubEl = document.getElementById('event-subtitle');
+      const trustBadge = document.getElementById('stage-trust-badge');
+      const trustText = document.getElementById('stage-trust-text');
+
       if (eventNameEl && data.event_name) eventNameEl.textContent = data.event_name;
       if (eventSubEl && data.event_subtitle) eventSubEl.textContent = data.event_subtitle;
 
-      // 2. Update Odometer Total
+      if (trustBadge && trustText) {
+        if (data.trust_badge_text) {
+          trustText.textContent = data.trust_badge_text;
+          trustBadge.style.display = 'inline-flex';
+        } else {
+          trustBadge.style.display = 'none';
+        }
+      }
+
+      // 2. Countdown Appeal Clock Pill
+      const clockPill = document.getElementById('stage-clock-pill');
+      const clockText = document.getElementById('stage-clock-text');
+      if (clockPill && clockText) {
+        if (data.timer_status === 'running' || data.timer_status === 'paused') {
+          let rem = data.countdown_seconds || 300;
+          if (data.timer_status === 'running' && data.timer_ends_at) {
+            rem = Math.max(0, Math.ceil((data.timer_ends_at - Date.now()) / 1000));
+          }
+          const mins = Math.floor(rem / 60);
+          const secs = rem % 60;
+          clockText.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+          clockPill.style.display = 'inline-flex';
+          if (rem <= 10 && data.timer_status === 'running') {
+            clockPill.classList.add('urgent');
+          } else {
+            clockPill.classList.remove('urgent');
+          }
+        } else {
+          clockPill.style.display = 'none';
+        }
+      }
+
+      // 3. Update Odometer Total
       if (odometer && data.total_raised_cents !== undefined) {
         odometer.set(data.total_raised_cents);
       }
 
-      // 3. Update Progress Bar & Percentage
+      // 4. Update Progress Bar & Percentage
       const progressFill = document.getElementById('progress-bar-fill');
       const progressPercent = document.getElementById('progress-percent');
       const goalAmount = document.getElementById('goal-amount');
@@ -141,7 +164,7 @@
         goalAmount.textContent = `$${Math.floor(data.goal_cents / 100).toLocaleString('en-US')}`;
       }
 
-      // 4. Update Matching Grant Banner
+      // 5. Update Matching Grant Banner
       const matchBanner = document.getElementById('match-banner');
       const matchBannerText = document.getElementById('match-banner-text');
 
@@ -156,34 +179,46 @@
         }
       }
 
-      // 5. Update Freeze Indicator
+      // 6. Update Freeze Indicator
       const freezeEl = document.getElementById('freeze-indicator');
       if (freezeEl) {
         freezeEl.style.display = data.is_frozen ? 'block' : 'none';
       }
 
-      // 6. Confetti Trigger Check
+      // 7. Confetti Trigger Check
       if (data.confetti_trigger && data.confetti_trigger > lastConfettiTrigger) {
         lastConfettiTrigger = data.confetti_trigger;
         fireConfettiBurst();
       }
 
-      // 7. Update Adaptive Scannable QR Code
-      const qrUrl = data.qr_donate_url || 'https://give.hope.org/donate';
-      const qrStyle = data.qr_style || 'dots';
-      const qrBadge = data.qr_center_icon || 'star';
-
-      if (qrUrl !== currentQrUrl || qrStyle !== currentQrStyle || qrBadge !== currentQrBadge) {
-        currentQrUrl = qrUrl;
-        currentQrStyle = qrStyle;
-        currentQrBadge = qrBadge;
-        const qrImg = document.getElementById('stage-qr-img');
-        if (qrImg) {
-          qrImg.src = `${API_BASE}/qr?url=${encodeURIComponent(currentQrUrl)}&v=4.2.0`;
+      // 8. Split Media Embed Frame
+      const mediaWrap = document.getElementById('stage-media-wrap');
+      const mediaFrame = document.getElementById('stage-media-frame');
+      if (mediaWrap && mediaFrame) {
+        if (data.thermometer_visual_mode === 'split_media' && data.embed_media_url) {
+          mediaWrap.style.display = 'block';
+          if (mediaFrame.src !== data.embed_media_url) {
+            mediaFrame.src = data.embed_media_url;
+          }
+        } else {
+          mediaWrap.style.display = 'none';
         }
       }
 
-      // 8. Apply Live Theme Tokens
+      // 9. Update Pinned VIP Donation
+      currentPinnedDonation = data.pinned_donation || null;
+
+      // 10. Update Adaptive Scannable QR Code
+      const qrUrl = data.qr_donate_url || 'https://give.hope.org/donate';
+      if (qrUrl !== currentQrUrl) {
+        currentQrUrl = qrUrl;
+        const qrImg = document.getElementById('stage-qr-img');
+        if (qrImg) {
+          qrImg.src = `${API_BASE}/qr?url=${encodeURIComponent(currentQrUrl)}&margin=2&v=4.2.0`;
+        }
+      }
+
+      // 11. Apply Live Theme Tokens
       if (data.theme) {
         document.documentElement.style.setProperty('--brand-hue', data.theme.hue);
         document.documentElement.style.setProperty('--brand-chroma', data.theme.chroma);
@@ -192,7 +227,12 @@
         }
       }
 
-      // 9. Update Chyrons List
+      // 12. Update Milestones
+      if (Array.isArray(data.milestones)) {
+        renderMilestones(data.milestones, data.goal_cents || 50000000);
+      }
+
+      // 13. Update Chyrons List
       if (Array.isArray(data.chyrons)) {
         chyronList = data.chyrons;
       }
@@ -205,28 +245,112 @@
   // --- Chyron Rotator Engine ---
   function startChyronRotator() {
     setInterval(() => {
-      if (chyronList.length === 0) return;
-
-      const item = chyronList[chyronIndex % chyronList.length];
-      chyronIndex++;
-
       const donorEl = document.getElementById('chyron-donor');
       const metaEl = document.getElementById('chyron-meta');
       const hostEl = document.getElementById('chyron-host');
 
       if (!donorEl || !metaEl || !hostEl) return;
 
+      // If there is a VIP Pinned Donation, keep it prominently featured
+      if (currentPinnedDonation) {
+        const dollars = `$${Math.floor(currentPinnedDonation.amount_cents / 100).toLocaleString('en-US')}`;
+        hostEl.classList.add('pinned');
+        donorEl.innerHTML = `★ ${escapeHTML(currentPinnedDonation.display_name)} — <span style="color: var(--brand-accent); font-weight: 900;">${dollars}</span>`;
+        metaEl.textContent = currentPinnedDonation.notes ? `“${currentPinnedDonation.notes}”` : 'Featured Gala Supporter';
+        return;
+      }
+
+      hostEl.classList.remove('pinned');
+
+      if (chyronList.length === 0) {
+        donorEl.textContent = 'Welcome to the Live Appeal';
+        metaEl.textContent = 'Live verified donations will appear here';
+        return;
+      }
+
+      const item = chyronList[chyronIndex % chyronList.length];
+      chyronIndex++;
+
       const dollars = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
 
       // Smooth fade transition
       hostEl.style.opacity = '0.2';
       setTimeout(() => {
-        donorEl.textContent = `${dollars} — ${item.display_name}`;
-        metaEl.textContent = `Verified Live Gift`;
+        donorEl.innerHTML = `${escapeHTML(item.display_name)} — <span style="color: var(--brand-accent); font-weight: 900;">${dollars}</span>`;
+        metaEl.textContent = item.notes ? `“${escapeHTML(item.notes)}”` : 'Verified Live Gala Supporter';
         hostEl.style.opacity = '1';
       }, 200);
 
     }, 4500); // Rotate every 4.5 seconds
+  }
+
+  // --- Confetti Cannon Engine ---
+  function fireConfettiBurst() {
+    const canvas = document.getElementById('confetti-canvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const particles = [];
+    const colors = ['#E2B755', '#38BDF8', '#4ADE80', '#F43F5E', '#A855F7', '#F59E0B', '#FFFFFF'];
+
+    for (let i = 0; i < 160; i++) {
+      particles.push({
+        x: canvas.width / 2,
+        y: canvas.height * 0.45,
+        vx: (Math.random() - 0.5) * 26,
+        vy: (Math.random() - 0.8) * 22,
+        size: Math.random() * 8 + 4,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotation: Math.random() * 360,
+        rSpeed: (Math.random() - 0.5) * 12,
+        gravity: 0.45,
+        opacity: 1
+      });
+    }
+
+    let frame = 0;
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let alive = false;
+
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.rotation += p.rSpeed;
+        p.opacity -= 0.007;
+
+        if (p.opacity > 0) {
+          alive = true;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate((p.rotation * Math.PI) / 180);
+          ctx.globalAlpha = Math.max(0, p.opacity);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx.restore();
+        }
+      });
+
+      frame++;
+      if (alive && frame < 180) {
+        requestAnimationFrame(render);
+      } else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    render();
+  }
+
+  function escapeHTML(str) {
+    if (!str) return '';
+    const p = document.createElement('p');
+    p.textContent = str;
+    return p.innerHTML;
   }
 
   function startPolling() {

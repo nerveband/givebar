@@ -12,7 +12,13 @@ import {
   getStageState,
   getEmceeState,
   getControlState,
-  getVolunteerState
+  getVolunteerState,
+  startTimer,
+  pauseTimer,
+  resetTimer,
+  addTimerSeconds,
+  pinDonation,
+  toggleDonationAnonymity
 } from "../server/src/ledger";
 import { handleControlRequest } from "../server/src/routes/control";
 import { handleDonationRequest } from "../server/src/routes/donation";
@@ -194,5 +200,40 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     expect(svg).toContain("xmlns=\"http://www.w3.org/2000/svg\"");
     expect(svg).toContain("viewBox=\"0 0");
     expect(svg).toContain("d=");
+  });
+
+  test("Countdown Appeal Clock starts, pauses, resets, and adds time", () => {
+    const started = startTimer(db, 300);
+    expect(started.timer_status).toBe("running");
+    expect(started.countdown_seconds).toBe(300);
+    expect(started.timer_ends_at).toBeGreaterThan(Date.now());
+
+    const paused = pauseTimer(db);
+    expect(paused.timer_status).toBe("paused");
+    expect(paused.timer_ends_at).toBeNull();
+
+    const reset = resetTimer(db, 600);
+    expect(reset.timer_status).toBe("stopped");
+    expect(reset.countdown_seconds).toBe(600);
+  });
+
+  test("pinDonation and toggleDonationAnonymity update stage projection", () => {
+    recordDonation(db, {
+      donation_id: "don_pin_1",
+      amount_cents: 2500000,
+      donor_name: "VIP Donor",
+      notes: "In honor of the volunteers"
+    });
+
+    pinDonation(db, "don_pin_1");
+    let stage = getStageState(db);
+    expect(stage.pinned_donation_id).toBe("don_pin_1");
+    expect(stage.pinned_donation).not.toBeNull();
+    expect(stage.pinned_donation?.display_name).toBe("VIP Donor");
+    expect(stage.pinned_donation?.notes).toBe("In honor of the volunteers");
+
+    toggleDonationAnonymity(db, "don_pin_1");
+    stage = getStageState(db);
+    expect(stage.pinned_donation?.display_name).toBe("Anonymous Supporter");
   });
 });

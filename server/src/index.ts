@@ -126,6 +126,10 @@ export const server = Bun.serve({
       return serveStaticFile("client/public/emcee.html");
     }
 
+    if (pathname === "/flyer" || pathname === "/flyer.html" || pathname === "/placard") {
+      return serveStaticFile("client/public/flyer.html");
+    }
+
     // --- Static Asset Serving (CSS, JS, Assets) ---
     if (pathname.startsWith("/css/")) {
       return serveStaticFile(join("client", pathname));

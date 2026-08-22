@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Givebar — Printable Banquet Table Placards & Flyers</title>
+  <script src="js/icons.js?v=4.2.0"></script>
+  <link rel="stylesheet" href="css/app.css?v=4.2.0">
+  <style>
+    @media screen {
+      body {
+        background: var(--bg-canvas);
+        padding: var(--space-6);
+        color: var(--ink-primary);
+      }
+
+      .no-print-bar {
+        max-width: 900px;
+        margin: 0 auto var(--space-6) auto;
+        padding: var(--space-4) var(--space-6);
+        background: var(--bg-surface);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--brand-radius);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-4);
+      }
+
+      .placard-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-8);
+      }
+
+      .sheet {
+        width: 8.5in;
+        height: 11in;
+        background: #FFFFFF;
+        color: #0E131E;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        border-radius: 8px;
+        padding: 0.6in;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        position: relative;
+      }
+    }
+
+    @media print {
+      body {
+        background: #FFFFFF !important;
+        color: #000000 !important;
+        margin: 0;
+        padding: 0;
+      }
+
+      .no-print-bar {
+        display: none !important;
+      }
+
+      .placard-container {
+        display: block !important;
+      }
+
+      .sheet {
+        width: 100vw;
+        height: 100vh;
+        page-break-after: always;
+        padding: 0.6in;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background: #FFFFFF !important;
+        color: #000000 !important;
+      }
+    }
+
+    .tent-fold-line {
+      border-top: 2px dashed #CBD5E1;
+      margin: var(--space-4) 0;
+      position: relative;
+      text-align: center;
+    }
+
+    .tent-fold-line span {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #FFFFFF;
+      padding: 0 10px;
+      font-size: 11px;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+
+    .pay-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #F1F5F9;
+      border: 1px solid #E2E8F0;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #1E293B;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Non-Printing Top Action Bar -->
+  <div class="no-print-bar">
+    <div>
+      <h1 style="font-size: var(--text-lg); font-weight: 900; color: var(--brand-accent);">
+        Banquet Table Placards & Giving Tent
+      </h1>
+      <p style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: 2px;">
+        Formatted for 8.5x11" or A4 cardstock. Place on every banquet table before doors open.
+      </p>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: var(--space-3);">
+      <button type="button" onclick="window.print()" class="btn-primary" style="min-height: 44px;">
+        <svg class="icon" viewBox="0 0 256 256"><path d="M216,40H40A16,16,0,0,0,24,56V168a16,16,0,0,0,16,16H96v16H80a8,8,0,0,0,0,16h96a8,8,0,0,0,0-16H160V184h56a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,168V56H216V168H40Zm72,32h32v16H112Z"/></svg>
+        Print Table Placards
+      </button>
+      <a href="control" class="btn-secondary" style="min-height: 44px;">
+        Return to Control Room
+      </a>
+    </div>
+  </div>
+
+  <div class="placard-container" id="placard-container">
+    
+    <!-- Printable Sheet 1: Banquet Table Placard -->
+    <div class="sheet">
+      
+      <!-- Top Section -->
+      <div style="text-align: center; border-bottom: 2px solid #E2E8F0; padding-bottom: 20px;">
+        <div style="display: inline-flex; align-items: center; gap: 6px; background: #FEF3C7; border: 1px solid #FDE68A; padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #92400E; margin-bottom: 12px;" id="flyer-trust-badge">
+          501(c)(3) Tax-Deductible Contribution
+        </div>
+        <h2 id="flyer-event-name" style="font-size: 28px; font-weight: 900; letter-spacing: -0.02em; color: #0F172A; margin: 0 0 6px 0;">
+          Annual Gala & Benefit Auction
+        </h2>
+        <div id="flyer-event-sub" style="font-size: 14px; color: #64748B; font-weight: 600;">
+          Supporting Community Programs & Education
+        </div>
+      </div>
+
+      <!-- Centerpiece Section: High-Contrast QR Code & Scan CTA -->
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin: 24px 0;">
+        <div style="font-size: 20px; font-weight: 800; color: #0F172A; margin-bottom: 8px;">
+          Scan with Your Phone Camera to Give
+        </div>
+        <p style="font-size: 13px; color: #64748B; max-width: 420px; margin: 0 0 20px 0; line-height: 1.4;">
+          Your pledge appears instantly on the ballroom stage thermometer. All donations are secure and tax-deductible.
+        </p>
+
+        <!-- High-Resolution Scannable QR -->
+        <div style="background: #FFFFFF; padding: 16px; border: 3px solid #0F172A; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
+          <img id="flyer-qr-img" src="api/qr?url=https://give.hope.org/donate&margin=2" alt="Scan to Donate" style="width: 220px; height: 220px; display: block;">
+        </div>
+
+        <div style="font-size: 12px; font-weight: 700; color: #475569; margin-top: 14px; font-family: monospace;" id="flyer-qr-url-text">
+          https://give.hope.org/donate
+        </div>
+      </div>
+
+      <!-- Supported Fast Payment Methods -->
+      <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px; text-align: center;">
+        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748B; letter-spacing: 0.06em; margin-bottom: 10px;">
+          Supported Giving Methods
+        </div>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;">
+          <span class="pay-badge">Apple Pay</span>
+          <span class="pay-badge">Google Pay</span>
+          <span class="pay-badge">Credit / Debit Card</span>
+          <span class="pay-badge">Pledge Card (#0412)</span>
+        </div>
+      </div>
+
+      <!-- Bottom Matching Grant & Thank You -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #E2E8F0; padding-top: 14px; font-size: 12px; color: #64748B;">
+        <div id="flyer-match-snippet" style="font-weight: 700; color: #0F172A;">
+          Double Your Impact: 1:1 Matching Grant in Effect
+        </div>
+        <div style="font-weight: 600;">
+          Thank you for your generous support!
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script src="js/flyer.js?v=4.2.0"></script>
+</body>
+</html>

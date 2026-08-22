@@ -54,10 +54,18 @@
       </div>
     </div>
 
-    <!-- Active Match Badge -->
-    <div id="emcee-match-badge" class="badge badge-live" style="display: none; font-size: var(--text-xs); padding: var(--space-2) var(--space-4); display: flex; align-items: center; gap: var(--space-2);">
-      <svg class="icon" viewBox="0 0 256 256"><path d="M208,128a80.09,80.09,0,0,1-80,80,80.09,80.09,0,0,1-80-80,80.09,80.09,0,0,1,80-80A80.09,80.09,0,0,1,208,128Z"/></svg>
-      MATCH ACTIVE: <span id="emcee-match-pool" class="tabular">$0</span> REMAINING
+    <div style="display: flex; align-items: center; gap: var(--space-3);">
+      <!-- Synchronized Appeal Clock Pill -->
+      <div id="emcee-clock-pill" class="badge badge-staged" style="display: none; font-size: var(--text-sm); padding: var(--space-2) var(--space-4); display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-mono); font-weight: 900;">
+        <svg class="icon" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg>
+        <span id="emcee-clock-text">05:00</span>
+      </div>
+
+      <!-- Active Match Badge -->
+      <div id="emcee-match-badge" class="badge badge-live" style="display: none; font-size: var(--text-xs); padding: var(--space-2) var(--space-4); display: flex; align-items: center; gap: var(--space-2);">
+        <svg class="icon" viewBox="0 0 256 256"><path d="M208,128a80.09,80.09,0,0,1-80,80,80.09,80.09,0,0,1-80-80,80.09,80.09,0,0,1,80-80A80.09,80.09,0,0,1,208,128Z"/></svg>
+        MATCH ACTIVE: <span id="emcee-match-pool" class="tabular">$0</span> REMAINING
+      </div>
     </div>
   </header>
 

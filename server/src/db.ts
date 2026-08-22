@@ -245,5 +245,18 @@ export function migrateSchema(db: Database): void {
 
       db.exec(`PRAGMA user_version = 3;`);
     }
+
+    if (userVersion < 4) {
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN countdown_seconds INTEGER NOT NULL DEFAULT 300;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN timer_status TEXT NOT NULL DEFAULT 'stopped';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN timer_ends_at INTEGER DEFAULT NULL;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN thermometer_visual_mode TEXT NOT NULL DEFAULT 'classic';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN embed_media_url TEXT DEFAULT '';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN trust_badge_text TEXT NOT NULL DEFAULT '501(c)(3) Tax-Deductible Contribution';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN pinned_donation_id TEXT DEFAULT NULL;`); } catch {}
+      try { db.exec(`ALTER TABLE ledger ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;`); } catch {}
+
+      db.exec(`PRAGMA user_version = 4;`);
+    }
   })();
 }
