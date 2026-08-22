@@ -23,7 +23,7 @@ export async function handleWebhookRequest(req: Request, db: Database, pathParts
 
         if (amount > 0) {
           const result = recordDonation(db, {
-            donation_id: crypto.randomUUID(),
+            donation_id: `bloomerang_${txnId}`,
             amount_cents: amount,
             donor_name: donorName,
             display_name: donorName,
@@ -51,7 +51,7 @@ export async function handleWebhookRequest(req: Request, db: Database, pathParts
 
           if (amountCents > 0) {
             const result = recordDonation(db, {
-              donation_id: crypto.randomUUID(),
+              donation_id: `stripe_${txnId}`,
               amount_cents: amountCents,
               donor_name: donorName,
               display_name: donorName,
@@ -76,7 +76,7 @@ export async function handleWebhookRequest(req: Request, db: Database, pathParts
 
         if (amountCents > 0) {
           const result = recordDonation(db, {
-            donation_id: crypto.randomUUID(),
+            donation_id: `kindful_${txnId}`,
             amount_cents: amountCents,
             donor_name: donorName,
             display_name: donorName,

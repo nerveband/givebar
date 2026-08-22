@@ -492,8 +492,12 @@
       if (Array.isArray(data.recent_events)) {
         renderAuditLog(data.recent_events);
       }
+      // 1. Update Title Header & Export Link
+      const csvLink = document.getElementById('link-export-csv');
+      if (csvLink) {
+        csvLink.href = `${API_BASE}/export/csv?pin=${encodeURIComponent(controlPin)}`;
+      }
 
-      // 6. Populate Settings Form (Once on First Load)
       if (!hasPopulatedInputs && data.event_state) {
         populateSettingsInputs(data.event_state);
         hasPopulatedInputs = true;

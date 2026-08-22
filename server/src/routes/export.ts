@@ -11,9 +11,16 @@ function escapeCSV(val: unknown): string {
 }
 
 export function handleExportCSV(req: Request, db: Database): Response {
+  const url = new URL(req.url);
+  const eventState = db.query<{ control_pin: string }, []>(`SELECT control_pin FROM event_state WHERE id = 1`).get();
+  const isAuthDisabled = process.env.GIVEBAR_DISABLE_AUTH === "1";
+  const pin = req.headers.get("X-Control-Pin") || url.searchParams.get("pin") || "";
+  if (!isAuthDisabled && eventState && eventState.control_pin && eventState.control_pin.trim() !== "" && pin !== eventState.control_pin) {
+    return Response.json({ error: "UNAUTHORIZED", message: "Control Room PIN required to download finance CSV" }, { status: 401 });
+  }
+
   const folded = foldLedger(db);
   const events = db.query<LedgerEvent, []>(`SELECT * FROM ledger ORDER BY seq ASC`).all();
-
   const headers = [
     "Sequence",
     "Event Type",

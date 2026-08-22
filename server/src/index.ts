@@ -37,7 +37,14 @@ function getMimeType(filePath: string): string {
 }
 
 function serveStaticFile(relativePath: string): Response {
+  const clientRoot = join(process.cwd(), "client");
   const fullPath = join(process.cwd(), relativePath);
+  
+  // Path traversal boundary guard
+  if (!fullPath.startsWith(clientRoot)) {
+    return new Response("Forbidden", { status: 403 });
+  }
+
   if (existsSync(fullPath)) {
     const fileBytes = readFileSync(fullPath);
     return new Response(fileBytes, {

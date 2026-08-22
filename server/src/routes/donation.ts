@@ -95,7 +95,24 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
   if (method === "POST" && pathParts.length === 4 && pathParts[3] === "amend") {
     const donationId = pathParts[2];
     try {
-      const body = await req.json() as Partial<CreateDonationInput>;
+      const body = await req.json() as Partial<CreateDonationInput & { confirmed_major_gift?: boolean }>;
+      if (body.amount_cents !== undefined) {
+        if (typeof body.amount_cents !== "number" || body.amount_cents <= 0) {
+          return Response.json({ error: "VALIDATION_ERROR", message: "amount_cents must be a positive integer" }, { status: 400 });
+        }
+        body.amount_cents = Math.round(body.amount_cents);
+        
+        const eventState = getEventState(db);
+        const threshold = eventState.major_gift_threshold_cents || 950000;
+        if (body.amount_cents >= threshold && body.confirmed_major_gift !== true) {
+          return Response.json({
+            error: "MAJOR_GIFT_CONFIRMATION_REQUIRED",
+            message: `Gifts of $${Math.floor(threshold / 100).toLocaleString("en-US")} or more require explicit confirmation.`,
+            amount_cents: body.amount_cents,
+            threshold_cents: threshold
+          }, { status: 428 });
+        }
+      }
       const seq = amendDonation(db, donationId, body);
       return Response.json({ ok: true, seq, donation_id: donationId, amended: true });
     } catch (err: unknown) {

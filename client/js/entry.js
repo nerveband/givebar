@@ -304,13 +304,13 @@
     const anonInput = document.getElementById('input-is-anon');
     const cardInput = document.getElementById('input-card-number');
     const tableInput = document.getElementById('input-table-number');
-
+    const notesInput = document.getElementById('input-donor-notes');
     if (nameInput) nameInput.value = '';
     if (phoneticInput) phoneticInput.value = '';
     if (anonInput) anonInput.checked = false;
     if (cardInput) cardInput.value = '';
     if (tableInput) tableInput.value = '';
-
+    if (notesInput) notesInput.value = '';
     clearPresetHighlights();
   }
 

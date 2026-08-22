@@ -169,7 +169,7 @@ export function foldLedger(db: Database, options?: FoldOptions): FoldedLedger {
 
   for (const event of events) {
     // Respect time horizon if specified
-    if (options?.maxCreatedAt && event.created_at > options.maxCreatedAt) {
+    if (options?.maxCreatedAt !== undefined && event.created_at > options.maxCreatedAt) {
       continue;
     }
 
@@ -418,9 +418,9 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
       }
     }
 
-    // Advance odometer floor if total increased and display is not frozen
+    // Advance odometer floor if stage delay is 0 and total increased
     const updatedFold = foldLedger(db);
-    if (updatedFold.total_raised_cents > eventState.odometer_floor_cents && !eventState.is_frozen) {
+    if (eventState.stage_delay_ms === 0 && updatedFold.total_raised_cents > eventState.odometer_floor_cents && !eventState.is_frozen) {
       db.query(`UPDATE event_state SET odometer_floor_cents = ?, updated_at = ? WHERE id = 1`).run(updatedFold.total_raised_cents, now);
     } else {
       db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
@@ -446,8 +446,7 @@ export function amendDonation(db: Database, donationId: string, input: Partial<C
   const donorName = (input.donor_name !== undefined ? input.donor_name : existing.donor_name).trim();
   const displayName = isAnonymous
     ? "Anonymous Supporter"
-    : (input.display_name?.trim() || (input.donor_name ? donorName : existing.display_name));
-
+    : (input.display_name?.trim() || (existing.display_name === "Anonymous Supporter" ? donorName : existing.display_name));
   const newAmount = input.amount_cents !== undefined ? input.amount_cents : existing.amount_cents;
   const newNormalizedCard = input.card_number !== undefined ? normalizeCard(input.card_number) : normalizeCard(existing.card_number);
 
@@ -517,60 +516,63 @@ export function amendDonation(db: Database, donationId: string, input: Partial<C
       `).run(newNormalizedCard, donationId, input.entered_by || existing.entered_by, newAmount, donorName, now);
     }
 
-    // 3. Recalculate matching grant (Release old match and apply new match)
+    // 3. Recalculate matching grant ONLY if amount changed
     const existingMatch = folded.match_by_parent.get(donationId) || 0;
-    if (existingMatch > 0) {
-      db.query(`
-        INSERT INTO ledger (
-          event_type, donation_id, supersedes_seq, amount_cents,
-          donor_name, display_name, is_anonymous, payment_method,
-          source, source_txn_id, card_number, entered_by, notes, created_at
-        ) VALUES (
-          'match_release', ?, ?, ?,
-          'Matching Grant', 'Matching Grant', 0, 'match',
-          'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
-        )
-      `).run(
-        `match_${donationId}`,
-        insertedSeq,
-        existingMatch,
-        `Match released on amendment for pledge ${donationId}`,
-        now
-      );
-    }
-
-    const eventState = getEventState(db);
-    const refreshedFold = foldLedger(db);
-    if (eventState.is_match_active === 1 && refreshedFold.derived_match_pool_cents > 0 && newAmount > 0) {
-      const matchPotential = Math.floor(newAmount * eventState.match_ratio);
-      const matchApplied = Math.min(matchPotential, refreshedFold.derived_match_pool_cents);
-
-      if (matchApplied > 0) {
+    if (newAmount !== existing.amount_cents) {
+      if (existingMatch > 0) {
         db.query(`
           INSERT INTO ledger (
             event_type, donation_id, supersedes_seq, amount_cents,
             donor_name, display_name, is_anonymous, payment_method,
             source, source_txn_id, card_number, entered_by, notes, created_at
           ) VALUES (
-            'match_apply', ?, ?, ?,
-            ?, ?, 0, 'match',
+            'match_release', ?, ?, ?,
+            'Matching Grant', 'Matching Grant', 0, 'match',
             'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
           )
         `).run(
           `match_${donationId}`,
           insertedSeq,
-          matchApplied,
-          eventState.match_sponsor_title || "Matching Grant",
-          eventState.match_sponsor_title || "Matching Grant",
-          `Match reapplied on amendment for pledge ${donationId}`,
+          existingMatch,
+          `Match released on amendment for pledge ${donationId}`,
           now
         );
       }
+
+      const eventState = getEventState(db);
+      const refreshedFold = foldLedger(db);
+      if (eventState.is_match_active === 1 && refreshedFold.derived_match_pool_cents > 0 && newAmount > 0) {
+        const matchPotential = Math.floor(newAmount * eventState.match_ratio);
+        const matchApplied = Math.min(matchPotential, refreshedFold.derived_match_pool_cents);
+
+        if (matchApplied > 0) {
+          db.query(`
+            INSERT INTO ledger (
+              event_type, donation_id, supersedes_seq, amount_cents,
+              donor_name, display_name, is_anonymous, payment_method,
+              source, source_txn_id, card_number, entered_by, notes, created_at
+            ) VALUES (
+              'match_apply', ?, ?, ?,
+              ?, ?, 0, 'match',
+              'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
+            )
+          `).run(
+            `match_${donationId}`,
+            insertedSeq,
+            matchApplied,
+            eventState.match_sponsor_title || "Matching Grant",
+            eventState.match_sponsor_title || "Matching Grant",
+            `Match reapplied on amendment for pledge ${donationId}`,
+            now
+          );
+        }
+      }
     }
 
-    // Advance floor if total increased
+    // Advance floor if stage delay is 0 and total increased
+    const eventState = getEventState(db);
     const postAmendFold = foldLedger(db);
-    if (postAmendFold.total_raised_cents > eventState.odometer_floor_cents && !eventState.is_frozen) {
+    if (eventState.stage_delay_ms === 0 && postAmendFold.total_raised_cents > eventState.odometer_floor_cents && !eventState.is_frozen) {
       db.query(`UPDATE event_state SET odometer_floor_cents = ?, updated_at = ? WHERE id = 1`).run(postAmendFold.total_raised_cents, now);
     } else {
       db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);

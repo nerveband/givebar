@@ -152,19 +152,20 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
   // Milestones
   const milestones = getMilestones(db, eventState.goal_cents);
 
-  // Delayed chyrons stream (older than 8s chyron buffer, not held, privacy-shielded)
-  const chyronBufferMs = 8000;
+  // Delayed chyrons stream (unified with stage_delay_ms horizon, not held, privacy-shielded)
+  const chyronBufferMs = stageDelayMs > 0 ? stageDelayMs : 0;
   const chyrons: PublicChyron[] = [];
   const sortedStaged = Array.from(fullFold.active_donations.values())
     .filter(d => !d.is_voided && !heldSet.has(d.donation_id))
     .sort((a, b) => b.created_at - a.created_at);
 
   for (const d of sortedStaged) {
-    if (now - d.created_at >= chyronBufferMs || stageDelayMs === 0) {
+    if (stageDelayMs === 0 || now - d.created_at >= chyronBufferMs) {
       chyrons.push({
         donation_id: d.donation_id,
         display_name: d.is_anonymous ? "Anonymous Supporter" : d.display_name,
         amount_cents: d.amount_cents,
+        notes: d.notes,
         created_at: d.created_at
       });
     }

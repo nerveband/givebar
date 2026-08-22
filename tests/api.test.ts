@@ -135,7 +135,9 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
       })
     }), db, ["api", "donation", "don_csv_1"]);
 
-    const exportReq = new Request("http://localhost:3000/api/export/csv");
+    const exportReq = new Request("http://localhost:3000/api/export/csv", {
+      headers: { "X-Control-Pin": "9999" }
+    });
     const exportRes = handleExportCSV(exportReq, db);
     expect(exportRes.status).toBe(200);
     expect(exportRes.headers.get("Content-Type")).toContain("text/csv");
