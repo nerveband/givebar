@@ -179,7 +179,7 @@
         currentQrBadge = qrBadge;
         const qrImg = document.getElementById('stage-qr-img');
         if (qrImg) {
-          qrImg.src = `${API_BASE}/qr?url=${encodeURIComponent(currentQrUrl)}&style=${encodeURIComponent(qrStyle)}&center=${encodeURIComponent(qrBadge)}&size=200`;
+          qrImg.src = `${API_BASE}/qr?url=${encodeURIComponent(currentQrUrl)}&v=4.2.0`;
         }
       }
 

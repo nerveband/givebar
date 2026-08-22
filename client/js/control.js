@@ -104,7 +104,7 @@
       const previewImg = document.getElementById('qr-customizer-preview');
       if (!previewImg) return;
       const url = (urlInput ? urlInput.value : '').trim() || 'https://give.hope.org/donate';
-      previewImg.src = `${API_BASE}/qr?url=${encodeURIComponent(url)}&style=${encodeURIComponent(selectedQrStyle)}&center=${encodeURIComponent(selectedQrBadge)}&size=160`;
+      previewImg.src = `${API_BASE}/qr?url=${encodeURIComponent(url)}&v=4.2.0`;
     }
 
     styleBtns.forEach(btn => {
@@ -586,7 +586,7 @@
     // Refresh preview
     const previewImg = document.getElementById('qr-customizer-preview');
     if (previewImg && state.qr_donate_url) {
-      previewImg.src = `${API_BASE}/qr?url=${encodeURIComponent(state.qr_donate_url)}&style=${encodeURIComponent(state.qr_style || 'dots')}&center=${encodeURIComponent(state.qr_center_icon || 'star')}&size=160`;
+      previewImg.src = `${API_BASE}/qr?url=${encodeURIComponent(state.qr_donate_url)}&v=4.2.0`;
     }
   }
 

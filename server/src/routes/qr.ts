@@ -55,7 +55,7 @@ export function handleQRRequest(req: Request): Response {
     return new Response(svg, {
       headers: {
         "Content-Type": "image/svg+xml",
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
         "Access-Control-Allow-Origin": "*"
       }
     });
