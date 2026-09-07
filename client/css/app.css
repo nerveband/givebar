@@ -523,3 +523,93 @@
   margin: 0 auto var(--space-5) auto;
   line-height: 1.5;
 }
+
+/* Auth Unlock Screen (Direction B) */
+.unlock-screen-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 440px;
+  padding: var(--space-8) var(--space-4);
+}
+
+.unlock-card {
+  background: #18191d;
+  border: 1px solid #282932;
+  border-radius: var(--brand-radius);
+  max-width: 420px;
+  width: 100%;
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+}
+
+.unlock-icon {
+  width: 36px;
+  height: 36px;
+  color: #d4a359;
+  margin-bottom: var(--space-3);
+}
+
+.unlock-title {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: #f4f5f6;
+  margin: 0 0 var(--space-2) 0;
+  letter-spacing: -0.01em;
+}
+
+.unlock-desc {
+  font-size: var(--text-sm);
+  color: #88888e;
+  line-height: 1.5;
+  margin: 0 0 var(--space-5) 0;
+}
+
+.unlock-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.unlock-input {
+  width: 100%;
+  background: #121316;
+  border: 1px solid #2e3038;
+  border-radius: var(--brand-radius);
+  color: #f4f5f6;
+  font-size: var(--text-base);
+  font-family: var(--font-sans);
+  text-align: center;
+  padding: 10px 14px;
+  letter-spacing: 0.15em;
+  outline: none;
+}
+
+.unlock-input:focus {
+  border-color: #d4a359;
+}
+
+.unlock-error {
+  color: #f87171;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 8px 12px;
+  border-radius: var(--brand-radius);
+  margin-bottom: var(--space-2);
+}
+
+/* Stale Data / Degraded Banner */
+.stale-notice-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  background: #231b12;
+  border: 1px solid #d4a359;
+  border-radius: var(--brand-radius);
+  padding: 8px 14px;
+  margin-bottom: var(--space-4);
+  font-size: var(--text-xs);
+  color: #d4a359;
+}

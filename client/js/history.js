@@ -16,12 +16,103 @@
   const timelineEl = document.getElementById('history-timeline');
   const searchInput = document.getElementById('history-search');
   const filterChips = document.querySelectorAll('.filter-chip');
+  const unlockScreen = document.getElementById('unlock-screen');
+  const unlockForm = document.getElementById('unlock-form');
+  const unlockPinInput = document.getElementById('unlock-pin-input');
+  const btnSubmitUnlock = document.getElementById('btn-submit-unlock');
+  const unlockError = document.getElementById('unlock-error');
+  const authView = document.getElementById('authenticated-view');
+
+  // PIN Helpers
+  function getControlPin() {
+    return sessionStorage.getItem('givebar_control_pin') || localStorage.getItem('givebar_control_pin') || '';
+  }
+
+  function setControlPin(pin) {
+    sessionStorage.setItem('givebar_control_pin', pin);
+    localStorage.setItem('givebar_control_pin', pin);
+  }
+
+  function clearControlPin() {
+    sessionStorage.removeItem('givebar_control_pin');
+    localStorage.removeItem('givebar_control_pin');
+  }
+
+  function setAuthUIState(state) {
+    if (state === 'unauthenticated') {
+      if (unlockScreen) unlockScreen.style.display = 'flex';
+      if (authView) authView.style.display = 'none';
+      if (unlockPinInput) setTimeout(() => unlockPinInput.focus(), 50);
+    } else {
+      if (unlockScreen) unlockScreen.style.display = 'none';
+      if (authView) authView.style.display = 'block';
+    }
+  }
 
   function init() {
     setupFilters();
     setupSearch();
+    setupUnlockForm();
     syncHistory();
     pollInterval = setInterval(syncHistory, 2500);
+  }
+
+  function setupUnlockForm() {
+    if (unlockForm) {
+      unlockForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const pin = (unlockPinInput?.value || '').trim();
+        if (!pin) {
+          showUnlockError('Please enter the Control Room PIN.');
+          return;
+        }
+        clearUnlockError();
+        if (btnSubmitUnlock) {
+          btnSubmitUnlock.disabled = true;
+          btnSubmitUnlock.textContent = 'Verifying...';
+        }
+        try {
+          const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
+            headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
+          });
+          if (res.status === 401) {
+            showUnlockError('Invalid Control Room PIN.');
+            if (unlockPinInput) { unlockPinInput.focus(); unlockPinInput.select(); }
+            return;
+          }
+          if (!res.ok) {
+            showUnlockError('Server error validating PIN.');
+            return;
+          }
+          const data = await res.json();
+          setControlPin(pin);
+          setAuthUIState('authenticated');
+          rawEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
+          renderTimeline();
+        } catch (err) {
+          showUnlockError('Network error connecting to server.');
+        } finally {
+          if (btnSubmitUnlock) {
+            btnSubmitUnlock.disabled = false;
+            btnSubmitUnlock.textContent = 'Unlock';
+          }
+        }
+      });
+    }
+  }
+
+  function showUnlockError(msg) {
+    if (unlockError) {
+      unlockError.textContent = msg;
+      unlockError.style.display = 'block';
+    }
+  }
+
+  function clearUnlockError() {
+    if (unlockError) {
+      unlockError.textContent = '';
+      unlockError.style.display = 'none';
+    }
   }
 
   function setupFilters() {
@@ -45,13 +136,19 @@
   }
 
   async function syncHistory() {
+    const pin = getControlPin();
     try {
-      const res = await fetch('/api/state?role=control', {
-        headers: { 'Cache-Control': 'no-cache' }
+      const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
+        headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
       });
+      if (res.status === 401) {
+        clearControlPin();
+        setAuthUIState('unauthenticated');
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
-
+      setAuthUIState('authenticated');
       rawEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
       renderTimeline();
     } catch (err) {
@@ -168,13 +265,18 @@
   }
 
   async function executeRestore(donationId) {
+    const pin = getControlPin();
     try {
       const res = await fetch(`/api/donation/${donationId}/restore`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Control-Pin': pin
+        },
         body: JSON.stringify({
           entered_by: 'User',
-          reason: 'Restored from History timeline'
+          reason: 'Restored from History timeline',
+          pin
         })
       });
 
@@ -190,13 +292,18 @@
   }
 
   async function executeVoid(donationId) {
+    const pin = getControlPin();
     try {
       const res = await fetch(`/api/donation/${donationId}/void`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Control-Pin': pin
+        },
         body: JSON.stringify({
           entered_by: 'User',
-          reason: 'Undone from History timeline'
+          reason: 'Undone from History timeline',
+          pin
         })
       });
 

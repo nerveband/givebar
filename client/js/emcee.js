@@ -39,8 +39,12 @@
     const elapsed = Date.now() - lastSuccessfulUpdateAt;
     const isStale = elapsed >= 5000;
     const dot = document.querySelector('.presenter-title .pulse-dot');
+    const degradedBanner = document.getElementById('presenter-degraded-banner');
     if (dot) {
       dot.classList.toggle('degraded', isStale);
+    }
+    if (degradedBanner) {
+      degradedBanner.style.display = isStale ? 'inline-flex' : 'none';
     }
   }
 

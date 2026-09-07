@@ -63,6 +63,7 @@
     const isStale = elapsed >= 5000;
     const dot = liveIndicator ? liveIndicator.querySelector('.pulse-dot') : null;
     const liveText = liveIndicator ? liveIndicator.querySelector('span:last-child') : null;
+    const degradedBanner = document.getElementById('stage-degraded-banner');
 
     if (dot) {
       dot.classList.toggle('degraded', isStale);
@@ -70,6 +71,9 @@
     if (liveText) {
       liveText.textContent = isStale ? 'Reconnecting' : 'Live';
       liveText.style.color = isStale ? '#88888e' : '#d4a359';
+    }
+    if (degradedBanner) {
+      degradedBanner.style.display = isStale ? 'inline-flex' : 'none';
     }
   }
 

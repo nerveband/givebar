@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Donations — Givebar</title>
-  <link rel="stylesheet" href="css/app.css?v=5.0.0">
+  <link rel="stylesheet" href="css/app.css?v=5.1.0">
 </head>
 <body>
 
@@ -29,95 +29,123 @@
 
     <!-- Main Content Panel -->
     <main class="ops-main">
-      <header style="margin-bottom: var(--space-6); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);">
-        <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0; color: #f4f5f6; letter-spacing: -0.02em;">
-          Manage Donations
-        </h1>
-        <div style="display: flex; align-items: center; gap: var(--space-3);">
-          <a id="link-export-csv" href="api/export/csv" class="btn-secondary" style="min-height: 38px; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
-            Download CSV
-          </a>
-          <a href="/add" class="btn-primary" style="min-height: 38px; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
-            + Add Donation
-          </a>
-        </div>
-      </header>
 
-      <!-- Summary Strip -->
-      <section class="summary-strip" aria-label="Summary Strip">
-        <div class="summary-strip-label">Total Raised</div>
-        <div class="summary-strip-val" id="summary-total-raised">$0</div>
-      </section>
-
-      <!-- Inline Undo Affordance -->
-      <div id="undo-banner" class="undo-bar" style="display: none;" role="status" aria-live="polite">
-        <span id="undo-message">Donation removed.</span>
-        <button type="button" id="btn-undo-delete" class="undo-btn">Undo</button>
+      <!-- Degraded / Stale Notice Bar -->
+      <div id="stale-banner" class="stale-notice-bar" role="status">
+        <span id="stale-banner-text">Connection degraded. Displaying cached data. Retrying...</span>
+        <button type="button" id="btn-reconnect-poll" class="btn-ghost" style="padding: 2px 8px; font-size: 11px; color: #d4a359;">Refresh</button>
       </div>
 
-      <!-- Controls Row: Tabs & Search -->
-      <div class="controls-bar">
-        <div class="view-tabs" role="tablist" aria-label="Donations View">
-          <button type="button" id="tab-table" class="view-tab active" role="tab" aria-selected="true" aria-controls="panel-table">
-            Table
-          </button>
-          <button type="button" id="tab-stream" class="view-tab" role="tab" aria-selected="false" aria-controls="panel-stream">
-            Stream
-          </button>
-        </div>
-
-        <div class="search-wrap">
-          <svg class="search-icon" width="14" height="14" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
-            <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/>
+      <!-- Unauthenticated Unlock Screen (State 1) -->
+      <div id="unlock-screen" class="unlock-screen-wrap" style="display: none;">
+        <div class="unlock-card">
+          <svg class="unlock-icon" viewBox="0 0 256 256" fill="currentColor">
+            <path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/>
           </svg>
-          <input type="search" id="manage-search" class="search-input" placeholder="Search" aria-label="Search donor name">
+          <h2 class="unlock-title">Control Room Unlock</h2>
+          <p class="unlock-desc">
+            A Control Room PIN is required to access live donation management, audit logs, and operational controls.
+          </p>
+          <div id="unlock-error" class="unlock-error" style="display: none;">Invalid Control Room PIN</div>
+          <form id="unlock-form" class="unlock-form" onsubmit="return false;">
+            <input type="password" id="unlock-pin-input" class="unlock-input" placeholder="Enter PIN" inputmode="numeric" autocomplete="current-password" required autofocus>
+            <button type="submit" id="btn-submit-unlock" class="btn-primary" style="min-height: 44px; width: 100%;">Unlock</button>
+          </form>
         </div>
       </div>
 
-      <!-- Table View -->
-      <div id="panel-table" role="tabpanel" aria-labelledby="tab-table">
-        <table class="donations-table">
-          <thead>
-            <tr>
-              <th data-sort="donor" class="sortable" style="width: 35%;">
-                Donor <span id="sort-icon-donor" class="sort-indicator">⇅</span>
-              </th>
-              <th data-sort="amount" class="sortable text-right" style="width: 20%;">
-                Amount <span id="sort-icon-amount" class="sort-indicator">⇅</span>
-              </th>
-              <th data-sort="time" class="sortable text-center" style="width: 20%;">
-                Time <span id="sort-icon-time" class="sort-indicator">⇅</span>
-              </th>
-              <th data-sort="status" class="sortable text-center" style="width: 15%;">
-                Status <span id="sort-icon-status" class="sort-indicator">⇅</span>
-              </th>
-              <th class="text-right" style="width: 10%;">
-                <span class="sr-only">Delete</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody id="manage-tbody">
-            <!-- Keyed rows render here -->
-          </tbody>
-        </table>
-      </div>
+      <!-- Authenticated Content (States 2 & 3) -->
+      <div id="authenticated-view">
+        <header style="margin-bottom: var(--space-6); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);">
+          <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0; color: #f4f5f6; letter-spacing: -0.02em;">
+            Manage Donations
+          </h1>
+          <div style="display: flex; align-items: center; gap: var(--space-3);">
+            <a id="link-export-csv" href="api/export/csv" class="btn-secondary" style="min-height: 38px; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
+              Download CSV
+            </a>
+            <a href="/add" class="btn-primary" style="min-height: 38px; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
+              + Add Donation
+            </a>
+          </div>
+        </header>
 
-      <!-- Stream View -->
-      <div id="panel-stream" role="tabpanel" aria-labelledby="tab-stream" style="display: none;">
-        <div id="manage-stream" style="display: flex; flex-direction: column; gap: var(--space-3);">
-          <!-- Keyed stream cards render here -->
+        <!-- Summary Strip -->
+        <section class="summary-strip" aria-label="Summary Strip">
+          <div class="summary-strip-label">Total Raised</div>
+          <div class="summary-strip-val" id="summary-total-raised">—</div>
+        </section>
+
+        <!-- Inline Undo Affordance -->
+        <div id="undo-banner" class="undo-bar" style="display: none;" role="status" aria-live="polite">
+          <span id="undo-message">Donation removed.</span>
+          <button type="button" id="btn-undo-delete" class="undo-btn">Undo</button>
         </div>
-      </div>
 
-      <!-- Empty State -->
-      <div id="empty-state" class="empty-state-box" style="display: none;">
-        <div class="empty-state-title" id="empty-state-title">No donations yet</div>
-        <p class="empty-state-text" id="empty-state-text">
-          Pledges and donations entered from Add Donation or online links will appear here live.
-        </p>
-        <a href="/add" id="empty-state-btn" class="btn-primary" style="display: inline-flex;">
-          Add First Donation
-        </a>
+        <!-- Controls Row: Tabs & Search -->
+        <div class="controls-bar">
+          <div class="view-tabs" role="tablist" aria-label="Donations View">
+            <button type="button" id="tab-table" class="view-tab active" role="tab" aria-selected="true" aria-controls="panel-table">
+              Table
+            </button>
+            <button type="button" id="tab-stream" class="view-tab" role="tab" aria-selected="false" aria-controls="panel-stream">
+              Stream
+            </button>
+          </div>
+
+          <div class="search-wrap">
+            <svg class="search-icon" width="14" height="14" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+              <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/>
+            </svg>
+            <input type="search" id="manage-search" class="search-input" placeholder="Search" aria-label="Search donor name">
+          </div>
+        </div>
+
+        <!-- Table View -->
+        <div id="panel-table" role="tabpanel" aria-labelledby="tab-table">
+          <table class="donations-table">
+            <thead>
+              <tr>
+                <th data-sort="donor" class="sortable" style="width: 35%;">
+                  Donor <span id="sort-icon-donor" class="sort-indicator">⇅</span>
+                </th>
+                <th data-sort="amount" class="sortable text-right" style="width: 20%;">
+                  Amount <span id="sort-icon-amount" class="sort-indicator">⇅</span>
+                </th>
+                <th data-sort="time" class="sortable text-center" style="width: 20%;">
+                  Time <span id="sort-icon-time" class="sort-indicator">⇅</span>
+                </th>
+                <th data-sort="status" class="sortable text-center" style="width: 15%;">
+                  Status <span id="sort-icon-status" class="sort-indicator">⇅</span>
+                </th>
+                <th class="text-right" style="width: 10%;">
+                  <span class="sr-only">Delete</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="manage-tbody">
+              <!-- Keyed rows render here -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Stream View -->
+        <div id="panel-stream" role="tabpanel" aria-labelledby="tab-stream" style="display: none;">
+          <div id="manage-stream" style="display: flex; flex-direction: column; gap: var(--space-3);">
+            <!-- Keyed stream cards render here -->
+          </div>
+        </div>
+
+        <!-- Empty State (Authenticated with 0 donations) -->
+        <div id="empty-state" class="empty-state-box" style="display: none;">
+          <div class="empty-state-title" id="empty-state-title">No donations yet</div>
+          <p class="empty-state-text" id="empty-state-text">
+            The event has not started yet. Pledges and donations entered from Add Donation or online links will appear here live.
+          </p>
+          <a href="/add" id="empty-state-btn" class="btn-primary" style="display: inline-flex;">
+            + Add First Donation
+          </a>
+        </div>
       </div>
 
     </main>
@@ -137,6 +165,6 @@
     </div>
   </div>
 
-  <script src="js/control.js?v=5.0.0"></script>
+  <script src="js/control.js?v=5.1.0"></script>
 </body>
 </html>

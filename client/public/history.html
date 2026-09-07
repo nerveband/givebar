@@ -197,7 +197,26 @@
 
     <!-- Main Content Panel -->
     <main class="ops-main">
-      <header style="margin-bottom: var(--space-5);">
+      <!-- Unauthenticated Unlock Screen -->
+      <div id="unlock-screen" class="unlock-screen-wrap" style="display: none;">
+        <div class="unlock-card">
+          <svg class="unlock-icon" viewBox="0 0 256 256" fill="currentColor">
+            <path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/>
+          </svg>
+          <h2 class="unlock-title">History Unlock</h2>
+          <p class="unlock-desc">
+            A Control Room PIN is required to view the immutable ledger audit timeline.
+          </p>
+          <div id="unlock-error" class="unlock-error" style="display: none;">Invalid Control Room PIN</div>
+          <form id="unlock-form" class="unlock-form" onsubmit="return false;">
+            <input type="password" id="unlock-pin-input" class="unlock-input" placeholder="Enter PIN" inputmode="numeric" autocomplete="current-password" required autofocus>
+            <button type="submit" id="btn-submit-unlock" class="btn-primary" style="min-height: 44px; width: 100%;">Unlock</button>
+          </form>
+        </div>
+      </div>
+
+      <div id="authenticated-view">
+        <header style="margin-bottom: var(--space-5);">
         <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0 0 6px 0; color: #f4f5f6; letter-spacing: -0.02em;">
           History
         </h1>
@@ -232,6 +251,7 @@
         </div>
       </div>
 
+      </div>
     </main>
   </div>
 

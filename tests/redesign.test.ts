@@ -490,4 +490,48 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     expect(anonRecent?.notes).toBeNull();
     expect((anonRecent as Record<string, unknown>).donor_name).toBeUndefined();
   });
+
+  test("Production Defect: 401 Unauthorized prevents unauthenticated state leakage and zero-total render", async () => {
+    // Ensure auth is enforced
+    updateEventState(db, { control_pin: "9999" });
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      // Record donations so real total is non-zero
+      recordDonation(db, {
+        donation_id: "don_auth_test",
+        amount_cents: 750000,
+        donor_name: "Auth Test Donor"
+      });
+
+      // 1. Unauthenticated request without PIN
+      const unauthReq = new Request("http://localhost:3000/api/state?role=control");
+      const unauthRes = handleStateRequest(unauthReq, db);
+      expect(unauthRes.status).toBe(401);
+      const unauthData = await unauthRes.json();
+      expect(unauthData.error).toBe("UNAUTHORIZED");
+      expect(unauthData.message).toBe("Control Room PIN required");
+      // Crucial: Must NOT contain any data fields that could paint a $0 total or empty list
+      expect(unauthData.folded).toBeUndefined();
+      expect(unauthData.total_raised_cents).toBeUndefined();
+      expect(unauthData.staged_chyrons).toBeUndefined();
+
+      // 2. Request with invalid PIN
+      const wrongPinReq = new Request("http://localhost:3000/api/state?role=control&pin=1111");
+      const wrongPinRes = handleStateRequest(wrongPinReq, db);
+      expect(wrongPinRes.status).toBe(401);
+
+      // 3. Authenticated request with valid PIN
+      const authReq = new Request("http://localhost:3000/api/state?role=control&pin=9999");
+      const authRes = handleStateRequest(authReq, db);
+      expect(authRes.status).toBe(200);
+      const authData = await authRes.json();
+      expect(authData.folded).toBeDefined();
+      expect(authData.folded.total_raised_cents).toBe(750000);
+      expect(authData.staged_chyrons.length).toBe(1);
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
+  });
 });

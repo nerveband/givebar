@@ -1,7 +1,8 @@
 /**
  * Givebar — Manage Donations Controller
  * Unified dataset, Table & Stream views, client sorting/filtering,
- * keyed row updates, delete dialog with 30s undo affordance.
+ * keyed row updates, delete dialog with 30s undo affordance,
+ * explicit PIN unlock screen on 401, staleness detector, and honest state isolation.
  */
 
 (function () {
@@ -16,6 +17,8 @@
   let sortDirection = 'desc'; // 'asc' | 'desc'
   let pollInterval = null;
   let sseSource = null;
+  let authState = 'unauthenticated'; // 'unauthenticated' | 'authenticated'
+  let lastSuccessfulUpdateAt = 0;
 
   // Pending deletion & Undo state
   let pendingDeleteDonation = null;
@@ -36,6 +39,19 @@
   const emptyStateTitleEl = document.getElementById('empty-state-title');
   const emptyStateTextEl = document.getElementById('empty-state-text');
   const emptyStateBtn = document.getElementById('empty-state-btn');
+  const authView = document.getElementById('authenticated-view');
+
+  // Stale Banner Elements
+  const staleBanner = document.getElementById('stale-banner');
+  const staleBannerText = document.getElementById('stale-banner-text');
+  const btnReconnectPoll = document.getElementById('btn-reconnect-poll');
+
+  // Unlock Screen Elements
+  const unlockScreen = document.getElementById('unlock-screen');
+  const unlockForm = document.getElementById('unlock-form');
+  const unlockPinInput = document.getElementById('unlock-pin-input');
+  const btnSubmitUnlock = document.getElementById('btn-submit-unlock');
+  const unlockError = document.getElementById('unlock-error');
 
   // Modal Dialog Elements
   const deleteModal = document.getElementById('delete-modal');
@@ -49,33 +65,190 @@
   const undoMessage = document.getElementById('undo-message');
   const btnUndoDelete = document.getElementById('btn-undo-delete');
 
+  // --- PIN Storage Helpers ---
+  function getControlPin() {
+    return sessionStorage.getItem('givebar_control_pin') || localStorage.getItem('givebar_control_pin') || '';
+  }
+
+  function setControlPin(pin) {
+    sessionStorage.setItem('givebar_control_pin', pin);
+    localStorage.setItem('givebar_control_pin', pin);
+  }
+
+  function clearControlPin() {
+    sessionStorage.removeItem('givebar_control_pin');
+    localStorage.removeItem('givebar_control_pin');
+  }
+
   function init() {
     setupTabListeners();
     setupSearchListener();
     setupSortHeaders();
     setupDeleteModal();
     setupUndoAction();
+    setupUnlockForm();
+    setupStaleBanner();
     startDataSync();
+  }
+
+  // --- Unlock Screen & State Isolation ---
+  function setupUnlockForm() {
+    if (unlockForm) {
+      unlockForm.addEventListener('submit', handleUnlockSubmit);
+    }
+  }
+
+  async function handleUnlockSubmit(e) {
+    if (e) e.preventDefault();
+    const pin = (unlockPinInput?.value || '').trim();
+    if (!pin) {
+      showUnlockError('Please enter the Control Room PIN.');
+      if (unlockPinInput) unlockPinInput.focus();
+      return;
+    }
+
+    clearUnlockError();
+    if (btnSubmitUnlock) {
+      btnSubmitUnlock.disabled = true;
+      btnSubmitUnlock.textContent = 'Verifying...';
+    }
+
+    try {
+      const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
+        headers: {
+          'X-Control-Pin': pin,
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (res.status === 401) {
+        showUnlockError('Invalid Control Room PIN.');
+        if (unlockPinInput) {
+          unlockPinInput.focus();
+          unlockPinInput.select();
+        }
+        return;
+      }
+
+      if (!res.ok) {
+        showUnlockError('Server error validating PIN. Please try again.');
+        return;
+      }
+
+      const data = await res.json();
+      setControlPin(pin);
+      lastSuccessfulUpdateAt = Date.now();
+      setAuthUIState('authenticated');
+      setDegradedState(false);
+      handleStateUpdate(data);
+
+      // Re-init SSE with valid PIN
+      initSSE();
+    } catch (err) {
+      showUnlockError('Network error connecting to server.');
+    } finally {
+      if (btnSubmitUnlock) {
+        btnSubmitUnlock.disabled = false;
+        btnSubmitUnlock.textContent = 'Unlock';
+      }
+    }
+  }
+
+  function showUnlockError(msg) {
+    if (unlockError) {
+      unlockError.textContent = msg;
+      unlockError.style.display = 'block';
+    }
+  }
+
+  function clearUnlockError() {
+    if (unlockError) {
+      unlockError.textContent = '';
+      unlockError.style.display = 'none';
+    }
+  }
+
+  function setAuthUIState(state) {
+    authState = state;
+    if (state === 'unauthenticated') {
+      if (unlockScreen) unlockScreen.style.display = 'flex';
+      if (authView) authView.style.display = 'none';
+      if (summaryTotalRaisedEl) summaryTotalRaisedEl.textContent = '—';
+      if (emptyStateEl) emptyStateEl.style.display = 'none';
+      if (staleBanner) staleBanner.style.display = 'none';
+      if (unlockPinInput) {
+        setTimeout(() => unlockPinInput.focus(), 50);
+      }
+    } else {
+      if (unlockScreen) unlockScreen.style.display = 'none';
+      if (authView) authView.style.display = 'block';
+    }
+  }
+
+  function setupStaleBanner() {
+    if (btnReconnectPoll) {
+      btnReconnectPoll.addEventListener('click', () => {
+        fetchState();
+      });
+    }
+  }
+
+  function setDegradedState(isDegraded) {
+    const isStale = isDegraded || (lastSuccessfulUpdateAt > 0 && Date.now() - lastSuccessfulUpdateAt > 5000);
+
+    if (staleBanner) {
+      if (isStale && authState === 'authenticated') {
+        staleBanner.style.display = 'flex';
+        const timeStr = lastSuccessfulUpdateAt > 0
+          ? new Date(lastSuccessfulUpdateAt).toLocaleTimeString()
+          : 'an earlier session';
+        if (staleBannerText) {
+          staleBannerText.textContent = `Connection degraded. Displaying cached data from ${timeStr}. Retrying...`;
+        }
+        if (summaryTotalRaisedEl && totalRaisedCents > 0) {
+          summaryTotalRaisedEl.textContent = `${formatCurrency(totalRaisedCents)} (Stale)`;
+        }
+      } else if (authState === 'authenticated') {
+        staleBanner.style.display = 'none';
+        if (summaryTotalRaisedEl) {
+          summaryTotalRaisedEl.textContent = formatCurrency(totalRaisedCents);
+        }
+      }
+    }
   }
 
   // --- Realtime / Sync ---
   function startDataSync() {
     fetchState();
     pollInterval = setInterval(fetchState, 1500);
+    setInterval(() => {
+      if (authState === 'authenticated') {
+        setDegradedState(false);
+      }
+    }, 1000);
     initSSE();
   }
 
   function initSSE() {
+    if (sseSource) {
+      try { sseSource.close(); } catch (e) {}
+      sseSource = null;
+    }
+
+    const pin = getControlPin();
+    if (!pin) return;
+
     try {
       if (window.EventSource) {
-        sseSource = new EventSource('/api/state/stream?role=control');
+        sseSource = new EventSource(`/api/state/stream?role=control&pin=${encodeURIComponent(pin)}`);
         sseSource.onmessage = function (event) {
           try {
             const data = JSON.parse(event.data);
+            lastSuccessfulUpdateAt = Date.now();
+            setAuthUIState('authenticated');
+            setDegradedState(false);
             handleStateUpdate(data);
-          } catch (e) {
-            // Fallback to polling
-          }
+          } catch (e) {}
         };
         sseSource.onerror = function () {
           if (sseSource) {
@@ -84,21 +257,39 @@
           }
         };
       }
-    } catch (e) {
-      // EventSource unavailable or failed
-    }
+    } catch (e) {}
   }
 
   async function fetchState() {
+    const pin = getControlPin();
     try {
-      const res = await fetch('/api/state?role=control', {
-        headers: { 'Cache-Control': 'no-cache' }
+      const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
+        headers: {
+          'X-Control-Pin': pin,
+          'Cache-Control': 'no-cache'
+        }
       });
-      if (!res.ok) return;
+
+      if (res.status === 401) {
+        // Unauthenticated state: never paint a zero or empty state
+        clearControlPin();
+        setAuthUIState('unauthenticated');
+        return;
+      }
+
+      if (!res.ok) {
+        setDegradedState(true);
+        return;
+      }
+
       const data = await res.json();
+      lastSuccessfulUpdateAt = Date.now();
+      setAuthUIState('authenticated');
+      setDegradedState(false);
       handleStateUpdate(data);
     } catch (err) {
       console.warn('[Givebar] Failed to fetch state:', err);
+      setDegradedState(true);
     }
   }
 
@@ -159,34 +350,38 @@
     return list;
   }
 
-  // --- Render Views ---
+  // --- Render Views (Unambiguous 3-State Separation) ---
   function renderCurrentView() {
+    // If not authenticated, do not render data or empty states
+    if (authState !== 'authenticated') return;
+
     const list = getFilteredAndSorted();
 
-    // Check empty states
+    // Authenticated with genuinely zero donations (State 2)
     if (currentDonations.length === 0) {
       if (panelTable) panelTable.style.display = 'none';
       if (panelStream) panelStream.style.display = 'none';
       if (emptyStateEl) {
         emptyStateEl.style.display = 'block';
-        emptyStateTitleEl.textContent = 'No donations yet';
-        emptyStateTextEl.textContent = 'Pledges and donations entered from Add Donation or online links will appear here live.';
+        if (emptyStateTitleEl) emptyStateTitleEl.textContent = 'No donations yet';
+        if (emptyStateTextEl) emptyStateTextEl.textContent = 'The event has not started yet. Pledges and donations entered from Add Donation or online links will appear here live.';
         if (emptyStateBtn) {
           emptyStateBtn.style.display = 'inline-flex';
-          emptyStateBtn.textContent = 'Add First Donation';
+          emptyStateBtn.textContent = '+ Add First Donation';
           emptyStateBtn.onclick = () => { window.location.href = '/add'; };
         }
       }
       return;
     }
 
+    // Authenticated with search filter yielding 0 matches
     if (list.length === 0) {
       if (panelTable) panelTable.style.display = 'none';
       if (panelStream) panelStream.style.display = 'none';
       if (emptyStateEl) {
         emptyStateEl.style.display = 'block';
-        emptyStateTitleEl.textContent = 'No donations match your search';
-        emptyStateTextEl.textContent = `No donations matching "${searchQuery}".`;
+        if (emptyStateTitleEl) emptyStateTitleEl.textContent = 'No donations match your search';
+        if (emptyStateTextEl) emptyStateTextEl.textContent = `No donations matching "${searchQuery}".`;
         if (emptyStateBtn) {
           emptyStateBtn.style.display = 'inline-flex';
           emptyStateBtn.textContent = 'Clear Search';
@@ -200,7 +395,7 @@
       return;
     }
 
-    // Hide empty state
+    // Authenticated with active donation rows
     if (emptyStateEl) emptyStateEl.style.display = 'none';
 
     if (activeTab === 'table') {
@@ -226,14 +421,12 @@
 
     const activeIds = new Set(list.map(d => d.id));
 
-    // Remove obsolete rows
     existingRows.forEach((tr, id) => {
       if (!activeIds.has(id)) {
         tr.remove();
       }
     });
 
-    // Insert or update in order
     let previousNode = null;
     list.forEach(item => {
       let tr = existingRows.get(item.id);
@@ -248,7 +441,6 @@
       const formattedAmount = formatCurrency(item.amountCents);
       const statusHtml = getStatusBadgeHtml(item.status);
 
-      // Only update contents if changed
       const innerHtml = `
         <td style="font-weight: 600; color: #f4f5f6;">${escapeHTML(item.donor)}</td>
         <td class="text-right amount-cell" style="color: #f4f5f6;">${formattedAmount}</td>
@@ -271,7 +463,6 @@
         }
       }
 
-      // Preserve DOM order
       if (isNew) {
         if (previousNode && previousNode.nextSibling) {
           tbodyEl.insertBefore(tr, previousNode.nextSibling);
@@ -467,7 +658,6 @@
       });
     }
 
-    // Escape closes modal
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && deleteModal && deleteModal.style.display !== 'none') {
         closeDeleteModal();
@@ -488,7 +678,6 @@
 
     if (deleteModal) {
       deleteModal.style.display = 'flex';
-      // Cancel is default focused action per Phase 3 contract
       if (btnCancelDelete) {
         btnCancelDelete.focus();
       }
@@ -503,13 +692,18 @@
   }
 
   async function executeDeleteDonation(donation) {
+    const pin = getControlPin();
     try {
       const res = await fetch(`/api/donation/${donation.id}/void`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Control-Pin': pin
+        },
         body: JSON.stringify({
           entered_by: 'User',
-          reason: `Deleted via Manage Donations by User`
+          reason: `Deleted via Manage Donations by User`,
+          pin
         })
       });
 
@@ -519,22 +713,19 @@
         return;
       }
 
-      // Record for Undo
       lastDeletedDonation = donation;
       showUndoAffordance(donation);
 
-      // Optimistically update local view
       currentDonations = currentDonations.filter(d => d.id !== donation.id);
       renderCurrentView();
 
-      // Refresh authoritative state
       fetchState();
     } catch (err) {
       console.error('[Givebar] Void error:', err);
     }
   }
 
-  // --- Inline Undo Affordance (at least 30 seconds) ---
+  // --- Inline Undo Affordance ---
   function showUndoAffordance(donation) {
     if (!undoBanner || !undoMessage) return;
 
@@ -569,13 +760,18 @@
   }
 
   async function executeRestoreDonation(donation) {
+    const pin = getControlPin();
     try {
       const res = await fetch(`/api/donation/${donation.id}/restore`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Control-Pin': pin
+        },
         body: JSON.stringify({
           entered_by: 'User',
-          reason: `Restored via Undo in Manage Donations by User`
+          reason: `Restored via Undo in Manage Donations by User`,
+          pin
         })
       });
 
