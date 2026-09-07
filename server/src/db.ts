@@ -82,15 +82,15 @@ export function migrateSchema(db: Database): void {
         control_pin TEXT NOT NULL DEFAULT '9999',
         milestones_json TEXT DEFAULT '[{"cents":10000000,"label":"Foundation"},{"cents":25000000,"label":"Staffing"},{"cents":50000000,"label":"Legal Clinic"},{"cents":100000000,"label":"Expansion"}]',
         odometer_floor_cents INTEGER NOT NULL DEFAULT 0,
-        confetti_trigger INTEGER NOT NULL DEFAULT 0,
+        confetti_trigger INTEGER NOT NULL DEFAULT 0,            -- Retired
         theme_preset TEXT NOT NULL DEFAULT 'champagne',
         brand_hue REAL NOT NULL DEFAULT 85,
         brand_chroma REAL NOT NULL DEFAULT 0.12,
         brand_accent_hex TEXT NOT NULL DEFAULT '',
         brand_radius_px INTEGER NOT NULL DEFAULT 12,
         major_gift_threshold_cents INTEGER NOT NULL DEFAULT 950000,
-        stage_delay_ms INTEGER NOT NULL DEFAULT 8000,
-        confetti_on_milestone INTEGER NOT NULL DEFAULT 1,
+        stage_delay_ms INTEGER NOT NULL DEFAULT 0,
+        confetti_on_milestone INTEGER NOT NULL DEFAULT 1,       -- Retired
         countdown_seconds INTEGER NOT NULL DEFAULT 300,
         timer_status TEXT NOT NULL DEFAULT 'stopped',
         timer_ends_at INTEGER DEFAULT NULL,
@@ -99,6 +99,21 @@ export function migrateSchema(db: Database): void {
         trust_badge_text TEXT NOT NULL DEFAULT '501(c)(3) Tax-Deductible Contribution',
         pinned_donation_id TEXT DEFAULT NULL,
         settings_seq INTEGER NOT NULL DEFAULT 1,
+        logo_url TEXT DEFAULT '',
+        background_style TEXT DEFAULT 'plain',
+        bar_color TEXT DEFAULT '',
+        show_qr INTEGER DEFAULT 1,
+        show_recent_donations INTEGER DEFAULT 1,
+        show_live_indicator INTEGER DEFAULT 1,
+        show_goal INTEGER DEFAULT 1,
+        stage_message TEXT DEFAULT '',
+        stage_message_visible INTEGER DEFAULT 0,
+        feature_timer INTEGER DEFAULT 0,
+        feature_card_number INTEGER DEFAULT 0,
+        feature_table_number INTEGER DEFAULT 0,
+        bloomerang_api_key TEXT DEFAULT '',
+        bloomerang_last_sync_at INTEGER DEFAULT NULL,
+        bloomerang_last_error TEXT DEFAULT '',
         updated_at INTEGER NOT NULL
       );
     `);
@@ -123,7 +138,7 @@ export function migrateSchema(db: Database): void {
           NULL, 'https://give.hope.org/donate', 'dots', 'star', '', '#FFFFFF',
           '1234', '9999',
           '[{"cents":10000000,"label":"Foundation"},{"cents":25000000,"label":"Staffing"},{"cents":50000000,"label":"Legal Clinic"},{"cents":100000000,"label":"Expansion"}]',
-          0, 0, 'champagne', 85, 0.12, '', 12, 950000, 8000, 1,
+          0, 0, 'champagne', 85, 0.12, '', 12, 950000, 0, 1,
           300, 'stopped', NULL, 'classic', '', '501(c)(3) Tax-Deductible Contribution', NULL,
           1, ?
         )
@@ -206,11 +221,13 @@ export function migrateSchema(db: Database): void {
         INSERT INTO ask_tier (sort_order, cents, label)
         VALUES (?, ?, ?)
       `);
-      insertTier.run(1, 1000000, "$10,000");
-      insertTier.run(2, 500000, "$5,000");
-      insertTier.run(3, 250000, "$2,500");
-      insertTier.run(4, 100000, "$1,000");
-      insertTier.run(5, 50000, "$500");
+      insertTier.run(1, 5000000, "$50,000");
+      insertTier.run(2, 2500000, "$25,000");
+      insertTier.run(3, 1000000, "$10,000");
+      insertTier.run(4, 500000, "$5,000");
+      insertTier.run(5, 200000, "$2,000");
+      insertTier.run(6, 100000, "$1,000");
+      insertTier.run(7, 50000, "$500");
     }
 
     // 7. Connector Leases & Checkpoints
@@ -268,6 +285,25 @@ export function migrateSchema(db: Database): void {
       try { db.exec(`ALTER TABLE ledger ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;`); } catch {}
 
       db.exec(`PRAGMA user_version = 4;`);
+    }
+    if (userVersion < 5) {
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN logo_url TEXT DEFAULT '';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN background_style TEXT DEFAULT 'plain';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN bar_color TEXT DEFAULT '';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN show_qr INTEGER DEFAULT 1;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN show_recent_donations INTEGER DEFAULT 1;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN show_live_indicator INTEGER DEFAULT 1;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN show_goal INTEGER DEFAULT 1;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN stage_message TEXT DEFAULT '';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN stage_message_visible INTEGER DEFAULT 0;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN feature_timer INTEGER DEFAULT 0;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN feature_card_number INTEGER DEFAULT 0;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN feature_table_number INTEGER DEFAULT 0;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN bloomerang_api_key TEXT DEFAULT '';`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN bloomerang_last_sync_at INTEGER DEFAULT NULL;`); } catch {}
+      try { db.exec(`ALTER TABLE event_state ADD COLUMN bloomerang_last_error TEXT DEFAULT '';`); } catch {}
+
+      db.exec(`PRAGMA user_version = 5;`);
     }
   })();
 }

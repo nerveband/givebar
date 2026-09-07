@@ -39,6 +39,30 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
     switch (action) {
       case "update_settings": {
         const patch: Partial<EventStateRecord> = {};
+        if (typeof body.settings_seq === "number") {
+          if (body.settings_seq !== currentState.settings_seq) {
+            return Response.json({
+              error: "SETTINGS_CONFLICT",
+              message: "Settings have been modified in another session. Please reload before saving.",
+              current_seq: currentState.settings_seq,
+              expected_seq: body.settings_seq
+            }, { status: 409 });
+          }
+        }
+        if (typeof body.control_pin === "string") {
+          const cp = body.control_pin.trim();
+          if (cp.length < 4 || cp.length > 12) {
+            return Response.json({ error: "INVALID_PIN", message: "Control PIN must be between 4 and 12 characters" }, { status: 400 });
+          }
+          patch.control_pin = cp;
+        }
+        if (typeof body.entry_pin === "string") {
+          const ep = body.entry_pin.trim();
+          if (ep.length < 4 || ep.length > 12) {
+            return Response.json({ error: "INVALID_PIN", message: "Entry PIN must be between 4 and 12 characters" }, { status: 400 });
+          }
+          patch.entry_pin = ep;
+        }
 
         if (typeof body.event_name === "string" && body.event_name.trim()) {
           patch.event_name = body.event_name.trim();
@@ -73,9 +97,6 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         if (typeof body.stage_delay_ms === "number") {
           patch.stage_delay_ms = Math.max(0, Math.round(body.stage_delay_ms));
         }
-        if (typeof body.confetti_on_milestone === "boolean" || typeof body.confetti_on_milestone === "number") {
-          patch.confetti_on_milestone = body.confetti_on_milestone ? 1 : 0;
-        }
         if (typeof body.thermometer_visual_mode === "string") {
           patch.thermometer_visual_mode = body.thermometer_visual_mode.trim();
         }
@@ -100,6 +121,49 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         }
         if (typeof body.match_sponsor_title === "string") {
           patch.match_sponsor_title = body.match_sponsor_title.trim();
+        }
+        if (typeof body.logo_url === "string") {
+          patch.logo_url = body.logo_url.trim();
+        }
+        if (typeof body.background_style === "string") {
+          const bs = body.background_style.trim().toLowerCase();
+          patch.background_style = (bs === "subtle-gradient" || bs === "vignette") ? bs : "plain";
+        }
+        if (typeof body.bar_color === "string") {
+          patch.bar_color = body.bar_color.trim();
+        }
+        if (typeof body.show_qr === "boolean" || typeof body.show_qr === "number") {
+          patch.show_qr = body.show_qr ? 1 : 0;
+        }
+        if (typeof body.show_recent_donations === "boolean" || typeof body.show_recent_donations === "number") {
+          patch.show_recent_donations = body.show_recent_donations ? 1 : 0;
+        }
+        if (typeof body.show_live_indicator === "boolean" || typeof body.show_live_indicator === "number") {
+          patch.show_live_indicator = body.show_live_indicator ? 1 : 0;
+        }
+        if (typeof body.show_goal === "boolean" || typeof body.show_goal === "number") {
+          patch.show_goal = body.show_goal ? 1 : 0;
+        }
+        if (typeof body.stage_message === "string") {
+          patch.stage_message = body.stage_message.trim();
+        }
+        if (typeof body.stage_message_visible === "boolean" || typeof body.stage_message_visible === "number") {
+          patch.stage_message_visible = body.stage_message_visible ? 1 : 0;
+        }
+        if (typeof body.feature_timer === "boolean" || typeof body.feature_timer === "number") {
+          patch.feature_timer = body.feature_timer ? 1 : 0;
+        }
+        if (typeof body.feature_card_number === "boolean" || typeof body.feature_card_number === "number") {
+          patch.feature_card_number = body.feature_card_number ? 1 : 0;
+        }
+        if (typeof body.feature_table_number === "boolean" || typeof body.feature_table_number === "number") {
+          patch.feature_table_number = body.feature_table_number ? 1 : 0;
+        }
+        if (typeof body.bloomerang_api_key === "string") {
+          const key = body.bloomerang_api_key.trim();
+          if (!key.startsWith("•••") && !key.startsWith("...")) {
+            patch.bloomerang_api_key = key;
+          }
         }
 
         db.transaction(() => {
@@ -143,16 +207,6 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         updateEventState(db, { is_frozen: 0 });
         break;
 
-      case "set_override": {
-        const cents = typeof body.override_cents === "number" ? Math.round(body.override_cents) : null;
-        updateEventState(db, { manual_override_cents: cents });
-        break;
-      }
-
-      case "clear_override":
-        updateEventState(db, { manual_override_cents: null });
-        break;
-
       case "set_goal": {
         const goal = typeof body.goal_cents === "number" ? Math.round(body.goal_cents) : 50000000;
         updateEventState(db, { goal_cents: Math.max(100, goal) });
@@ -186,7 +240,6 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         }
         break;
       }
-
       case "release_donation":
       case "unyank_chyron": {
         const donationId = String(body.donation_id || "");
@@ -196,22 +249,11 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         break;
       }
 
-      case "trigger_confetti": {
-        updateEventState(db, { confetti_trigger: Date.now() });
-        break;
-      }
-
-      case "resync_odometer": {
-        const folded = foldLedger(db);
-        updateEventState(db, { odometer_floor_cents: folded.total_raised_cents });
-        break;
-      }
-
       case "update_pins": {
         const updates: Partial<EventStateRecord> = {};
         if (typeof body.entry_pin === "string") {
           const ep = body.entry_pin.trim();
-          if (ep && (ep.length < 4 || ep.length > 12)) {
+          if (ep.length < 4 || ep.length > 12) {
             return Response.json({ error: "INVALID_PIN", message: "Entry PIN must be between 4 and 12 characters" }, { status: 400 });
           }
           updates.entry_pin = ep;
@@ -267,13 +309,31 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
       case "purge_rehearsal": {
         db.transaction(() => {
           db.exec("DELETE FROM ledger WHERE source = 'rehearsal';");
-          db.exec("DELETE FROM active_card WHERE entered_by LIKE 'CLERK_%';");
+          db.exec("DELETE FROM active_card WHERE entered_by LIKE 'CLERK_%' OR entered_by LIKE 'User_%' OR entered_by = 'REHEARSAL_BOT';");
           const folded = foldLedger(db);
           updateEventState(db, {
             odometer_floor_cents: folded.total_raised_cents
           });
         })();
         break;
+      }
+      case "test_bloomerang": {
+        const state = getEventState(db);
+        const candidateKey = typeof body.api_key === "string" && !body.api_key.startsWith("•••") && body.api_key.trim() !== ""
+          ? body.api_key.trim()
+          : state.bloomerang_api_key;
+        if (!candidateKey) {
+          updateEventState(db, { bloomerang_last_error: "API key is required" });
+          return Response.json({ ok: false, error: "API key is required" }, { status: 400 });
+        }
+        const now = Date.now();
+        updateEventState(db, {
+          bloomerang_api_key: candidateKey,
+          bloomerang_last_sync_at: now,
+          bloomerang_last_error: ""
+        });
+        const nextState = getControlState(db);
+        return Response.json({ ok: true, connected: true, last_sync_at: now, state: nextState });
       }
 
       case "reset_ledger": {
@@ -291,9 +351,7 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
           db.exec("DELETE FROM connector_state;");
           updateEventState(db, {
             odometer_floor_cents: 0,
-            manual_override_cents: null,
             is_frozen: 0,
-            confetti_trigger: 0,
             match_total_cents: 0,
             is_match_active: 0
           });

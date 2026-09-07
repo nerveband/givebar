@@ -58,7 +58,7 @@ Everything runs on a single self-contained process backed by embedded SQLite in 
 Non-technical event directors and gala chairs can customize the entire gala in real time from the **Event Setup** tab in the Control Room (`/control`):
 
 * **Event Identity**: Event title, subtitle, organization, and donation QR code destination link.
-* **Fundraising Goal**: Target goal amount, milestone celebration percentages (25%, 50%, 75%, 100%), and automatic confetti celebration triggers.
+* **Fundraising Goal**: Target goal amount and milestone celebration percentages (25%, 50%, 75%, 100%).
 * **Theme Palettes**: Live visual swatches (**Champagne Gold**, **Royal Sapphire**, **Forest Emerald**, **Ruby Red**, or Custom HEX) that update colors across all screens instantly.
 * **Ballroom QR Customizer**: Live selectable module styles (Modern Dots, Smooth Squircle, Classic Square) and center shield badges (Star, Heart, Gift, Sparkle, None).
 * **Volunteer Quick-Amounts**: Configurable ask-tier buttons ($10k, $5k, $2.5k, $1k, $500, or custom amounts).
@@ -100,7 +100,7 @@ Before doors open on gala night:
 2. **Hold Verification**: Click **"Inject Test Typo"** in `/control`, click the red **"Hold from Stage"** button within 8 seconds, and confirm the typo name and amount never appear on `/stage`.
 3. **Major Gift Guardrail**: Open `/entry`, enter `$50,000`, and confirm the high-contrast confirmation intercept modal appears before submission.
 4. **Duplicate Card Test**: Enter a pledge with card `#0101`; attempt to enter another with `#0101` and verify the inline warning prevents duplicate entry without wiping form data.
-5. **Stage Confetti**: Trigger confetti from `/control` and verify celebration particles burst across `/stage`.
+5. **Live Verification**: Verify stage odometer updates live and records appear in Recent Donations.
 6. **Finance Reconciliation**: Click **"Download Finance CSV"** and verify all events balance down to the exact cent.
 
 ---

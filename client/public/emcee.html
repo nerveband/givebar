@@ -2,138 +2,282 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Givebar — Podium Screen (Emcee View)</title>
-  <script src="js/icons.js?v=4.0.0"></script>
-  <link rel="stylesheet" href="css/app.css?v=4.0.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Presenter View — Givebar</title>
+  <link rel="stylesheet" href="css/app.css?v=5.0.0">
   <style>
+    /* =========================================================================
+       Presenter View (Direction B — b-presenter.png)
+       Mobile-first design for 375px through desktop.
+       ========================================================================= */
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      padding: var(--space-6) var(--space-5);
-      max-width: 1200px;
+      background: #08080a; /* Deep near-black OLED surface */
+      color: #f4f5f6;
+      font-family: var(--font-sans);
+      margin: 0;
+      padding: 0;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .presenter-shell {
+      max-width: 840px;
+      width: 100%;
       margin: 0 auto;
-      background: #040609; /* Deepest black for podium OLED screens */
+      padding: var(--space-4) var(--space-4) var(--space-6) var(--space-4);
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      justify-content: space-between;
     }
 
-    .emcee-total-display {
-      font-size: clamp(3.5rem, 8vw, 5.5rem);
-      font-weight: 900;
-      color: var(--brand-accent);
-      letter-spacing: -0.04em;
-      line-height: 1;
-      font-variant-numeric: tabular-nums;
-      margin: var(--space-2) 0 var(--space-4) 0;
-    }
-
-    .shoutout-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-left: 4px solid var(--brand-accent);
-      border-radius: var(--brand-radius);
-      padding: var(--space-4) var(--space-5);
-      margin-bottom: var(--space-3);
+    /* Minimal Top Bar */
+    .presenter-top-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      padding-bottom: var(--space-3);
+      border-bottom: 1px solid #1f2026;
+      margin-bottom: var(--space-4);
+    }
+
+    .presenter-title {
+      font-size: var(--text-sm);
+      font-weight: 700;
+      color: #88888e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .presenter-nav-link {
+      font-size: var(--text-xs);
+      color: #88888e;
+      text-decoration: none;
+      padding: 4px 8px;
+      border-radius: var(--brand-radius);
+      border: 1px solid #282932;
+      background: #141519;
+      transition: color 0.12s ease;
+    }
+
+    .presenter-nav-link:hover {
+      color: #d4a359;
+      border-color: #d4a359;
+    }
+
+    /* Primary Hero: Current Donor Name + Pronunciation + Amount */
+    .presenter-hero-card {
+      background: #101114;
+      border: 1px solid #26272e;
+      border-radius: var(--brand-radius);
+      padding: var(--space-6) var(--space-4);
+      text-align: center;
+      margin: auto 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 280px;
+    }
+
+    .presenter-donor-name {
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      font-weight: 800;
+      color: #f4f5f6;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin: 0 0 10px 0;
+      word-break: break-word;
+      max-width: 100%;
+    }
+
+    /* Name Pronunciation directly beneath at >= 20px, not italicized */
+    .presenter-pronunciation {
+      font-size: clamp(20px, 3.2vw, 26px);
+      font-weight: 500;
+      font-style: normal; /* Explicitly NOT italicized per contract */
+      color: #d4a359;
+      letter-spacing: 0.01em;
+      line-height: 1.3;
+      margin: 0 0 18px 0;
+      word-break: break-word;
+      max-width: 100%;
+    }
+
+    /* Amount as secondary */
+    .presenter-amount {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      color: #d4a359;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin: 0 0 10px 0;
+    }
+
+    .presenter-meta {
+      font-size: var(--text-xs);
+      color: #88888e;
+      margin-top: 4px;
+    }
+
+    /* Compact Recent Donations List */
+    .presenter-recent-section {
+      background: #101114;
+      border: 1px solid #26272e;
+      border-radius: var(--brand-radius);
+      padding: var(--space-4);
+      margin-top: var(--space-4);
+      margin-bottom: var(--space-4);
+    }
+
+    .presenter-recent-header {
+      font-size: var(--text-xs);
+      font-weight: 700;
+      color: #88888e;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: var(--space-2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .presenter-recent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .presenter-recent-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #1a1b20;
+      font-size: var(--text-sm);
       gap: var(--space-3);
+    }
+
+    .presenter-recent-row:last-child {
+      border-bottom: none;
+    }
+
+    .presenter-recent-name {
+      color: #f4f5f6;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .presenter-recent-amt {
+      color: #d4a359;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Secondary Footer: Milestone distance & Total Raised (Never dominant) */
+    .presenter-footer-metrics {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      background: #141519;
+      border: 1px solid #232429;
+      border-radius: var(--brand-radius);
+      font-size: var(--text-xs);
+      color: #88888e;
+    }
+
+    .metric-sub-val {
+      color: #f4f5f6;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-sub-val.gold {
+      color: #d4a359;
+    }
+
+    @media (max-width: 480px) {
+      .presenter-footer-metrics {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
     }
   </style>
 </head>
 <body>
 
-  <!-- Top Header & Live Pulse -->
-  <header style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-6);">
-    <div style="display: flex; align-items: center; gap: var(--space-3);">
-      <span class="pulse-dot"></span>
+  <div class="presenter-shell">
+
+    <!-- Minimal Header -->
+    <header class="presenter-top-bar">
+      <div class="presenter-title">
+        <span class="pulse-dot"></span>
+        <span>Presenter View</span>
+      </div>
+      <a href="/" class="presenter-nav-link">Home</a>
+    </header>
+
+    <!-- Primary Centerpiece: Current / Latest Donor -->
+    <main class="presenter-hero-card" id="presenter-hero">
+      <div id="presenter-donor-name" class="presenter-donor-name">
+        Awaiting First Gift...
+      </div>
+
+      <!-- Name Pronunciation directly beneath at >= 20px, not italicized -->
+      <div id="presenter-pronunciation" class="presenter-pronunciation" style="display: none;">
+      </div>
+
+      <!-- Amount as secondary -->
+      <div id="presenter-amount" class="presenter-amount" style="display: none;">
+        $0
+      </div>
+
+      <!-- Optional Table or Dedication Note -->
+      <div id="presenter-meta" class="presenter-meta" style="display: none;">
+      </div>
+    </main>
+
+    <!-- Compact Recent Donations List -->
+    <section class="presenter-recent-section" aria-label="Recent Donations">
+      <div class="presenter-recent-header">
+        <span>Recent Donations</span>
+        <span id="presenter-recent-count">0 gifts</span>
+      </div>
+      <div id="presenter-recent-list" class="presenter-recent-list">
+        <div style="color: #88888e; font-size: var(--text-xs); padding: 8px 0; text-align: center;">
+          Recent gifts will appear here live
+        </div>
+      </div>
+    </section>
+
+    <!-- Secondary Information at Bottom (Never dominant) -->
+    <footer class="presenter-footer-metrics">
       <div>
-        <h1 style="font-size: var(--text-lg); font-weight: 800; color: var(--ink-primary);">
-          Podium Confidence Monitor
-        </h1>
-        <div id="emcee-subtitle" style="font-size: var(--text-xs); color: var(--ink-muted);">
-          Annual Gala & Benefit Auction
-        </div>
+        Next Milestone: <span id="presenter-milestone-text" class="metric-sub-val gold">Awaiting goal</span>
       </div>
-    </div>
-
-    <div style="display: flex; align-items: center; gap: var(--space-3);">
-      <!-- Synchronized Appeal Clock Pill -->
-      <div id="emcee-clock-pill" class="badge badge-staged" style="display: none; font-size: var(--text-sm); padding: var(--space-2) var(--space-4); display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-mono); font-weight: 900;">
-        <svg class="icon" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg>
-        <span id="emcee-clock-text">05:00</span>
+      <div>
+        Total Raised: <span id="presenter-total-raised" class="metric-sub-val">$0</span>
+        (<span id="presenter-percent" class="metric-sub-val">0%</span> of <span id="presenter-goal" class="metric-sub-val">$500k</span>)
       </div>
-
-      <!-- Active Match Badge -->
-      <div id="emcee-match-badge" class="badge badge-live" style="display: none; font-size: var(--text-xs); padding: var(--space-2) var(--space-4); display: flex; align-items: center; gap: var(--space-2);">
-        <svg class="icon" viewBox="0 0 256 256"><path d="M208,128a80.09,80.09,0,0,1-80,80,80.09,80.09,0,0,1-80-80,80.09,80.09,0,0,1,80-80A80.09,80.09,0,0,1,208,128Z"/></svg>
-        MATCH ACTIVE: <span id="emcee-match-pool" class="tabular">$0</span> REMAINING
-      </div>
-    </div>
-  </header>
-
-  <!-- Big Total Centerpiece (3-Second Glance) -->
-  <main class="surface-card elevated accent-border" style="text-align: center; padding: var(--space-8) var(--space-6); margin-bottom: var(--space-6);">
-    <div style="font-size: var(--text-xs); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand-accent);">
-      Authoritative Gala Total Raised
-    </div>
-    
-    <div class="emcee-total-display" id="emcee-total-raised">$0</div>
-
-    <div style="font-size: var(--text-lg); font-weight: 700; color: var(--ink-secondary);">
-      <span id="emcee-percent" style="color: var(--ink-primary); font-weight: 900;" class="tabular">0%</span> of <span id="emcee-goal" style="color: var(--ink-primary); font-weight: 900;" class="tabular">$500,000</span> Goal
-      • <span id="emcee-active-count" style="color: var(--ink-primary);" class="tabular">0</span> Verified Gifts
-    </div>
-  </main>
-
-  <!-- Two-Column Callout Grid -->
-  <div class="grid-2">
-    
-    <!-- LEFT: Next Milestone & Top 5 Major Gifts for Shoutouts -->
-    <div style="display: flex; flex-direction: column; gap: var(--space-5);">
-      
-      <!-- Next Milestone Target Box -->
-      <div class="surface-card">
-        <div style="font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; color: var(--ink-muted); margin-bottom: var(--space-1);">
-          Next Milestone Target
-        </div>
-        <div style="font-size: var(--text-2xl); font-weight: 900; color: var(--color-success);" id="emcee-milestone-gap" class="tabular">
-          $0 to next goal
-        </div>
-        <div style="font-size: var(--text-sm); color: var(--ink-secondary); margin-top: var(--space-1);" id="emcee-milestone-name">
-          -
-        </div>
-      </div>
-
-      <!-- Top 5 Largest Gifts (Vocal Shoutouts) -->
-      <div class="surface-card">
-        <div style="font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-accent); margin-bottom: var(--space-4); display: flex; align-items: center; gap: var(--space-2);">
-          <svg class="icon" viewBox="0 0 256 256"><path d="M239.2,97.29a16,16,0,0,0-13.81-11L166,81.17,142.72,25.81a15.95,15.95,0,0,0-29.44,0L90.07,81.17,30.61,86.32a16,16,0,0,0-9.1,27.87l45.06,39.41L53.77,212.1a16,16,0,0,0,23.84,17.34L128,196.48l50.39,32.96A16,16,0,0,0,202.23,212.1L189.43,153.6l45.06-39.41A16,16,0,0,0,239.2,97.29Z"/></svg>
-          Top 5 Largest Gifts (For Vocal Shoutouts)
-        </div>
-        <div id="top-gifts-container">
-          <div style="color: var(--ink-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6);">
-            Awaiting first major gift...
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- RIGHT: Live Incoming Stream with Seconds-Ago Pacing -->
-    <div>
-      <div class="surface-card">
-        <div style="font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: var(--space-4); display: flex; align-items: center; gap: var(--space-2);">
-          <svg class="icon" viewBox="0 0 256 256"><path d="M215.79,118.17a8,8,0,0,0-7.79-6.17H144V32a8,8,0,0,0-13.66-5.66l-96,96a8,8,0,0,0,5.66,13.66H96v80a8,8,0,0,0,13.66,5.66l96-96A8,8,0,0,0,215.79,118.17Z"/></svg>
-          Live Incoming Stream
-        </div>
-        <div id="recent-gifts-container" style="max-height: 540px; overflow-y: auto;">
-          <div style="color: var(--ink-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6);">
-            Awaiting incoming gifts...
-          </div>
-        </div>
-      </div>
-    </div>
+    </footer>
 
   </div>
 
-  <script src="js/emcee.js?v=4.0.0"></script>
+  <script src="js/emcee.js?v=5.0.0"></script>
 </body>
 </html>

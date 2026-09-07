@@ -1,831 +1,619 @@
 /**
- * Givebar — Event Control Room Controller
- * 3-Tab Operational Layout, Live Settings Management, Countdown Appeal Timer, QR Customizer, Pin & Anonymity Tools
+ * Givebar — Manage Donations Controller
+ * Unified dataset, Table & Stream views, client sorting/filtering,
+ * keyed row updates, delete dialog with 30s undo affordance.
  */
 
 (function () {
-  const basePath = window.location.pathname.replace(/\/[^/]*$/, '');
-  const API_BASE = (basePath === '/' || basePath === '') ? '/api' : `${basePath}/api`;
+  'use strict';
 
-  let controlPin = sessionStorage.getItem('givebar_control_pin') || '9999';
-  let isFrozen = false;
-  let hasPopulatedInputs = false;
-  let activeModalCallback = null;
-  let selectedThemePreset = 'champagne';
-  let selectedThemeHue = 85;
-  let selectedQrStyle = 'dots';
-  let selectedQrBadge = 'star';
-  let latestEventState = null;
+  // State
+  let currentDonations = [];
+  let totalRaisedCents = 0;
+  let activeTab = 'table'; // 'table' | 'stream'
+  let searchQuery = '';
+  let sortColumn = 'time'; // 'donor' | 'amount' | 'time' | 'status'
+  let sortDirection = 'desc'; // 'asc' | 'desc'
+  let pollInterval = null;
+  let sseSource = null;
+
+  // Pending deletion & Undo state
+  let pendingDeleteDonation = null;
+  let lastDeletedDonation = null;
+  let undoTimer = null;
+  let undoExpiresAt = 0;
+
+  // DOM Elements
+  const summaryTotalRaisedEl = document.getElementById('summary-total-raised');
+  const tabTableBtn = document.getElementById('tab-table');
+  const tabStreamBtn = document.getElementById('tab-stream');
+  const panelTable = document.getElementById('panel-table');
+  const panelStream = document.getElementById('panel-stream');
+  const searchInput = document.getElementById('manage-search');
+  const tbodyEl = document.getElementById('manage-tbody');
+  const streamEl = document.getElementById('manage-stream');
+  const emptyStateEl = document.getElementById('empty-state');
+  const emptyStateTitleEl = document.getElementById('empty-state-title');
+  const emptyStateTextEl = document.getElementById('empty-state-text');
+  const emptyStateBtn = document.getElementById('empty-state-btn');
+
+  // Modal Dialog Elements
+  const deleteModal = document.getElementById('delete-modal');
+  const deleteTitle = document.getElementById('delete-dialog-title');
+  const deleteBody = document.getElementById('delete-dialog-body');
+  const btnCancelDelete = document.getElementById('btn-cancel-delete');
+  const btnConfirmDelete = document.getElementById('btn-confirm-delete');
+
+  // Undo Banner Elements
+  const undoBanner = document.getElementById('undo-banner');
+  const undoMessage = document.getElementById('undo-message');
+  const btnUndoDelete = document.getElementById('btn-undo-delete');
 
   function init() {
-    setupTabs();
-    setupSwatches();
-    setupQrCustomizer();
-    setupTimerControls();
-    setupTransportActions();
-    setupModalListeners();
-    setupDelegatedQueueListeners();
-    setupModalListeners();
-
-    startPolling();
+    setupTabListeners();
+    setupSearchListener();
+    setupSortHeaders();
+    setupDeleteModal();
+    setupUndoAction();
+    startDataSync();
   }
 
-  // --- API Helper ---
-  async function postControl(payload) {
+  // --- Realtime / Sync ---
+  function startDataSync() {
+    fetchState();
+    pollInterval = setInterval(fetchState, 1500);
+    initSSE();
+  }
+
+  function initSSE() {
     try {
-      const res = await fetch(`${API_BASE}/control`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Control-Pin': controlPin
-        },
-        body: JSON.stringify({ ...payload, pin: controlPin })
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: 'Action failed' }));
-        showNotification(err.message || 'Action failed', true);
-        return null;
-      }
-      return await res.json();
-    } catch {
-      showNotification('Network error communicating with Givebar server.', true);
-      return null;
-    }
-  }
-
-  function showNotification(msg, isError = false) {
-    const banner = document.getElementById('drift-banner');
-    const desc = document.getElementById('drift-desc');
-    if (banner && desc && isError) {
-      desc.textContent = msg;
-      banner.style.display = 'block';
-    }
-  }
-
-  // --- Tab Navigation ---
-  function setupTabs() {
-    const tabBtns = document.querySelectorAll('.tab-bar .tab-btn');
-    tabBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        tabBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        const tabKey = btn.getAttribute('data-tab');
-        document.getElementById('tab-pane-queue').style.display = tabKey === 'queue' ? 'block' : 'none';
-        document.getElementById('tab-pane-donations').style.display = tabKey === 'donations' ? 'block' : 'none';
-        document.getElementById('tab-pane-setup').style.display = tabKey === 'setup' ? 'block' : 'none';
-      });
-    });
-  }
-
-  // --- Theme Swatches ---
-  function setupSwatches() {
-    const swatches = document.querySelectorAll('.theme-swatch');
-    swatches.forEach(swatch => {
-      swatch.addEventListener('click', () => {
-        swatches.forEach(s => s.classList.remove('active'));
-        swatch.classList.add('active');
-
-        selectedThemePreset = swatch.getAttribute('data-preset') || 'champagne';
-        selectedThemeHue = parseFloat(swatch.getAttribute('data-hue') || '85');
-
-        // Apply locally to preview immediately
-        document.documentElement.style.setProperty('--brand-hue', selectedThemeHue);
-      });
-    });
-  }
-
-  // --- QR Customizer & Live Preview ---
-  function setupQrCustomizer() {
-    const urlInput = document.getElementById('input-set-qr-url');
-
-    function updateQrPreview() {
-      const previewImg = document.getElementById('qr-customizer-preview');
-      if (!previewImg) return;
-      const url = (urlInput ? urlInput.value : '').trim() || 'https://give.hope.org/donate';
-      previewImg.src = `${API_BASE}/qr?url=${encodeURIComponent(url)}&v=4.2.0`;
-    }
-
-    if (urlInput) {
-      urlInput.addEventListener('input', () => {
-        updateQrPreview();
-      });
-    }
-  }
-
-  // --- Countdown Appeal Timer Controls ---
-  function setupTimerControls() {
-    const toggleBtn = document.getElementById('btn-timer-toggle');
-    const resetBtn = document.getElementById('btn-timer-reset');
-    const addBtns = document.querySelectorAll('[data-timer-add]');
-
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', async () => {
-        const isRunning = latestEventState && latestEventState.timer_status === 'running';
-        if (isRunning) {
-          await postControl({ action: 'pause_timer' });
-        } else {
-          await postControl({ action: 'start_timer' });
-        }
-        pollState();
-      });
-    }
-
-    if (resetBtn) {
-      resetBtn.addEventListener('click', async () => {
-        await postControl({ action: 'reset_timer', seconds: 300 });
-        pollState();
-      });
-    }
-
-    addBtns.forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const addSec = parseInt(btn.getAttribute('data-timer-add') || '60', 10);
-        await postControl({ action: 'add_timer_time', seconds: addSec });
-        pollState();
-      });
-    });
-  }
-
-  function renderCountdownClock(state, serverTime) {
-    if (!state) return;
-    const timerDisplay = document.getElementById('ctrl-timer-display');
-    const timerBadge = document.getElementById('ctrl-timer-badge');
-    const toggleBtn = document.getElementById('btn-timer-toggle');
-
-    const serverOffset = serverTime ? serverTime - Date.now() : 0;
-    const currentSyncedNow = Date.now() + serverOffset;
-
-    let remainingSeconds = state.countdown_seconds || 300;
-    if (state.timer_status === 'running' && state.timer_ends_at) {
-      remainingSeconds = Math.max(0, Math.ceil((state.timer_ends_at - currentSyncedNow) / 1000));
-    }
-    const mins = Math.floor(remainingSeconds / 60);
-    const secs = remainingSeconds % 60;
-    const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-
-    if (timerDisplay) {
-      timerDisplay.textContent = formatted;
-      if (remainingSeconds <= 10 && state.timer_status === 'running') {
-        timerDisplay.style.color = 'var(--color-danger)';
-      } else if (remainingSeconds <= 60 && state.timer_status === 'running') {
-        timerDisplay.style.color = 'var(--color-warning)';
-      } else {
-        timerDisplay.style.color = 'var(--ink-primary)';
-      }
-    }
-
-    if (timerBadge) {
-      if (state.timer_status === 'running') {
-        timerBadge.className = 'badge badge-live';
-        timerBadge.textContent = 'RUNNING';
-      } else if (state.timer_status === 'paused') {
-        timerBadge.className = 'badge badge-staged';
-        timerBadge.textContent = 'PAUSED';
-      } else {
-        timerBadge.className = 'badge badge-held';
-        timerBadge.textContent = 'STOPPED';
-      }
-    }
-
-    if (toggleBtn) {
-      if (state.timer_status === 'running') {
-        toggleBtn.innerHTML = `
-          <svg class="icon" viewBox="0 0 256 256"><path d="M208,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h32A16,16,0,0,1,208,48ZM96,32H64A16,16,0,0,0,48,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z"/></svg>
-          Pause Clock
-        `;
-        toggleBtn.className = 'btn-secondary';
-      } else {
-        toggleBtn.innerHTML = `
-          <svg class="icon" viewBox="0 0 256 256"><path d="M232.4,114.49,88.32,26.35A16,16,0,0,0,64,40.2V215.8a16,16,0,0,0,24.32,13.85L232.4,141.51A16,16,0,0,0,232.4,114.49ZM80,215.8V40.2L224,128Z"/></svg>
-          Start Clock
-        `;
-        toggleBtn.className = 'btn-primary';
-      }
-    }
-  }
-
-  // --- Modal Engine (Accessible, Non-Blocking, Phosphor Icons) ---
-  function showModal({ iconHtml = '', title, desc, hasInput = false, inputPlaceholder = '', confirmText = 'Confirm', isDanger = false, onConfirm }) {
-    const modal = document.getElementById('cockpit-modal');
-    const iconEl = document.getElementById('cockpit-modal-icon');
-    const titleEl = document.getElementById('cockpit-modal-title');
-    const descEl = document.getElementById('cockpit-modal-desc');
-    const inputWrap = document.getElementById('cockpit-modal-input-wrap');
-    const inputEl = document.getElementById('cockpit-modal-input');
-    const confirmBtn = document.getElementById('btn-cockpit-confirm');
-
-    if (!modal) return;
-
-    if (iconEl && iconHtml) iconEl.innerHTML = iconHtml;
-    if (titleEl) titleEl.textContent = title;
-    if (descEl) descEl.textContent = desc;
-
-    if (hasInput && inputWrap && inputEl) {
-      inputWrap.style.display = 'block';
-      inputEl.value = '';
-      inputEl.placeholder = inputPlaceholder;
-      setTimeout(() => inputEl.focus(), 50);
-    } else if (inputWrap) {
-      inputWrap.style.display = 'none';
-    }
-
-    if (confirmBtn) {
-      confirmBtn.textContent = confirmText;
-      confirmBtn.className = isDanger ? 'btn-danger' : 'btn-primary';
-    }
-
-    activeModalCallback = onConfirm;
-    modal.style.display = 'flex';
-  }
-
-  function hideModal() {
-    const modal = document.getElementById('cockpit-modal');
-    if (modal) modal.style.display = 'none';
-    activeModalCallback = null;
-  }
-
-  function setupModalListeners() {
-    const confirmBtn = document.getElementById('btn-cockpit-confirm');
-    const cancelBtn = document.getElementById('btn-cockpit-cancel');
-    const inputEl = document.getElementById('cockpit-modal-input');
-
-    if (confirmBtn) {
-      confirmBtn.addEventListener('click', () => {
-        const val = inputEl ? inputEl.value : '';
-        if (activeModalCallback) activeModalCallback(val);
-        hideModal();
-      });
-    }
-
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', hideModal);
-    }
-
-    if (inputEl) {
-      inputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          if (confirmBtn) confirmBtn.click();
-        } else if (e.key === 'Escape') {
-          hideModal();
-        }
-      });
-    }
-  }
-
-  // --- Transport Actions ---
-  function setupTransportActions() {
-    const freezeBtn = document.getElementById('btn-toggle-freeze');
-    const confettiBtn = document.getElementById('btn-fire-confetti');
-    const resyncOdometerBtn = document.getElementById('btn-resync-odometer');
-    const overrideBtn = document.getElementById('btn-set-override');
-    const reconcileBtn = document.getElementById('btn-reconcile-resync');
-    const wipeBtn = document.getElementById('btn-wipe-ledger');
-
-    if (freezeBtn) {
-      freezeBtn.addEventListener('click', async () => {
-        const action = isFrozen ? 'unfreeze' : 'freeze';
-        await postControl({ action });
-        pollState();
-      });
-    }
-
-    if (confettiBtn) {
-      confettiBtn.addEventListener('click', async () => {
-        await postControl({ action: 'trigger_confetti' });
-        confettiBtn.textContent = 'Confetti Fired!';
-        setTimeout(() => {
-          confettiBtn.innerHTML = `
-            <svg class="icon" viewBox="0 0 256 256"><path d="M216.49,104.49l-64,64a8,8,0,0,1-11.32,0L98.34,125.66a8,8,0,0,1,0-11.32l64-64a8,8,0,0,1,11.32,0l42.83,42.83A8,8,0,0,1,216.49,104.49ZM88,56A8,8,0,0,0,80,48H32a8,8,0,0,0,0,16H80A8,8,0,0,0,88,56Zm136,136H176a8,8,0,0,0,0,16h48a8,8,0,0,0,0-16ZM56,96a8,8,0,0,0-8-8,8,8,0,0,0-8,8v48a8,8,0,0,0,16,0ZM192,208a8,8,0,0,0-8,8v16a8,8,0,0,0,16,0V216A8,8,0,0,0,192,208Z"/></svg>
-            Launch Stage Confetti
-          `;
-        }, 1500);
-      });
-    }
-
-    if (resyncOdometerBtn) {
-      resyncOdometerBtn.addEventListener('click', () => {
-        showModal({
-          iconHtml: '<svg class="icon" viewBox="0 0 256 256"><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h30.82l-24.35-24.35A88,88,0,1,0,216,128a8,8,0,0,1,16,0,104,104,0,1,1-35.08-78.53L224,76.69V48a8,8,0,0,1,16,0Z"/></svg>',
-          title: 'Resync Ballroom Screen Total',
-          desc: 'This resets the stage odometer floor directly to match the verified total raised in the ledger.',
-          confirmText: 'Yes, Resync Screen Total',
-          onConfirm: async () => {
-            await postControl({ action: 'resync_odometer' });
-            pollState();
+      if (window.EventSource) {
+        sseSource = new EventSource('/api/state/stream?role=control');
+        sseSource.onmessage = function (event) {
+          try {
+            const data = JSON.parse(event.data);
+            handleStateUpdate(data);
+          } catch (e) {
+            // Fallback to polling
           }
-        });
-      });
-    }
-
-    if (reconcileBtn) {
-      reconcileBtn.addEventListener('click', async () => {
-        showModal({
-          iconHtml: '<svg class="icon" viewBox="0 0 256 256"><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h30.82l-24.35-24.35A88,88,0,1,0,216,128a8,8,0,0,1,16,0,104,104,0,1,1-35.08-78.53L224,76.69V48a8,8,0,0,1,16,0Z"/></svg>',
-          title: 'Resolve Ballroom Drift?',
-          desc: 'This aligns the ballroom screen total directly with the verified ledger total.',
-          confirmText: 'Align Screen with Ledger',
-          onConfirm: async () => {
-            await postControl({ action: 'resync_odometer' });
-            pollState();
+        };
+        sseSource.onerror = function () {
+          if (sseSource) {
+            sseSource.close();
+            sseSource = null;
           }
-        });
-      });
-    }
-
-    if (overrideBtn) {
-      overrideBtn.addEventListener('click', () => {
-        showModal({
-          iconHtml: '<svg class="icon" viewBox="0 0 256 256"><path d="M227.32,73.37,182.63,28.69a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.32,96A16,16,0,0,0,227.32,73.37ZM48,163.31l88-88L180.69,120l-88,88H48ZM216,84.69,192,108.69,147.31,64,171.31,40Z"/></svg>',
-          title: 'Adjust Ballroom Screen Total',
-          desc: 'Enter an override dollar amount for the stage display (leave blank to clear override):',
-          hasInput: true,
-          inputPlaceholder: 'e.g. 500000 (or leave blank to clear)',
-          confirmText: 'Set Screen Total',
-          onConfirm: async (val) => {
-            const trimmed = val ? val.trim().replace(/[^0-9.]/g, '') : '';
-            if (trimmed) {
-              const cents = Math.round(parseFloat(trimmed) * 100);
-              await postControl({ action: 'set_override', override_cents: cents });
-            } else {
-              await postControl({ action: 'clear_override' });
-            }
-            pollState();
-          }
-        });
-      });
-    }
-
-    if (wipeBtn) {
-      wipeBtn.addEventListener('click', () => {
-        showModal({
-          iconHtml: '<svg class="icon" viewBox="0 0 256 256"><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM120,104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm8,88a12,12,0,1,1,12-12A12,12,0,0,1,128,192Z"/></svg>',
-          title: 'Reset All Event Data?',
-          desc: 'Type WIPE to permanently delete all test pledges and reset the ledger for a fresh gala night:',
-          hasInput: true,
-          inputPlaceholder: 'Type WIPE to confirm',
-          confirmText: 'Permanently Wipe Data',
-          isDanger: true,
-          onConfirm: async (val) => {
-            if (val === 'WIPE') {
-              await postControl({ action: 'reset_ledger', confirm_wipe: true });
-              pollState();
-            } else {
-              alert('Reset cancelled. You must type WIPE exactly.');
-            }
-          }
-        });
-      });
-    }
-  }
-
-  // --- Tech Rehearsal Actions ---
-  function setupRehearsalActions() {
-    const simBtns = document.querySelectorAll('[data-sim]');
-    simBtns.forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const mode = btn.getAttribute('data-sim');
-        try {
-          await fetch(`${API_BASE}/rehearsal`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode })
-          });
-          pollState();
-        } catch {
-          // Ignore
-        }
-      });
-    });
-  }
-
-  // --- Settings Form Submission ---
-  function setupSettingsForm() {
-    const saveBtn = document.getElementById('btn-save-all-settings');
-    if (!saveBtn) return;
-
-    saveBtn.addEventListener('click', async () => {
-      const titleInput = document.getElementById('input-set-title');
-      const subtitleInput = document.getElementById('input-set-subtitle');
-      const trustBadgeInput = document.getElementById('input-set-trust-badge');
-      const visualModeSelect = document.getElementById('input-set-visual-mode');
-      const mediaUrlInput = document.getElementById('input-set-media-url');
-      const goalInput = document.getElementById('input-set-goal');
-      const matchActiveInput = document.getElementById('input-set-match-active');
-      const matchPoolInput = document.getElementById('input-set-match-pool');
-      const matchRatioInput = document.getElementById('input-set-match-ratio');
-      const matchSponsorInput = document.getElementById('input-set-match-sponsor');
-      const qrUrlInput = document.getElementById('input-set-qr-url');
-      const delayInput = document.getElementById('input-set-delay-sec');
-      const thresholdInput = document.getElementById('input-set-major-threshold');
-      const controlPinInput = document.getElementById('input-set-control-pin');
-      const entryPinInput = document.getElementById('input-set-entry-pin');
-      const payload = {
-        action: 'update_settings',
-        event_name: titleInput ? titleInput.value.trim() : 'Annual Gala & Benefit Auction',
-        event_subtitle: subtitleInput ? subtitleInput.value.trim() : 'Supporting Community Programs & Education',
-        trust_badge_text: trustBadgeInput ? trustBadgeInput.value.trim() : '501(c)(3) Tax-Deductible Contribution',
-        thermometer_visual_mode: visualModeSelect ? visualModeSelect.value : 'classic',
-        embed_media_url: mediaUrlInput ? mediaUrlInput.value.trim() : '',
-        goal_cents: goalInput ? Math.round(parseFloat(goalInput.value || '500000') * 100) : 50000000,
-        theme_preset: selectedThemePreset,
-        brand_hue: selectedThemeHue,
-        qr_donate_url: qrUrlInput ? qrUrlInput.value.trim() : 'https://give.hope.org/donate',
-        is_match_active: matchActiveInput ? matchActiveInput.checked : false,
-        match_total_cents: matchPoolInput ? Math.round(parseFloat(matchPoolInput.value || '0') * 100) : 0,
-        match_ratio: matchRatioInput ? parseFloat(matchRatioInput.value || '1.0') : 1.0,
-        match_sponsor_title: matchSponsorInput ? matchSponsorInput.value.trim() : 'Board of Directors Matching Grant',
-        stage_delay_ms: delayInput ? Math.max(0, parseInt(delayInput.value || '8', 10) * 1000) : 8000,
-        major_gift_threshold_cents: thresholdInput ? Math.max(100, parseInt(thresholdInput.value || '9500', 10) * 100) : 950000
-      };
-
-      if (controlPinInput && controlPinInput.value.trim()) {
-        controlPin = controlPinInput.value.trim();
-        sessionStorage.setItem('givebar_control_pin', controlPin);
+        };
       }
-
-      saveBtn.textContent = 'Saving Settings...';
-      const res = await postControl(payload);
-      if (res && res.ok) {
-        saveBtn.innerHTML = `
-          <svg class="icon" viewBox="0 0 256 256"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg>
-          Settings Saved!
-        `;
-        saveBtn.style.background = 'var(--color-success)';
-        setTimeout(() => {
-          saveBtn.innerHTML = `
-            <svg class="icon" viewBox="0 0 256 256"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg>
-            Save Event Settings
-          `;
-          saveBtn.style.background = '';
-        }, 2000);
-        pollState();
-      } else {
-        saveBtn.textContent = 'Save Event Settings';
-      }
-    });
+    } catch (e) {
+      // EventSource unavailable or failed
+    }
   }
 
-  // --- State Polling & UI Rendering ---
-  async function pollState() {
+  async function fetchState() {
     try {
-      const res = await fetch(`${API_BASE}/state?role=control&pin=${encodeURIComponent(controlPin)}`, {
-        headers: { 'X-Control-Pin': controlPin }
+      const res = await fetch('/api/state?role=control', {
+        headers: { 'Cache-Control': 'no-cache' }
       });
       if (!res.ok) return;
       const data = await res.json();
-
-      latestEventState = data.event_state;
-
-      // 1. Update Title Header
-      const headerTitle = document.getElementById('event-name-sub');
-      if (headerTitle && data.event_state?.event_name) {
-        headerTitle.textContent = `${data.event_state.event_name} • ${data.event_state.event_subtitle || ''}`;
-      }
-
-      // 2. Metrics & Drift Banner
-      // 3. Countdown Clock (Synchronized with server time)
-      renderCountdownClock(data.event_state, data.server_time);
-
-      // 4. Staging Queue (Tab 1)
-      if (Array.isArray(data.staged_chyrons)) {
-        renderQueue(data.staged_chyrons, data.event_state?.pinned_donation_id);
-      }
-
-      // 5. Verified Ledger Audit Log (Tab 2)
-      if (Array.isArray(data.recent_events)) {
-        renderAuditLog(data.recent_events);
-      }
-      // 1. Update Title Header & Export Link
-      const csvLink = document.getElementById('link-export-csv');
-      if (csvLink) {
-        csvLink.href = `${API_BASE}/export/csv?pin=${encodeURIComponent(controlPin)}`;
-      }
-
-      if (!hasPopulatedInputs && data.event_state) {
-        populateSettingsInputs(data.event_state);
-        hasPopulatedInputs = true;
-      }
-    } catch {
-      // Network hiccup, retry next tick
+      handleStateUpdate(data);
+    } catch (err) {
+      console.warn('[Givebar] Failed to fetch state:', err);
     }
   }
 
-  function renderMetrics(data) {
-    const totalRaisedEl = document.getElementById('ctrl-total-raised');
-    const directRaisedEl = document.getElementById('ctrl-direct-raised');
-    const matchAppliedEl = document.getElementById('ctrl-match-applied');
-    const goalProgressEl = document.getElementById('ctrl-goal-progress');
-    const activeCountEl = document.getElementById('ctrl-active-count');
-    const matchStatusEl = document.getElementById('ctrl-match-status');
-    const displayStatusEl = document.getElementById('ctrl-display-status');
-    const freezeBtn = document.getElementById('btn-toggle-freeze');
-    const driftBanner = document.getElementById('drift-banner');
-    const driftDesc = document.getElementById('drift-desc');
+  function handleStateUpdate(data) {
+    if (!data) return;
 
-    const totalCents = data.folded?.total_raised_cents || 0;
-    const directCents = data.folded?.direct_raised_cents || 0;
-    const matchCents = data.folded?.match_applied_cents || 0;
-    const goalCents = data.event_state?.goal_cents || 50000000;
-
-    if (totalRaisedEl) totalRaisedEl.textContent = `$${Math.floor(totalCents / 100).toLocaleString('en-US')}`;
-    if (directRaisedEl) directRaisedEl.textContent = `$${Math.floor(directCents / 100).toLocaleString('en-US')}`;
-    if (matchAppliedEl) matchAppliedEl.textContent = `$${Math.floor(matchCents / 100).toLocaleString('en-US')}`;
-
-    const percent = goalCents > 0 ? Math.min(100, Math.round((totalCents / goalCents) * 100)) : 0;
-    if (goalProgressEl) goalProgressEl.textContent = `${percent}% of $${Math.floor(goalCents / 100).toLocaleString('en-US')} goal`;
-
-    if (activeCountEl) activeCountEl.textContent = `${data.folded?.active_donation_count || 0} verified gifts`;
-
-    if (matchStatusEl) {
-      matchStatusEl.textContent = data.event_state?.is_match_active ? 'Match Active (Doubling)' : 'Match Inactive';
-      matchStatusEl.style.color = data.event_state?.is_match_active ? 'var(--color-success)' : 'var(--ink-muted)';
+    // Total Raised
+    totalRaisedCents = data.folded?.total_raised_cents || 0;
+    if (summaryTotalRaisedEl) {
+      summaryTotalRaisedEl.textContent = formatCurrency(totalRaisedCents);
     }
 
-    isFrozen = Boolean(data.event_state?.is_frozen);
-    if (displayStatusEl) {
-      displayStatusEl.innerHTML = isFrozen
-        ? '<span style="color: var(--color-danger);"><svg class="icon" viewBox="0 0 256 256"><path d="M208,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h32A16,16,0,0,1,208,48ZM96,32H64A16,16,0,0,0,48,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z"/></svg> PAUSED</span>'
-        : '<span style="color: var(--color-success);"><span class="pulse-dot"></span> LIVE ON-AIR</span>';
-    }
-    if (freezeBtn) {
-      freezeBtn.innerHTML = isFrozen
-        ? '<svg class="icon" viewBox="0 0 256 256"><path d="M232.4,114.49,88.32,26.35A16,16,0,0,0,64,40.2V215.8a16,16,0,0,0,24.32,13.85L232.4,141.51A16,16,0,0,0,232.4,114.49ZM80,215.8V40.2L224,128Z"/></svg> Resume Stage Screen'
-        : '<svg class="icon" viewBox="0 0 256 256"><path d="M208,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h32A16,16,0,0,1,208,48ZM96,32H64A16,16,0,0,0,48,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z"/></svg> Pause Ballroom Screen';
-      freezeBtn.className = isFrozen ? 'btn-primary' : 'btn-secondary';
-    }
+    // Process donations list
+    const chyrons = data.staged_chyrons || [];
+    currentDonations = chyrons.map(item => {
+      const isPending = !item.is_live_on_stage || item.is_held;
+      const status = item.is_voided ? 'removed' : (isPending ? 'pending' : 'confirmed');
+      return {
+        id: item.donation_id,
+        donor: item.donor_name || 'Anonymous',
+        displayName: item.display_name || item.donor_name || 'Anonymous',
+        isAnonymous: Boolean(item.is_anonymous),
+        amountCents: item.amount_cents || 0,
+        createdAt: item.created_at || Date.now(),
+        status,
+        isHeld: Boolean(item.is_held),
+        enteredBy: item.entered_by || 'User'
+      };
+    });
 
-    // Drift banner check
-    if (data.stage_preview && data.stage_preview.is_drifted) {
-      const stageDollars = Math.floor(data.stage_preview.stage_total_cents / 100).toLocaleString('en-US');
-      const verifiedDollars = Math.floor(data.stage_preview.verified_total_cents / 100).toLocaleString('en-US');
-      if (driftDesc) {
-        driftDesc.textContent = `Ballroom screen displays $${stageDollars} while true verified ledger total is $${verifiedDollars}.`;
-      }
-      if (driftBanner) driftBanner.style.display = 'block';
-    } else if (driftBanner) {
-      driftBanner.style.display = 'none';
-    }
+    renderCurrentView();
   }
 
-  function renderQueue(chyrons, pinnedDonationId) {
-    const container = document.getElementById('chyron-queue-container');
-    if (!container) return;
+  // --- Filtering & Sorting ---
+  function getFilteredAndSorted() {
+    const q = searchQuery.trim().toLowerCase();
+    let list = currentDonations.filter(d => {
+      if (!q) return true;
+      const donorMatch = d.donor.toLowerCase().includes(q);
+      const displayMatch = d.displayName.toLowerCase().includes(q);
+      return donorMatch || displayMatch;
+    });
 
-    if (chyrons.length === 0) {
-      container.innerHTML = `
-        <div style="text-align: center; color: var(--ink-muted); padding: var(--space-10);">
-          No recent pledge transactions in buffer.
-        </div>
-      `;
+    list.sort((a, b) => {
+      let comparison = 0;
+      if (sortColumn === 'donor') {
+        comparison = a.donor.localeCompare(b.donor);
+      } else if (sortColumn === 'amount') {
+        comparison = a.amountCents - b.amountCents;
+      } else if (sortColumn === 'time') {
+        comparison = a.createdAt - b.createdAt;
+      } else if (sortColumn === 'status') {
+        comparison = a.status.localeCompare(b.status);
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return list;
+  }
+
+  // --- Render Views ---
+  function renderCurrentView() {
+    const list = getFilteredAndSorted();
+
+    // Check empty states
+    if (currentDonations.length === 0) {
+      if (panelTable) panelTable.style.display = 'none';
+      if (panelStream) panelStream.style.display = 'none';
+      if (emptyStateEl) {
+        emptyStateEl.style.display = 'block';
+        emptyStateTitleEl.textContent = 'No donations yet';
+        emptyStateTextEl.textContent = 'Pledges and donations entered from Add Donation or online links will appear here live.';
+        if (emptyStateBtn) {
+          emptyStateBtn.style.display = 'inline-flex';
+          emptyStateBtn.textContent = 'Add First Donation';
+          emptyStateBtn.onclick = () => { window.location.href = '/add'; };
+        }
+      }
       return;
     }
 
-    let html = '';
-    chyrons.forEach(item => {
-      const dollars = Math.floor(item.amount_cents / 100).toLocaleString('en-US');
-      const isStaged = !item.is_live_on_stage && !item.is_held;
-      const isPinned = item.donation_id === pinnedDonationId;
-      
-      let rowClass = 'queue-row live';
-      if (item.is_held) rowClass = 'queue-row held';
-      else if (isStaged) rowClass = 'queue-row staged';
-      if (isPinned) rowClass += ' pinned';
+    if (list.length === 0) {
+      if (panelTable) panelTable.style.display = 'none';
+      if (panelStream) panelStream.style.display = 'none';
+      if (emptyStateEl) {
+        emptyStateEl.style.display = 'block';
+        emptyStateTitleEl.textContent = 'No donations match your search';
+        emptyStateTextEl.textContent = `No donations matching "${searchQuery}".`;
+        if (emptyStateBtn) {
+          emptyStateBtn.style.display = 'inline-flex';
+          emptyStateBtn.textContent = 'Clear Search';
+          emptyStateBtn.onclick = () => {
+            if (searchInput) searchInput.value = '';
+            searchQuery = '';
+            renderCurrentView();
+          };
+        }
+      }
+      return;
+    }
 
-      let statusBadge = '';
-      let actionBtn = '';
+    // Hide empty state
+    if (emptyStateEl) emptyStateEl.style.display = 'none';
 
-      if (item.is_held) {
-        statusBadge = `<span class="badge badge-held"><svg class="icon" viewBox="0 0 256 256"><path d="M208,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h32A16,16,0,0,1,208,48ZM96,32H64A16,16,0,0,0,48,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z"/></svg> HELD</span>`;
-        actionBtn = `<button type="button" class="btn-secondary" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="release" data-id="${escapeHTML(item.donation_id)}">Release</button>`;
-      } else if (isStaged) {
-        statusBadge = `<span class="badge badge-staged"><svg class="icon" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg> REVIEW (${item.remaining_delay_sec}s)</span>`;
-        actionBtn = `<button type="button" class="btn-danger" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="hold" data-id="${escapeHTML(item.donation_id)}">Hold</button>`;
+    if (activeTab === 'table') {
+      if (panelTable) panelTable.style.display = 'block';
+      if (panelStream) panelStream.style.display = 'none';
+      renderKeyedTable(list);
+    } else {
+      if (panelTable) panelTable.style.display = 'none';
+      if (panelStream) panelStream.style.display = 'block';
+      renderKeyedStream(list);
+    }
+  }
+
+  // --- Keyed Table Update (Preserves Focus & Selection) ---
+  function renderKeyedTable(list) {
+    if (!tbodyEl) return;
+
+    const existingRows = new Map();
+    Array.from(tbodyEl.children).forEach(tr => {
+      const id = tr.getAttribute('data-donation-id');
+      if (id) existingRows.set(id, tr);
+    });
+
+    const activeIds = new Set(list.map(d => d.id));
+
+    // Remove obsolete rows
+    existingRows.forEach((tr, id) => {
+      if (!activeIds.has(id)) {
+        tr.remove();
+      }
+    });
+
+    // Insert or update in order
+    let previousNode = null;
+    list.forEach(item => {
+      let tr = existingRows.get(item.id);
+      const isNew = !tr;
+
+      if (isNew) {
+        tr = document.createElement('tr');
+        tr.setAttribute('data-donation-id', item.id);
+      }
+
+      const relativeTime = formatRelativeTime(item.createdAt);
+      const formattedAmount = formatCurrency(item.amountCents);
+      const statusHtml = getStatusBadgeHtml(item.status);
+
+      // Only update contents if changed
+      const innerHtml = `
+        <td style="font-weight: 600; color: #f4f5f6;">${escapeHTML(item.donor)}</td>
+        <td class="text-right amount-cell" style="color: #f4f5f6;">${formattedAmount}</td>
+        <td class="text-center time-cell">${relativeTime}</td>
+        <td class="text-center">${statusHtml}</td>
+        <td class="text-right">
+          <button type="button" class="btn-delete-row" data-action="delete" data-id="${escapeHTML(item.id)}" data-donor="${escapeHTML(item.donor)}" data-amount="${item.amountCents}" aria-label="Delete donation" title="Delete donation">
+            &#x2715;
+          </button>
+        </td>
+      `;
+
+      if (tr.innerHTML !== innerHtml) {
+        tr.innerHTML = innerHtml;
+        const deleteBtn = tr.querySelector('.btn-delete-row');
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', () => {
+            promptDeleteDonation(item);
+          });
+        }
+      }
+
+      // Preserve DOM order
+      if (isNew) {
+        if (previousNode && previousNode.nextSibling) {
+          tbodyEl.insertBefore(tr, previousNode.nextSibling);
+        } else if (!previousNode && tbodyEl.firstChild) {
+          tbodyEl.insertBefore(tr, tbodyEl.firstChild);
+        } else {
+          tbodyEl.appendChild(tr);
+        }
       } else {
-        statusBadge = `<span class="badge badge-live"><span class="pulse-dot"></span> ON-AIR</span>`;
-        actionBtn = `<button type="button" class="btn-ghost" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="hold" data-id="${escapeHTML(item.donation_id)}">Remove</button>`;
+        const expectedNext = previousNode ? previousNode.nextSibling : tbodyEl.firstChild;
+        if (tr !== expectedNext) {
+          tbodyEl.insertBefore(tr, expectedNext);
+        }
       }
 
-      const pinBadge = isPinned ? `<span class="badge badge-live">PINNED TOP</span>` : '';
-      const pinBtn = `<button type="button" class="btn-secondary" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="pin" data-id="${escapeHTML(item.donation_id)}">${isPinned ? 'Unpin' : 'Pin'}</button>`;
-      const anonBtn = `<button type="button" class="btn-ghost" style="min-height: 38px; padding: var(--space-1) var(--space-3); font-size: var(--text-xs);" data-action="anon" data-id="${escapeHTML(item.donation_id)}">${item.is_anonymous ? 'De-Anon' : 'Anon'}</button>`;
+      previousNode = tr;
+    });
+  }
 
+  // --- Keyed Stream Update ---
+  function renderKeyedStream(list) {
+    if (!streamEl) return;
 
-      const notesHtml = item.notes ? `<div style="font-size: 11px; color: var(--brand-accent); margin-top: 4px; font-style: italic;">“${escapeHTML(item.notes)}”</div>` : '';
+    const existingCards = new Map();
+    Array.from(streamEl.children).forEach(card => {
+      const id = card.getAttribute('data-donation-id');
+      if (id) existingCards.set(id, card);
+    });
 
-      html += `
-        <div class="${rowClass}">
-          <div style="display: flex; align-items: center; gap: var(--space-3);">
-            <div>
-              <div style="font-size: var(--text-base); font-weight: 800; color: var(--brand-accent);">$${dollars}</div>
-              <div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: 2px;">Card ${item.card_number || 'N/A'} • Table ${item.table_number || 'N/A'}</div>
-            </div>
-            <div style="border-left: 1px solid var(--border-subtle); padding-left: var(--space-3);">
-              <div style="font-weight: 700; font-size: var(--text-sm);">${escapeHTML(item.donor_name)}</div>
-              <div style="font-size: var(--text-xs); color: var(--ink-muted);">Display: "${escapeHTML(item.display_name)}"</div>
-              ${notesHtml}
-            </div>
+    const activeIds = new Set(list.map(d => d.id));
+    existingCards.forEach((card, id) => {
+      if (!activeIds.has(id)) card.remove();
+    });
+
+    let previousNode = null;
+    list.forEach(item => {
+      let card = existingCards.get(item.id);
+      const isNew = !card;
+
+      if (isNew) {
+        card = document.createElement('div');
+        card.setAttribute('data-donation-id', item.id);
+        card.style.cssText = 'background: #18191d; border: 1px solid #27282e; border-radius: var(--brand-radius); padding: var(--space-4); display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);';
+      }
+
+      const relativeTime = formatRelativeTime(item.createdAt);
+      const formattedAmount = formatCurrency(item.amountCents);
+      const statusHtml = getStatusBadgeHtml(item.status);
+
+      const innerHtml = `
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <div style="font-weight: 700; font-size: var(--text-sm); color: #f4f5f6;">
+            ${escapeHTML(item.donor)}
           </div>
-
-          <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
-            ${pinBadge}
-            ${statusBadge}
-            ${pinBtn}
-            ${anonBtn}
-            ${actionBtn}
+          <div style="font-size: var(--text-xs); color: #88888e; display: flex; align-items: center; gap: var(--space-2);">
+            <span>${relativeTime}</span>
+            <span>&bull;</span>
+            <span>${statusHtml}</span>
           </div>
         </div>
+        <div style="display: flex; align-items: center; gap: var(--space-4);">
+          <div style="font-size: var(--text-base); font-weight: 800; color: #f4f5f6; font-variant-numeric: tabular-nums;">
+            ${formattedAmount}
+          </div>
+          <button type="button" class="btn-delete-row" data-action="delete" data-id="${escapeHTML(item.id)}" aria-label="Delete donation" title="Delete donation">
+            &#x2715;
+          </button>
+        </div>
       `;
-    });
 
-    container.innerHTML = html;
-    if (window.renderPhosphorIcons) window.renderPhosphorIcons(container);
-  }
-
-  function renderAuditLog(events) {
-    const tbody = document.getElementById('ledger-table-body');
-    if (!tbody) return;
-
-    if (events.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--ink-muted); padding: var(--space-6);">No ledger events recorded yet.</td></tr>`;
-      return;
-    }
-
-    let html = '';
-    events.forEach(ev => {
-      const dollars = `$${Math.floor(ev.amount_cents / 100).toLocaleString('en-US')}`;
-      const isMatch = ev.event_type === 'match_apply' || ev.event_type === 'match_release';
-      const isVoid = ev.event_type === 'void';
-
-      let actionHtml = '-';
-      if (!isMatch && !isVoid) {
-        actionHtml = `<button type="button" class="btn-ghost" style="font-size: 11px; padding: 4px 8px;" data-action="void" data-id="${escapeHTML(ev.donation_id)}"><svg class="icon" viewBox="0 0 256 256"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></svg> Void</button>`;
+      if (card.innerHTML !== innerHtml) {
+        card.innerHTML = innerHtml;
+        const deleteBtn = card.querySelector('.btn-delete-row');
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', () => {
+            promptDeleteDonation(item);
+          });
+        }
       }
 
-      html += `
-        <tr style="${isVoid ? 'opacity: 0.45; text-decoration: line-through;' : ''}">
-          <td class="mono" style="font-size: var(--text-xs); color: var(--ink-muted);">#${ev.seq}</td>
-          <td><span class="badge ${ev.event_type === 'create' ? 'badge-live' : (ev.event_type === 'void' ? 'badge-held' : 'badge-staged')}">${ev.event_type}</span></td>
-          <td class="mono" style="font-weight: 800; color: var(--brand-accent);">${dollars}</td>
-          <td style="font-weight: 600;">${escapeHTML(ev.donor_name)}</td>
-          <td style="font-size: var(--text-xs); color: var(--ink-muted);">${escapeHTML(ev.display_name || '-')}</td>
-          <td>${ev.payment_method}</td>
-          <td>${ev.source}</td>
-          <td class="mono" style="font-size: var(--text-xs);">${ev.card_number || '-'}</td>
-          <td>${ev.entered_by || '-'}</td>
-          <td>${actionHtml}</td>
-        </tr>
-      `;
+      if (isNew) {
+        if (previousNode && previousNode.nextSibling) {
+          streamEl.insertBefore(card, previousNode.nextSibling);
+        } else if (!previousNode && streamEl.firstChild) {
+          streamEl.insertBefore(card, streamEl.firstChild);
+        } else {
+          streamEl.appendChild(card);
+        }
+      } else {
+        const expectedNext = previousNode ? previousNode.nextSibling : streamEl.firstChild;
+        if (card !== expectedNext) {
+          streamEl.insertBefore(card, expectedNext);
+        }
+      }
+
+      previousNode = card;
     });
-    tbody.innerHTML = html;
-    if (window.renderPhosphorIcons) window.renderPhosphorIcons(tbody);
   }
 
-  function populateSettingsInputs(state) {
-    const titleInput = document.getElementById('input-set-title');
-    const subtitleInput = document.getElementById('input-set-subtitle');
-    const trustBadgeInput = document.getElementById('input-set-trust-badge');
-    const visualModeSelect = document.getElementById('input-set-visual-mode');
-    const mediaUrlInput = document.getElementById('input-set-media-url');
-    const goalInput = document.getElementById('input-set-goal');
-    const matchActiveInput = document.getElementById('input-set-match-active');
-    const matchPoolInput = document.getElementById('input-set-match-pool');
-    const matchRatioInput = document.getElementById('input-set-match-ratio');
-    const matchSponsorInput = document.getElementById('input-set-match-sponsor');
-    const qrUrlInput = document.getElementById('input-set-qr-url');
+  function getStatusBadgeHtml(status) {
+    if (status === 'confirmed') {
+      return '<span class="status-badge" title="Confirmed">&#x2713;</span>';
+    } else if (status === 'pending') {
+      return '<span class="status-badge pending" title="Pending" style="color: #d4a359;">&#x1F552; Pending</span>';
+    } else if (status === 'removed') {
+      return '<span class="status-badge removed" title="Removed">&#x2715; Removed</span>';
+    }
+    return '';
+  }
 
-    if (titleInput && state.event_name) titleInput.value = state.event_name;
-    if (subtitleInput && state.event_subtitle) subtitleInput.value = state.event_subtitle;
-    if (trustBadgeInput && state.trust_badge_text) trustBadgeInput.value = state.trust_badge_text;
-    if (visualModeSelect && state.thermometer_visual_mode) visualModeSelect.value = state.thermometer_visual_mode;
-    const delayInput = document.getElementById('input-set-delay-sec');
-    const thresholdInput = document.getElementById('input-set-major-threshold');
-    if (delayInput && state.stage_delay_ms !== undefined) delayInput.value = Math.floor(state.stage_delay_ms / 1000);
-    if (thresholdInput && state.major_gift_threshold_cents !== undefined) thresholdInput.value = Math.floor(state.major_gift_threshold_cents / 100);
+  // --- Sorting Controls ---
+  function setupSortHeaders() {
+    const headers = document.querySelectorAll('.donations-table th.sortable');
+    headers.forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.getAttribute('data-sort');
+        if (!col) return;
 
-    if (goalInput && state.goal_cents) goalInput.value = Math.floor(state.goal_cents / 100);
-    if (matchActiveInput) matchActiveInput.checked = Boolean(state.is_match_active);
-    if (matchPoolInput && state.match_total_cents) matchPoolInput.value = Math.floor(state.match_total_cents / 100);
-    if (matchRatioInput && state.match_ratio) matchRatioInput.value = state.match_ratio;
-    if (matchSponsorInput && state.match_sponsor_title) matchSponsorInput.value = state.match_sponsor_title;
-    if (qrUrlInput && state.qr_donate_url) qrUrlInput.value = state.qr_donate_url;
-    if (state.theme_preset) {
-      selectedThemePreset = state.theme_preset;
-      document.querySelectorAll('.theme-swatch').forEach(s => {
-        s.classList.toggle('active', s.getAttribute('data-preset') === state.theme_preset);
+        if (sortColumn === col) {
+          sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortColumn = col;
+          sortDirection = col === 'amount' || col === 'time' ? 'desc' : 'asc';
+        }
+
+        updateSortIndicators();
+        renderCurrentView();
+      });
+    });
+    updateSortIndicators();
+  }
+
+  function updateSortIndicators() {
+    ['donor', 'amount', 'time', 'status'].forEach(col => {
+      const icon = document.getElementById(`sort-icon-${col}`);
+      if (!icon) return;
+      if (sortColumn === col) {
+        icon.textContent = sortDirection === 'asc' ? '▲' : '▼';
+        icon.style.color = '#d4a359';
+      } else {
+        icon.textContent = '⇅';
+        icon.style.color = '#555660';
+      }
+    });
+  }
+
+  // --- Tab & Search Controls ---
+  function setupTabListeners() {
+    if (tabTableBtn) {
+      tabTableBtn.addEventListener('click', () => {
+        activeTab = 'table';
+        tabTableBtn.classList.add('active');
+        tabTableBtn.setAttribute('aria-selected', 'true');
+        tabStreamBtn.classList.remove('active');
+        tabStreamBtn.setAttribute('aria-selected', 'false');
+        renderCurrentView();
       });
     }
 
-    // Refresh preview
-    const previewImg = document.getElementById('qr-customizer-preview');
-    if (previewImg && state.qr_donate_url) {
-      previewImg.src = `${API_BASE}/qr?url=${encodeURIComponent(state.qr_donate_url)}&v=4.2.0`;
+    if (tabStreamBtn) {
+      tabStreamBtn.addEventListener('click', () => {
+        activeTab = 'stream';
+        tabStreamBtn.classList.add('active');
+        tabStreamBtn.setAttribute('aria-selected', 'true');
+        tabTableBtn.classList.remove('active');
+        tabTableBtn.setAttribute('aria-selected', 'false');
+        renderCurrentView();
+      });
     }
   }
 
-  // Global Action Handlers
-  window.givebarHold = async (donationId) => {
-    await postControl({ action: 'hold_donation', donation_id: donationId });
-    pollState();
-  };
+  function setupSearchListener() {
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        searchQuery = searchInput.value;
+        renderCurrentView();
+      });
+    }
+  }
 
-  window.givebarRelease = async (donationId) => {
-    await postControl({ action: 'release_donation', donation_id: donationId });
-    pollState();
-  };
+  // --- Delete Dialog & Undo Flow ---
+  function setupDeleteModal() {
+    if (btnCancelDelete) {
+      btnCancelDelete.addEventListener('click', closeDeleteModal);
+    }
 
-  window.givebarPin = async (donationId) => {
-    await postControl({ action: 'pin_donation', donation_id: donationId });
-    pollState();
-  };
+    if (btnConfirmDelete) {
+      btnConfirmDelete.addEventListener('click', async () => {
+        if (!pendingDeleteDonation) return;
+        const donationToVoid = pendingDeleteDonation;
+        closeDeleteModal();
+        await executeDeleteDonation(donationToVoid);
+      });
+    }
 
-  window.givebarToggleAnon = async (donationId) => {
-    await postControl({ action: 'toggle_anonymity', donation_id: donationId });
-    pollState();
-  };
-
-  window.givebarVoidPrompt = (donationId) => {
-    showModal({
-      iconHtml: '<svg class="icon" viewBox="0 0 256 256"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></svg>',
-      title: 'Void Donation?',
-      desc: 'Enter the reason for voiding this donation from the authoritative ledger:',
-      hasInput: true,
-      inputPlaceholder: 'Reason (e.g. Card entered with wrong amount)',
-      confirmText: 'Confirm Void',
-      isDanger: true,
-      onConfirm: async (reason) => {
-        try {
-          await fetch(`${API_BASE}/donation/${donationId}/void`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ entered_by: 'CONTROL_ROOM', reason: reason || 'Voided by operator' })
-          });
-          pollState();
-        } catch {
-          // Ignore
-        }
+    // Escape closes modal
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && deleteModal && deleteModal.style.display !== 'none') {
+        closeDeleteModal();
       }
     });
-  };
+  }
+
+  function promptDeleteDonation(donation) {
+    pendingDeleteDonation = donation;
+    const formattedAmount = formatCurrency(donation.amountCents);
+
+    if (deleteTitle) {
+      deleteTitle.textContent = 'Delete this donation?';
+    }
+    if (deleteBody) {
+      deleteBody.textContent = `Delete donation of ${formattedAmount} from ${donation.donor}? This donation will be removed from the display and subtracted from the total raised. It can be restored from History.`;
+    }
+
+    if (deleteModal) {
+      deleteModal.style.display = 'flex';
+      // Cancel is default focused action per Phase 3 contract
+      if (btnCancelDelete) {
+        btnCancelDelete.focus();
+      }
+    }
+  }
+
+  function closeDeleteModal() {
+    if (deleteModal) {
+      deleteModal.style.display = 'none';
+    }
+    pendingDeleteDonation = null;
+  }
+
+  async function executeDeleteDonation(donation) {
+    try {
+      const res = await fetch(`/api/donation/${donation.id}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entered_by: 'User',
+          reason: `Deleted via Manage Donations by User`
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || 'Failed to delete donation');
+        return;
+      }
+
+      // Record for Undo
+      lastDeletedDonation = donation;
+      showUndoAffordance(donation);
+
+      // Optimistically update local view
+      currentDonations = currentDonations.filter(d => d.id !== donation.id);
+      renderCurrentView();
+
+      // Refresh authoritative state
+      fetchState();
+    } catch (err) {
+      console.error('[Givebar] Void error:', err);
+    }
+  }
+
+  // --- Inline Undo Affordance (at least 30 seconds) ---
+  function showUndoAffordance(donation) {
+    if (!undoBanner || !undoMessage) return;
+
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+    }
+
+    const formattedAmount = formatCurrency(donation.amountCents);
+    undoExpiresAt = Date.now() + 30000;
+    undoMessage.textContent = `Donation of ${formattedAmount} from ${donation.donor} deleted. It can also be restored from History.`;
+    undoBanner.style.display = 'flex';
+
+    undoTimer = setTimeout(() => {
+      undoBanner.style.display = 'none';
+      lastDeletedDonation = null;
+    }, 30000);
+  }
+
+  function setupUndoAction() {
+    if (btnUndoDelete) {
+      btnUndoDelete.addEventListener('click', async () => {
+        if (!lastDeletedDonation) return;
+        const donationToRestore = lastDeletedDonation;
+
+        if (undoTimer) clearTimeout(undoTimer);
+        if (undoBanner) undoBanner.style.display = 'none';
+        lastDeletedDonation = null;
+
+        await executeRestoreDonation(donationToRestore);
+      });
+    }
+  }
+
+  async function executeRestoreDonation(donation) {
+    try {
+      const res = await fetch(`/api/donation/${donation.id}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entered_by: 'User',
+          reason: `Restored via Undo in Manage Donations by User`
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || 'Failed to restore donation');
+        return;
+      }
+
+      fetchState();
+    } catch (err) {
+      console.error('[Givebar] Restore error:', err);
+    }
+  }
+
+  // --- Utilities ---
+  function formatCurrency(cents) {
+    return `$${Math.floor(cents / 100).toLocaleString('en-US')}`;
+  }
+
+  function formatRelativeTime(epochMs) {
+    const sec = Math.max(0, Math.floor((Date.now() - epochMs) / 1000));
+    if (sec < 60) return `${sec}s`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m`;
+    const hrs = Math.floor(min / 60);
+    return `${hrs}h`;
+  }
 
   function escapeHTML(str) {
-    if (str === null || str === undefined) return '';
+    if (!str) return '';
     return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+      .replace(/'/g, '&#039;');
   }
 
-  function setupDelegatedQueueListeners() {
-    const queueContainer = document.getElementById('chyron-queue-container');
-    if (queueContainer) {
-      queueContainer.addEventListener('click', async (e) => {
-        const btn = e.target.closest('[data-action]');
-        if (!btn) return;
-        const action = btn.getAttribute('data-action');
-        const donationId = btn.getAttribute('data-id');
-        if (!donationId) return;
-
-        if (action === 'hold') {
-          await postControl({ action: 'hold_donation', donation_id: donationId });
-          pollState();
-        } else if (action === 'release') {
-          await postControl({ action: 'release_donation', donation_id: donationId });
-          pollState();
-        } else if (action === 'pin') {
-          await postControl({ action: 'pin_donation', donation_id: donationId });
-          pollState();
-        } else if (action === 'anon') {
-          await postControl({ action: 'toggle_anonymity', donation_id: donationId });
-          pollState();
-        }
-      });
-    }
-
-    const tbody = document.getElementById('ledger-table-body');
-    if (tbody) {
-      tbody.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action="void"]');
-        if (!btn) return;
-        const donationId = btn.getAttribute('data-id');
-        if (donationId) {
-          window.givebarVoidPrompt(donationId);
-        }
-      });
-    }
-  }
-
-  function startPolling() {
-    pollState();
-    setInterval(pollState, 1000);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  document.addEventListener('DOMContentLoaded', init);
 })();

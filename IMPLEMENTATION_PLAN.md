@@ -133,7 +133,6 @@ The cockpit for the event producer, lead moderator, and AV technician:
 * **Live Emergency Controls**:
   * **Freeze Screen**: Holds visible total while backend ingestion continues.
   * **Manual Total Override**: Emergency input to set the stage total directly.
-  * **Milestone Confetti Trigger**: Manually arms and fires celebratory confetti bursts on emcee cues.
   * **Match Fund Toggle**: Activates/deactivates the matching grant banner and sets remaining match pool.
 * **Rehearsal Mode**: Generates mock gala traffic (simulated donor stream, milestone milestones, typo corrections) to test on venue projection hardware during tech rehearsals.
 * **Finance Reconciliation CSV Export**: Complete auditable export mapping ledger events to CRM accounting formats.

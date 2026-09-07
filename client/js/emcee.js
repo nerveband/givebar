@@ -1,219 +1,220 @@
 /**
- * Givebar — Podium Screen Controller (/emcee)
- * High-contrast OLED monitor, 3-second glance hierarchy, vocal shoutout cards
+ * Givebar — Presenter View Controller
+ * Focuses on current donor name large, Name Pronunciation directly beneath at >= 20px (not italicized),
+ * secondary amount, compact recent donations feed, and non-dominant milestone/total metrics.
+ * Strict privacy shield: anonymous records never expose donor name, table number, or notes.
  */
 
 (function () {
-  const basePath = window.location.pathname.replace(/\/[^/]*$/, '');
-  const API_BASE = (basePath === '/' || basePath === '') ? '/api' : `${basePath}/api`;
+  'use strict';
+  let pollInterval = null;
+  let sseSource = null;
+  let lastSuccessfulUpdateAt = Date.now();
+  let serverTimeOffsetMs = 0;
+
+  // DOM Elements
+  const donorNameEl = document.getElementById('presenter-donor-name');
+  const pronunciationEl = document.getElementById('presenter-pronunciation');
+  const amountEl = document.getElementById('presenter-amount');
+  const metaEl = document.getElementById('presenter-meta');
+  const recentListEl = document.getElementById('presenter-recent-list');
+  const recentCountEl = document.getElementById('presenter-recent-count');
+  const milestoneTextEl = document.getElementById('presenter-milestone-text');
+  const totalRaisedEl = document.getElementById('presenter-total-raised');
+  const percentEl = document.getElementById('presenter-percent');
+  const goalEl = document.getElementById('presenter-goal');
 
   function init() {
-    startPolling();
+    startSync();
   }
 
-  async function pollEmceeState() {
+  function startSync() {
+    fetchState();
+    pollInterval = setInterval(fetchState, 1500);
+    setInterval(checkStaleness, 1000);
+    initSSE();
+  }
+
+  function checkStaleness() {
+    const elapsed = Date.now() - lastSuccessfulUpdateAt;
+    const isStale = elapsed >= 5000;
+    const dot = document.querySelector('.presenter-title .pulse-dot');
+    if (dot) {
+      dot.classList.toggle('degraded', isStale);
+    }
+  }
+
+  function initSSE() {
     try {
-      const res = await fetch(`${API_BASE}/state?role=emcee`);
+      if (window.EventSource) {
+        sseSource = new EventSource('/api/state/stream?role=emcee');
+        sseSource.onmessage = function (event) {
+          try {
+            const data = JSON.parse(event.data);
+            handleStateUpdate(data);
+          } catch (e) {}
+        };
+        sseSource.onerror = function () {
+          if (sseSource) {
+            sseSource.close();
+            sseSource = null;
+          }
+        };
+      }
+    } catch (e) {}
+  }
+
+  async function fetchState() {
+    try {
+      const res = await fetch('/api/state?role=emcee', {
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (!res.ok) return;
-
       const data = await res.json();
+      handleStateUpdate(data);
+    } catch (err) {
+      console.warn('[Givebar Presenter] State fetch failed:', err);
+    }
+  }
+  function handleStateUpdate(data) {
+    if (!data) return;
+    lastSuccessfulUpdateAt = Date.now();
+    if (data.server_time) {
+      serverTimeOffsetMs = data.server_time - Date.now();
+    }
+    checkStaleness();
 
-      // 1. Total Raised & Goal Percentage
-      const totalEl = document.getElementById('emcee-total-raised');
-      const percentEl = document.getElementById('emcee-percent');
-      const goalEl = document.getElementById('emcee-goal');
-      const countEl = document.getElementById('emcee-active-count');
-      const subTitleEl = document.getElementById('emcee-subtitle');
+    // 1. Current / Latest Donor (Held items are already excluded by server getEmceeState)
+    const recentGifts = Array.isArray(data.recent_gifts) ? data.recent_gifts : [];
+    const topGifts = Array.isArray(data.top_gifts) ? data.top_gifts : [];
 
-      if (totalEl && data.total_raised_cents !== undefined) {
-        totalEl.textContent = `$${Math.floor(data.total_raised_cents / 100).toLocaleString('en-US')}`;
+    // Most recent donation is primary highlight
+    const currentGift = recentGifts.length > 0 ? recentGifts[0] : (topGifts.length > 0 ? topGifts[0] : null);
+
+    if (currentGift) {
+      const isAnon = Boolean(currentGift.is_anonymous);
+      const displayName = isAnon ? 'Anonymous Supporter' : (currentGift.display_name || 'Anonymous Supporter');
+
+      if (donorNameEl) {
+        donorNameEl.textContent = displayName;
       }
 
-      if (percentEl && data.percent !== undefined) {
-        percentEl.textContent = `${data.percent}%`;
-      }
-
-      if (goalEl && data.goal_cents) {
-        goalEl.textContent = `$${Math.floor(data.goal_cents / 100).toLocaleString('en-US')}`;
-      }
-
-      if (countEl && data.active_donation_count !== undefined) {
-        countEl.textContent = data.active_donation_count.toLocaleString('en-US');
-      }
-
-      if (subTitleEl && data.event_name) {
-        subTitleEl.textContent = `${data.event_name} • ${data.event_subtitle || 'Live Appeal'}`;
-      }
-
-      // 2. Next Milestone Target
-      const gapEl = document.getElementById('emcee-milestone-gap');
-      const nameEl = document.getElementById('emcee-milestone-name');
-
-      if (gapEl && nameEl) {
-        if (data.next_milestone) {
-          const remainingDollars = Math.floor(data.next_milestone.remaining_cents / 100);
-          gapEl.textContent = `$${remainingDollars.toLocaleString('en-US')} to go`;
-          nameEl.textContent = `Goal: ${data.next_milestone.label} ($${Math.floor(data.next_milestone.target_cents / 100).toLocaleString('en-US')})`;
+      // Name Pronunciation directly beneath, readable >= 20px, NOT italicized
+      if (pronunciationEl) {
+        if (!isAnon && currentGift.donor_phonetic && currentGift.donor_phonetic.trim()) {
+          pronunciationEl.textContent = currentGift.donor_phonetic.trim();
+          pronunciationEl.style.display = 'block';
         } else {
-          gapEl.textContent = 'All Milestones Cleared!';
-          nameEl.textContent = 'Fundraising goal achieved';
+          pronunciationEl.style.display = 'none';
+          pronunciationEl.textContent = '';
         }
       }
 
-      // 3. Active Matching Grant Badge
-      const matchBadge = document.getElementById('emcee-match-badge');
-      const matchPool = document.getElementById('emcee-match-pool');
+      // Secondary Amount
+      if (amountEl) {
+        amountEl.textContent = formatCurrency(currentGift.amount_cents);
+        amountEl.style.display = 'block';
+      }
 
-      if (matchBadge && matchPool) {
-        if (data.is_match_active && data.match_pool_cents > 0) {
-          matchPool.textContent = `$${Math.floor(data.match_pool_cents / 100).toLocaleString('en-US')}`;
-          matchBadge.style.display = 'inline-flex';
+      // Optional metadata (table number, notes) — stripped if anonymous!
+      if (metaEl) {
+        if (!isAnon && (currentGift.table_number || currentGift.notes)) {
+          const parts = [];
+          if (currentGift.table_number) parts.push(`Table ${currentGift.table_number}`);
+          if (currentGift.notes) parts.push(currentGift.notes);
+          metaEl.textContent = parts.join(' • ');
+          metaEl.style.display = 'block';
         } else {
-          matchBadge.style.display = 'none';
+          metaEl.style.display = 'none';
+          metaEl.textContent = '';
         }
       }
-      // 3.5. Countdown Appeal Clock
-      const clockPill = document.getElementById('emcee-clock-pill');
-      const clockText = document.getElementById('emcee-clock-text');
-      const serverOffset = data.server_time ? data.server_time - Date.now() : 0;
-      const currentSyncedNow = Date.now() + serverOffset;
+    } else {
+      if (donorNameEl) donorNameEl.textContent = 'Awaiting First Gift...';
+      if (pronunciationEl) pronunciationEl.style.display = 'none';
+      if (amountEl) amountEl.style.display = 'none';
+      if (metaEl) metaEl.style.display = 'none';
+    }
 
-      if (clockPill && clockText) {
-        if (data.timer_status === 'running' || data.timer_status === 'paused') {
-          let rem = data.countdown_seconds || 300;
-          if (data.timer_status === 'running' && data.timer_ends_at) {
-            rem = Math.max(0, Math.ceil((data.timer_ends_at - currentSyncedNow) / 1000));
-          }
-          const mins = Math.floor(rem / 60);
-          const secs = rem % 60;
-          clockText.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-          clockPill.style.display = 'inline-flex';
-          if (rem <= 10 && data.timer_status === 'running') {
-            clockPill.className = 'badge badge-held';
-          } else if (rem <= 60 && data.timer_status === 'running') {
-            clockPill.className = 'badge badge-staged';
-          } else {
-            clockPill.className = 'badge badge-live';
-          }
-        } else {
-          clockPill.style.display = 'none';
-        }
+    // 2. Compact Recent Donations Feed (Last 5 items)
+    if (recentListEl) {
+      const displayRecent = recentGifts.slice(0, 5);
+      if (recentCountEl) {
+        recentCountEl.textContent = `${displayRecent.length} gifts`;
       }
 
-      if (data.theme) {
-        document.documentElement.style.setProperty('--brand-hue', data.theme.hue);
-        document.documentElement.style.setProperty('--brand-chroma', data.theme.chroma);
-        if (data.theme.radius_px) {
-          document.documentElement.style.setProperty('--brand-radius', `${data.theme.radius_px}px`);
-        }
+      if (displayRecent.length === 0) {
+        recentListEl.innerHTML = `
+          <div style="color: #88888e; font-size: var(--text-xs); padding: 8px 0; text-align: center;">
+            Recent gifts will appear here live
+          </div>
+        `;
+      } else {
+        recentListEl.innerHTML = displayRecent.map(g => {
+          const isAnon = Boolean(g.is_anonymous);
+          const name = isAnon ? 'Anonymous Supporter' : (g.display_name || 'Anonymous Supporter');
+          return `
+            <div class="presenter-recent-row">
+              <span class="presenter-recent-name">${escapeHTML(name)}</span>
+              <span class="presenter-recent-amt">${formatCurrency(g.amount_cents)}</span>
+            </div>
+          `;
+        }).join('');
       }
+    }
 
-      // 5. Render Top 5 Largest Gifts & Recent Stream
-      renderTopGifts(data.top_gifts || []);
-      renderRecentGifts(data.recent_gifts || []);
+    // 3. Secondary Metrics: Next Milestone & Total Raised (Never dominant)
+    if (milestoneTextEl) {
+      if (data.next_milestone) {
+        const remaining = formatShortCurrency(data.next_milestone.remaining_cents);
+        const target = formatShortCurrency(data.next_milestone.target_cents);
+        milestoneTextEl.textContent = `${remaining} away (${target} target)`;
+      } else if (data.goal_cents && data.total_raised_cents >= data.goal_cents) {
+        milestoneTextEl.textContent = 'Goal Reached!';
+      } else {
+        milestoneTextEl.textContent = 'In progress';
+      }
+    }
 
-    } catch {
-      // Ignore network hiccup
+    if (totalRaisedEl) {
+      totalRaisedEl.textContent = formatCurrency(data.total_raised_cents || 0);
+    }
+    if (percentEl) {
+      percentEl.textContent = `${data.percent || 0}%`;
+    }
+    if (goalEl) {
+      goalEl.textContent = formatShortCurrency(data.goal_cents || 50000000);
     }
   }
 
-  function renderTopGifts(gifts) {
-    const container = document.getElementById('top-gifts-container');
-    if (!container) return;
-
-    if (gifts.length === 0) {
-      container.innerHTML = `
-        <div style="color: var(--ink-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6);">
-          Awaiting first major gift...
-        </div>
-      `;
-      return;
-    }
-
-    let html = '';
-    gifts.forEach((item, index) => {
-      const dollars = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
-      const phoneticGuide = item.donor_phonetic
-        ? `<div style="font-size: 1.1rem; font-weight: 800; color: var(--color-warning); margin-top: 4px;">Pronounce: “${escapeHTML(item.donor_phonetic)}”</div>`
-        : '';
-      const tableTag = item.table_number
-        ? `<span class="badge" style="background: var(--bg-canvas); color: var(--ink-secondary);">Table ${escapeHTML(item.table_number)}</span>`
-        : '';
-
-      html += `
-        <div class="shoutout-card">
-          <div>
-            <div style="font-size: var(--text-base); font-weight: 800; color: var(--ink-primary);">
-              #${index + 1} • ${escapeHTML(item.display_name)}
-            </div>
-            ${phoneticGuide}
-            ${item.notes ? `<div style="font-size: var(--text-xs); color: var(--ink-muted); margin-top: 2px;">${escapeHTML(item.notes)}</div>` : ''}
-          </div>
-
-          <div style="display: flex; align-items: center; gap: var(--space-2);">
-            ${tableTag}
-            <div style="font-size: var(--text-lg); font-weight: 900; color: var(--brand-accent);" class="tabular">
-              ${dollars}
-            </div>
-          </div>
-        </div>
-      `;
-    });
-
-    container.innerHTML = html;
+  // --- Formatting Helpers ---
+  function formatCurrency(cents) {
+    return `$${Math.floor((cents || 0) / 100).toLocaleString('en-US')}`;
   }
 
-  function renderRecentGifts(gifts) {
-    const container = document.getElementById('recent-gifts-container');
-    if (!container) return;
-
-    if (gifts.length === 0) {
-      container.innerHTML = `
-        <div style="color: var(--ink-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6);">
-          Awaiting incoming gifts...
-        </div>
-      `;
-      return;
+  function formatShortCurrency(cents) {
+    const dollars = Math.floor((cents || 0) / 100);
+    if (dollars === 0) return '$0';
+    if (dollars >= 1000000) {
+      const m = dollars / 1000000;
+      return `$${Number(m.toFixed(1))}M`;
     }
-
-    let html = '';
-    gifts.forEach((item) => {
-      const dollars = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
-      const timeStr = item.seconds_ago < 60
-        ? `${item.seconds_ago}s ago`
-        : `${Math.floor(item.seconds_ago / 60)}m ago`;
-
-      html += `
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle);">
-          <div>
-            <div style="font-size: var(--text-sm); font-weight: 700;">${escapeHTML(item.display_name)}</div>
-            ${item.donor_phonetic ? `<div style="font-size: var(--text-xs); color: var(--color-warning);">${escapeHTML(item.donor_phonetic)}</div>` : ''}
-            <div style="font-size: var(--text-xs); color: var(--ink-muted);">${timeStr}</div>
-          </div>
-          <div style="font-size: var(--text-base); font-weight: 900; color: var(--brand-accent);" class="tabular">
-            ${dollars}
-          </div>
-        </div>
-      `;
-    });
-
-    container.innerHTML = html;
+    if (dollars >= 1000) {
+      const k = dollars / 1000;
+      return `$${Number(k.toFixed(0))}k`;
+    }
+    return `$${dollars}`;
   }
 
   function escapeHTML(str) {
-    const p = document.createElement('p');
-    p.textContent = str;
-    return p.innerHTML;
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
-  function startPolling() {
-    pollEmceeState();
-    setInterval(pollEmceeState, 1000);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  document.addEventListener('DOMContentLoaded', init);
 })();

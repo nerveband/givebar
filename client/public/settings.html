@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings — Givebar</title>
+  <link rel="stylesheet" href="css/app.css?v=5.0.0">
+  <style>
+    .settings-accordion {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      max-width: 860px;
+    }
+
+    .accordion-panel {
+      background: #18191d;
+      border: 1px solid #27282e;
+      border-radius: var(--brand-radius);
+      overflow: hidden;
+      transition: border-color 0.15s ease;
+    }
+
+    .accordion-panel.expanded {
+      border-color: #383a44;
+    }
+
+    .accordion-header {
+      width: 100%;
+      background: #18191d;
+      border: none;
+      padding: var(--space-4) var(--space-5);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #f4f5f6;
+      font-size: var(--text-base);
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--font-sans);
+      user-select: none;
+    }
+
+    .accordion-header:hover {
+      background: #1c1d22;
+    }
+
+    .accordion-chevron {
+      color: #88888e;
+      font-size: var(--text-sm);
+      transition: transform 0.2s ease;
+    }
+
+    .accordion-panel.expanded .accordion-chevron {
+      transform: rotate(180deg);
+    }
+
+    .accordion-body {
+      display: none;
+      padding: 0 var(--space-5) var(--space-5) var(--space-5);
+      border-top: 1px solid #232428;
+    }
+
+    .accordion-panel.expanded .accordion-body {
+      display: block;
+      padding-top: var(--space-4);
+    }
+
+    .form-group {
+      margin-bottom: var(--space-4);
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-label {
+      display: block;
+      font-size: var(--text-xs);
+      font-weight: 700;
+      color: #88888e;
+      margin-bottom: 6px;
+    }
+
+    .form-hint {
+      font-size: var(--text-xs);
+      color: #66676e;
+      margin-top: 4px;
+    }
+
+    .form-input-text {
+      width: 100%;
+      background: #121316;
+      border: 1px solid #2a2c34;
+      border-radius: var(--brand-radius);
+      color: #f4f5f6;
+      font-size: var(--text-sm);
+      padding: 9px 12px;
+      font-family: var(--font-sans);
+      outline: none;
+    }
+
+    .form-input-text:focus {
+      border-color: #d4a359;
+    }
+
+    .toggle-check-label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-3);
+      min-height: 44px;
+      cursor: pointer;
+      user-select: none;
+      font-size: var(--text-sm);
+      color: #f4f5f6;
+      font-weight: 500;
+    }
+
+    .editor-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: var(--space-3);
+    }
+
+    .editor-table th {
+      font-size: var(--text-xs);
+      color: #88888e;
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid #232428;
+    }
+
+    .editor-table td {
+      padding: 6px 8px;
+    }
+
+    .btn-row-remove {
+      background: transparent;
+      border: none;
+      color: #71747a;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--brand-radius);
+      font-size: var(--text-xs);
+    }
+
+    .btn-row-remove:hover {
+      color: #f87171;
+      background: #232429;
+    }
+
+    .btn-save-settings {
+      background: #d4a359;
+      color: #121316;
+      border: none;
+      border-radius: var(--brand-radius);
+      font-weight: 800;
+      font-size: var(--text-sm);
+      padding: 12px 28px;
+      cursor: pointer;
+      font-family: var(--font-sans);
+      transition: background-color 0.15s ease;
+    }
+
+    .btn-save-settings:hover {
+      background: #e5b842;
+    }
+
+    /* Error & Success Surfaces */
+    .status-surface {
+      max-width: 860px;
+      padding: 12px 16px;
+      border-radius: var(--brand-radius);
+      font-size: var(--text-sm);
+      margin-bottom: var(--space-5);
+      display: none;
+    }
+
+    .status-surface.error {
+      background: #241414;
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+    }
+
+    .status-surface.success {
+      background: #142418;
+      border: 1px solid #22c55e;
+      color: #86efac;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ops-shell">
+    <!-- Left Navigation Sidebar -->
+    <aside class="ops-sidebar">
+      <div class="ops-brand">
+        <div class="ops-brand-title">Givebar</div>
+        <div class="ops-brand-sub">Live Gala Fundraising</div>
+      </div>
+      <nav class="ops-nav" aria-label="Main Navigation">
+        <a href="/" class="ops-nav-item">Home</a>
+        <a href="/chart" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/donations" class="ops-nav-item">Manage Donations</a>
+        <a href="/add" class="ops-nav-item">Add Donation</a>
+        <a href="/presenter" class="ops-nav-item">Presenter View</a>
+        <a href="/settings" class="ops-nav-item active">Settings</a>
+        <a href="/testing" class="ops-nav-item">Testing</a>
+        <a href="/history" class="ops-nav-item">History</a>
+      </nav>
+    </aside>
+
+    <!-- Main Content Panel -->
+    <main class="ops-main">
+      <header style="margin-bottom: var(--space-6); display: flex; align-items: center; justify-content: space-between; max-width: 860px;">
+        <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0; color: #f4f5f6; letter-spacing: -0.02em;">
+          Settings
+        </h1>
+        <button type="button" id="btn-save-top" class="btn-save-settings">
+          Save Settings
+        </button>
+      </header>
+
+      <!-- Real Error Surface (Not transient drift banner) -->
+      <div id="settings-error-banner" class="status-surface error" role="alert">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);">
+          <span id="settings-error-text">Failed to save settings.</span>
+          <button type="button" id="btn-reload-conflict" class="btn-secondary" style="display: none; min-height: 32px; font-size: var(--text-xs);">
+            Reload Latest Settings
+          </button>
+        </div>
+      </div>
+
+      <!-- Success Surface -->
+      <div id="settings-success-banner" class="status-surface success" role="status">
+        Settings saved successfully.
+      </div>
+
+      <form id="settings-form" onsubmit="return false;" class="settings-accordion">
+
+        <!-- 1. Event Section -->
+        <section class="accordion-panel expanded" id="sec-event">
+          <button type="button" class="accordion-header" data-toggle="sec-event">
+            <span>Event</span>
+            <span class="accordion-chevron">&#x2303;</span>
+          </button>
+          <div class="accordion-body">
+            <div class="form-group">
+              <label class="form-label" for="setting-event-name">Event Name</label>
+              <input type="text" id="setting-event-name" class="form-input-text" placeholder="Annual Gala">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-event-subtitle">Event Subtitle</label>
+              <input type="text" id="setting-event-subtitle" class="form-input-text" placeholder="Supporting Community Programs">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-goal-dollars">Fundraising Goal ($)</label>
+              <input type="number" id="setting-goal-dollars" class="form-input-text" placeholder="500000" min="1">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-trust-badge">Trust Badge Text</label>
+              <input type="text" id="setting-trust-badge" class="form-input-text" placeholder="501(c)(3) Tax-Deductible Contribution">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Milestones</label>
+              <table class="editor-table">
+                <thead>
+                  <tr>
+                    <th style="width: 35%;">Target ($)</th>
+                    <th style="width: 50%;">Label</th>
+                    <th style="width: 15%;"></th>
+                  </tr>
+                </thead>
+                <tbody id="milestones-tbody">
+                  <!-- Dynamic rows -->
+                </tbody>
+              </table>
+              <button type="button" id="btn-add-milestone" class="btn-secondary" style="min-height: 34px; font-size: var(--text-xs);">
+                + Add Milestone
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Display Section -->
+        <section class="accordion-panel" id="sec-display">
+          <button type="button" class="accordion-header" data-toggle="sec-display">
+            <span>Display</span>
+            <span class="accordion-chevron">&#x2304;</span>
+          </button>
+          <div class="accordion-body">
+            <div class="form-group">
+              <label class="form-label" for="setting-bg-style">Background Style</label>
+              <select id="setting-bg-style" class="form-input-text">
+                <option value="plain">Plain Near-Black</option>
+                <option value="subtle-gradient">Subtle Gradient</option>
+                <option value="vignette">Vignette</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-bar-color">Bar Color Override (Optional Hex)</label>
+              <input type="text" id="setting-bar-color" class="form-input-text" placeholder="#d4a359">
+              <div class="form-hint">Must pass 3:1 contrast against track; falls back to amber if insufficient.</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-logo-url">Logo URL (Optional)</label>
+              <input type="url" id="setting-logo-url" class="form-input-text" placeholder="https://example.org/logo.png">
+              <div class="form-hint">Collapses cleanly when empty; sized to never compete with the total.</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-qr-url">Donation Link (QR Destination URL)</label>
+              <input type="url" id="setting-qr-url" class="form-input-text" placeholder="https://give.example.org/donate">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Display Toggles</label>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <label for="toggle-show-qr" class="toggle-check-label">
+                  <input type="checkbox" id="toggle-show-qr" class="anon-checkbox">
+                  <span>Show QR Code Block</span>
+                </label>
+                <label for="toggle-show-recent" class="toggle-check-label">
+                  <input type="checkbox" id="toggle-show-recent" class="anon-checkbox">
+                  <span>Show Recent Donations Feed</span>
+                </label>
+                <label for="toggle-show-live" class="toggle-check-label">
+                  <input type="checkbox" id="toggle-show-live" class="anon-checkbox">
+                  <span>Show Live Indicator</span>
+                </label>
+                <label for="toggle-show-goal" class="toggle-check-label">
+                  <input type="checkbox" id="toggle-show-goal" class="anon-checkbox">
+                  <span>Show Goal Figure on Bar</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-stage-message">Stage Message</label>
+              <input type="text" id="setting-stage-message" class="form-input-text" placeholder="Short encouraging line shown on stage">
+            </div>
+
+            <div class="form-group">
+              <label for="toggle-stage-message-visible" class="toggle-check-label">
+                <input type="checkbox" id="toggle-stage-message-visible" class="anon-checkbox">
+                <span>Display Stage Message on Screen</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. Donations Section -->
+        <section class="accordion-panel" id="sec-donations">
+          <button type="button" class="accordion-header" data-toggle="sec-donations">
+            <span>Donations</span>
+            <span class="accordion-chevron">&#x2304;</span>
+          </button>
+          <div class="accordion-body">
+            <div class="form-group">
+              <label class="form-label">Ask Tiers (Presets)</label>
+              <table class="editor-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40%;">Amount ($)</th>
+                    <th style="width: 45%;">Label</th>
+                    <th style="width: 15%;"></th>
+                  </tr>
+                </thead>
+                <tbody id="ask-tiers-tbody">
+                  <!-- Dynamic rows -->
+                </tbody>
+              </table>
+              <button type="button" id="btn-add-tier" class="btn-secondary" style="min-height: 34px; font-size: var(--text-xs);">
+                + Add Ask Tier
+              </button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-guardrail-threshold">Confirm Large Donations Threshold ($)</label>
+              <input type="number" id="setting-guardrail-threshold" class="form-input-text" placeholder="9500" min="100">
+              <div class="form-hint">Prevents extra-zero typos ($50k to $500k) with an explicit confirmation step.</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-staging-delay">Staging Delay (seconds)</label>
+              <input type="number" id="setting-staging-delay" class="form-input-text" placeholder="0" min="0" max="60">
+              <div class="form-hint">Defaults to 0 for immediate display. Set to 8 for staging review window.</div>
+            </div>
+
+            <!-- Matching Sponsor Section -->
+            <div class="form-group" style="border-top: 1px solid #232428; padding-top: var(--space-4); margin-top: var(--space-4);">
+              <label for="toggle-match-active" class="toggle-check-label">
+                <input type="checkbox" id="toggle-match-active" class="anon-checkbox">
+                <span>Enable Matching Sponsor</span>
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-match-title">Matching Sponsor Title</label>
+              <input type="text" id="setting-match-title" class="form-input-text" placeholder="Board of Directors Matching Grant">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-match-pool">Match Pool Total ($)</label>
+              <input type="number" id="setting-match-pool" class="form-input-text" placeholder="100000" min="0">
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Connections Section (Bloomerang) -->
+        <section class="accordion-panel" id="sec-connections">
+          <button type="button" class="accordion-header" data-toggle="sec-connections">
+            <span>Connections</span>
+            <span class="accordion-chevron">&#x2304;</span>
+          </button>
+          <div class="accordion-body">
+            <div class="form-group">
+              <label class="form-label" for="setting-bloomerang-key">Bloomerang API Key</label>
+              <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" id="setting-bloomerang-key" class="form-input-text" placeholder="••••••••••••••" autocomplete="new-password">
+                <button type="button" id="btn-toggle-key-view" class="btn-ghost" style="position: absolute; right: 8px; padding: 4px 8px; font-size: var(--text-xs);" aria-label="Toggle password visibility">
+                  Show
+                </button>
+              </div>
+              <div class="form-hint">Stored securely. Never returned in any public projection or state payload.</div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-4); flex-wrap: wrap;">
+              <button type="button" id="btn-test-connection" class="btn-secondary" style="min-height: 38px; font-size: var(--text-xs); color: #d4a359; border-color: #d4a359;">
+                Test Connection
+              </button>
+              <div id="conn-status-display" style="font-size: var(--text-xs); font-weight: 600; color: #88888e;">
+                Not connected
+              </div>
+            </div>
+
+            <div id="conn-sync-info" style="font-size: var(--text-xs); color: #66676e; margin-top: var(--space-2);">
+            </div>
+            <div id="conn-error-info" style="display: none; font-size: var(--text-xs); color: #f87171; margin-top: var(--space-2);">
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. Features Section -->
+        <section class="accordion-panel" id="sec-features">
+          <button type="button" class="accordion-header" data-toggle="sec-features">
+            <span>Features</span>
+            <span class="accordion-chevron">&#x2304;</span>
+          </button>
+          <div class="accordion-body">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label for="toggle-feature-timer" class="toggle-check-label">
+                <input type="checkbox" id="toggle-feature-timer" class="anon-checkbox">
+                <span>Appeal Countdown Timer</span>
+              </label>
+              <label for="toggle-feature-card" class="toggle-check-label">
+                <input type="checkbox" id="toggle-feature-card" class="anon-checkbox">
+                <span>Pledge Card Number Input</span>
+              </label>
+              <label for="toggle-feature-table" class="toggle-check-label">
+                <input type="checkbox" id="toggle-feature-table" class="anon-checkbox">
+                <span>Table Number Input</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. Access Section -->
+        <section class="accordion-panel" id="sec-access">
+          <button type="button" class="accordion-header" data-toggle="sec-access">
+            <span>Access</span>
+            <span class="accordion-chevron">&#x2304;</span>
+          </button>
+          <div class="accordion-body">
+            <div class="form-group">
+              <label class="form-label" for="setting-control-pin">Control Room PIN</label>
+              <input type="password" id="setting-control-pin" class="form-input-text" placeholder="9999" minlength="4" maxlength="12">
+              <div class="form-hint">Minimum length: 4 characters. Rejects empty values.</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-entry-pin">Volunteer Pad PIN</label>
+              <input type="password" id="setting-entry-pin" class="form-input-text" placeholder="1234" minlength="4" maxlength="12">
+              <div class="form-hint">Minimum length: 4 characters. Rejects empty values.</div>
+            </div>
+          </div>
+        </section>
+
+        <div style="margin-top: var(--space-6); display: flex; justify-content: flex-end;">
+          <button type="button" id="btn-save-bottom" class="btn-save-settings">
+            Save Settings
+          </button>
+        </div>
+
+      </form>
+    </main>
+  </div>
+
+  <script src="js/settings.js?v=5.0.0"></script>
+</body>
+</html>

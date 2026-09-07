@@ -90,7 +90,7 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
         // Find next milestone and inject amount to cross it
         const eventState = getEventState(db);
         const folded = foldLedger(db);
-        const currentTotal = eventState.manual_override_cents !== null ? eventState.manual_override_cents : folded.total_raised_cents;
+        const currentTotal = folded.total_raised_cents;
         
         let milestones: Array<{ cents: number; label: string }> = [];
         try {
@@ -153,7 +153,7 @@ function generateRandomDonation() {
     payment_method: (Math.random() < 0.7 ? "pledge" : (Math.random() < 0.5 ? "card" : "check")) as "pledge" | "card" | "check",
     source: "rehearsal" as const,
     card_number: `#0${rehearsalCardCounter}`,
-    entered_by: `CLERK_${Math.floor(Math.random() * 3) + 1}`,
+    entered_by: `User_${Math.floor(Math.random() * 3) + 1}`,
     notes: `Table ${tableNum}`,
     confirmed_major_gift: true
   };

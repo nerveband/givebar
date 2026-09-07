@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Testing — Givebar</title>
+  <link rel="stylesheet" href="css/app.css?v=5.0.0">
+  <style>
+    .test-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      background: #241e12;
+      border: 1px solid #d4a359;
+      border-radius: var(--brand-radius);
+      padding: var(--space-4) var(--space-5);
+      margin-bottom: var(--space-6);
+      color: #f4f5f6;
+    }
+
+    .test-banner-title {
+      font-size: var(--text-sm);
+      font-weight: 700;
+      color: #d4a359;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .test-actions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+
+    .test-action-card {
+      background: #18191d;
+      border: 1px solid #27282e;
+      border-radius: var(--brand-radius);
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+
+    .test-action-card:hover {
+      border-color: #383a44;
+    }
+
+    .test-action-title {
+      font-size: var(--text-sm);
+      font-weight: 700;
+      color: #f4f5f6;
+      margin: 0;
+    }
+
+    .test-action-desc {
+      font-size: var(--text-xs);
+      color: #88888e;
+      line-height: 1.4;
+      margin: 0;
+    }
+
+    .sample-tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      background: #241e12;
+      color: #d4a359;
+      border: 1px solid rgba(212, 163, 89, 0.4);
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ops-shell">
+    <!-- Left Navigation Sidebar -->
+    <aside class="ops-sidebar">
+      <div class="ops-brand">
+        <div class="ops-brand-title">Givebar</div>
+        <div class="ops-brand-sub">Live Gala Fundraising</div>
+      </div>
+      <nav class="ops-nav" aria-label="Main Navigation">
+        <a href="/" class="ops-nav-item">Home</a>
+        <a href="/chart" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/donations" class="ops-nav-item">Manage Donations</a>
+        <a href="/add" class="ops-nav-item">Add Donation</a>
+        <a href="/presenter" class="ops-nav-item">Presenter View</a>
+        <a href="/settings" class="ops-nav-item">Settings</a>
+        <a href="/testing" class="ops-nav-item active">Testing</a>
+        <a href="/history" class="ops-nav-item">History</a>
+      </nav>
+    </aside>
+
+    <!-- Main Content Panel -->
+    <main class="ops-main">
+      <header style="margin-bottom: var(--space-5);">
+        <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0 0 6px 0; color: #f4f5f6; letter-spacing: -0.02em;">
+          Testing
+        </h1>
+        <p style="font-size: var(--text-sm); color: #88888e; margin: 0; max-width: 680px; line-height: 1.5;">
+          Technical rehearsal simulator. Generates isolated sample records to test stage projection, volunteer pads, and pacing without polluting real gala financial records.
+        </p>
+      </header>
+
+      <!-- Persistent Test Mode Banner (Shows whenever sample records exist) -->
+      <section id="test-mode-banner" class="test-banner" role="status">
+        <div>
+          <div class="test-banner-title">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d4a359;"></span>
+            Test Mode Active
+          </div>
+          <div style="font-size: var(--text-xs); color: #c4c6cc; margin-top: 2px;" id="test-banner-desc">
+            3 sample records active in database. Purging removes only sample data and leaves real donations untouched.
+          </div>
+        </div>
+        <button type="button" id="btn-purge-sample-data" class="btn-primary" style="min-height: 38px; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
+          Purge Sample Data
+        </button>
+      </section>
+
+      <!-- Rehearsal Generator Controls -->
+      <section style="margin-bottom: var(--space-6);">
+        <h2 style="font-size: var(--text-sm); font-weight: 700; color: #88888e; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 var(--space-3) 0;">
+          Generate Sample Data
+        </h2>
+
+        <div class="test-actions-grid">
+          <div class="test-action-card">
+            <div>
+              <h3 class="test-action-title">Single Gift</h3>
+              <p class="test-action-desc">Injects one random sample donation with simulated donor and amount.</p>
+            </div>
+            <button type="button" id="btn-gen-single" class="btn-secondary" style="width: 100%; min-height: 38px; font-size: var(--text-xs);">
+              + Add Single Gift
+            </button>
+          </div>
+
+          <div class="test-action-card">
+            <div>
+              <h3 class="test-action-title">Rapid Burst</h3>
+              <p class="test-action-desc">Injects 7 rapid-fire sample gifts to test stream pacing and odometer rolls.</p>
+            </div>
+            <button type="button" id="btn-gen-burst" class="btn-secondary" style="width: 100%; min-height: 38px; font-size: var(--text-xs);">
+              + Rapid Burst (7)
+            </button>
+          </div>
+
+          <div class="test-action-card">
+            <div>
+              <h3 class="test-action-title">Typo Gift</h3>
+              <p class="test-action-desc">Injects a large test gift with clear hold cue to test delete and undo.</p>
+            </div>
+            <button type="button" id="btn-gen-typo" class="btn-secondary" style="width: 100%; min-height: 38px; font-size: var(--text-xs);">
+              + Inject Typo Gift
+            </button>
+          </div>
+
+          <div class="test-action-card">
+            <div>
+              <h3 class="test-action-title">Cross Milestone</h3>
+              <p class="test-action-desc">Injects exact amount needed to cross the next configured milestone on stage.</p>
+            </div>
+            <button type="button" id="btn-gen-milestone" class="btn-secondary" style="width: 100%; min-height: 38px; font-size: var(--text-xs);">
+              + Cross Next Milestone
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Active Sample Records Table -->
+      <section style="background: #18191d; border: 1px solid #27282e; border-radius: var(--brand-radius); padding: var(--space-5);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4);">
+          <h2 style="font-size: var(--text-base); font-weight: 700; margin: 0; color: #f4f5f6;">
+            Active Sample Records
+          </h2>
+          <span style="font-size: var(--text-xs); color: #88888e;" id="sample-count-badge">0 active records</span>
+        </div>
+
+        <table class="donations-table">
+          <thead>
+            <tr>
+              <th style="width: 40%;">Donor</th>
+              <th class="text-right" style="width: 20%;">Amount</th>
+              <th class="text-center" style="width: 20%;">Time</th>
+              <th class="text-center" style="width: 20%;">Status</th>
+            </tr>
+          </thead>
+          <tbody id="sample-records-tbody">
+            <!-- Sample rows render here -->
+          </tbody>
+        </table>
+
+        <!-- Empty state when no test data exists -->
+        <div id="sample-clean-state" style="padding: var(--space-8) 0; text-align: center; color: #88888e; font-size: var(--text-sm);">
+          No sample records active. The ledger is completely clean.
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="js/testing.js?v=5.0.0"></script>
+</body>
+</html>

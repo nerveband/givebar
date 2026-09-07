@@ -47,7 +47,6 @@ A reference guide benchmarking Givebar against live production tools like Staget
 | `No-Backward-Odometer Rule` | Floor Monotonicity | **Keep Screen Moving Forward** (No Rollbacks) |
 | `Manual Override Cents` | Display Offset Delta | **Adjust Ballroom Screen Total** |
 | `Clerk Identifier` | Operator ID | **Volunteer Name** |
-| `Confetti Trigger` | Celebration Cue | **Launch Stage Confetti** |
 | `Emergency Freeze` | Blackout / Slate | **Pause Ballroom Screen** |
 
 ---
@@ -55,8 +54,7 @@ A reference guide benchmarking Givebar against live production tools like Staget
 ## 3. Zero-Code In-App Customization Specification
 
 The Event Control Room (`/control`) includes an in-app **Event Settings** tab where event directors can customize:
-1. **Event Identity**: Event title, subtitle, organization, and QR code donation URL.
-2. **Fundraising Target**: Goal target dollars, milestone percentage pips (25%, 50%, 75%), and auto-confetti celebration triggers.
+2. **Fundraising Target**: Goal target dollars and milestone percentage pips (25%, 50%, 75%).
 3. **Brand & Color Theme**: Visual swatches (Champagne Gold, Royal Sapphire, Emerald Green, or custom HEX) that update the stage accent and progress bar in real time.
 4. **Volunteer Quick-Amounts**: Configurable ask-tier buttons ($10k, $5k, $2.5k, $1k, $500, or custom presets).
 5. **Matching Donor Setup**: Sponsor title, matching grant pool amount, match ratio (1:1 double, 2:1 triple), and live active toggle.

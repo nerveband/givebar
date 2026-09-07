@@ -61,15 +61,12 @@ export interface EventStateRecord {
   control_pin: string;
   milestones_json: string;
   odometer_floor_cents: number;
-  confetti_trigger: number;
   theme_preset: string;
   brand_hue: number;
   brand_chroma: number;
   brand_accent_hex: string;
   brand_radius_px: number;
   major_gift_threshold_cents: number;
-  stage_delay_ms: number;
-  confetti_on_milestone: number;
   countdown_seconds: number;
   timer_status: string;
   timer_ends_at: number | null;
@@ -77,6 +74,21 @@ export interface EventStateRecord {
   embed_media_url: string;
   trust_badge_text: string;
   pinned_donation_id: string | null;
+  logo_url: string;
+  background_style: string;
+  bar_color: string;
+  show_qr: number;
+  show_recent_donations: number;
+  show_live_indicator: number;
+  show_goal: number;
+  stage_message: string;
+  stage_message_visible: number;
+  feature_timer: number;
+  feature_card_number: number;
+  feature_table_number: number;
+  bloomerang_api_key: string;
+  bloomerang_last_sync_at: number | null;
+  bloomerang_last_error: string;
   settings_seq: number;
   updated_at: number;
 }
@@ -262,13 +274,22 @@ export function foldLedger(db: Database, options?: FoldOptions): FoldedLedger {
         activeDonations.set(event.donation_id, existing);
       }
     } else if (event.event_type === "void") {
-      const existing = activeDonations.get(event.donation_id);
+      const existing = activeDonations.get(event.donation_id) || allRecords.get(event.donation_id);
       if (existing) {
         existing.latest_seq = event.seq;
         existing.is_voided = true;
         existing.updated_at = event.created_at;
         activeDonations.delete(event.donation_id);
         voidCount++;
+      }
+    } else if (event.event_type === "restore") {
+      const existing = allRecords.get(event.donation_id);
+      if (existing) {
+        existing.latest_seq = event.seq;
+        existing.is_voided = false;
+        existing.updated_at = event.created_at;
+        activeDonations.set(event.donation_id, existing);
+        voidCount = Math.max(0, voidCount - 1);
       }
     }
   }
@@ -687,6 +708,108 @@ export function voidDonation(db: Database, donationId: string, enteredBy?: strin
 }
 
 /**
+ * Restore a previously voided donation in the ledger.
+ * Records 'restore' event and re-enforces matching grant if applicable.
+ */
+export function restoreDonation(db: Database, donationId: string, enteredBy?: string, reason?: string): number {
+  const folded = foldLedger(db);
+  const existing = folded.all_records.get(donationId);
+  if (!existing || !existing.is_voided) {
+    throw new Error(`Cannot restore donation ${donationId}: donation does not exist or is not voided.`);
+  }
+
+  const normalizedCard = normalizeCard(existing.card_number);
+  if (normalizedCard) {
+    const activeCard = db.query<{ card_number: string; donation_id: string; entered_by: string; created_at: number; amount_cents: number; donor_name: string }, [string]>(
+      `SELECT * FROM active_card WHERE card_number = ? LIMIT 1`
+    ).get(normalizedCard);
+    if (activeCard && activeCard.donation_id !== donationId) {
+      throw new CardSerialCollisionError(
+        normalizedCard,
+        activeCard.donation_id,
+        activeCard.entered_by,
+        activeCard.created_at,
+        activeCard.amount_cents,
+        activeCard.donor_name
+      );
+    }
+  }
+
+  const now = Date.now();
+  let insertedSeq = 0;
+
+  db.transaction(() => {
+    const result = db.query(`
+      INSERT INTO ledger (
+        event_type, donation_id, supersedes_seq, amount_cents,
+        donor_name, display_name, is_anonymous, payment_method,
+        source, source_txn_id, card_number, entered_by, notes,
+        donor_phonetic, table_number, created_at
+      ) VALUES (
+        'restore', ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?
+      )
+    `).run(
+      donationId,
+      existing.latest_seq,
+      existing.amount_cents,
+      existing.donor_name,
+      existing.display_name,
+      existing.is_anonymous ? 1 : 0,
+      existing.payment_method,
+      existing.source,
+      null,
+      existing.card_number,
+      enteredBy || existing.entered_by,
+      reason || "Restored donation",
+      existing.donor_phonetic || null,
+      existing.table_number || null,
+      now
+    );
+
+    insertedSeq = Number(result.lastInsertRowid);
+
+    if (normalizedCard) {
+      db.query(`
+        INSERT OR REPLACE INTO active_card (card_number, donation_id, entered_by, amount_cents, donor_name, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(normalizedCard, donationId, enteredBy || existing.entered_by, existing.amount_cents, existing.donor_name, now);
+    }
+
+    const eventState = getEventState(db);
+    if (eventState.is_match_active && folded.derived_match_pool_cents > 0) {
+      const matchPotential = Math.round(existing.amount_cents * eventState.match_ratio);
+      const matchAllocated = Math.min(matchPotential, folded.derived_match_pool_cents);
+      if (matchAllocated > 0) {
+        db.query(`
+          INSERT INTO ledger (
+            event_type, donation_id, supersedes_seq, amount_cents,
+            donor_name, display_name, is_anonymous, payment_method,
+            source, source_txn_id, card_number, entered_by, notes, created_at
+          ) VALUES (
+            'match_apply', ?, ?, ?,
+            'Matching Grant', 'Matching Grant', 0, 'match',
+            'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
+          )
+        `).run(
+          `match_${donationId}`,
+          insertedSeq,
+          matchAllocated,
+          `Match applied on restore of pledge ${donationId}`,
+          now
+        );
+      }
+    }
+
+    db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
+  })();
+
+  return insertedSeq;
+}
+
+/**
  * Hold a donation from stage projection (1-click hold).
  */
 export function holdDonation(db: Database, donationId: string, heldBy?: string, reason?: string): void {
@@ -764,7 +887,6 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
         control_pin = ?,
         milestones_json = ?,
         odometer_floor_cents = ?,
-        confetti_trigger = ?,
         theme_preset = ?,
         brand_hue = ?,
         brand_chroma = ?,
@@ -772,7 +894,6 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
         brand_radius_px = ?,
         major_gift_threshold_cents = ?,
         stage_delay_ms = ?,
-        confetti_on_milestone = ?,
         countdown_seconds = ?,
         timer_status = ?,
         timer_ends_at = ?,
@@ -780,6 +901,21 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
         embed_media_url = ?,
         trust_badge_text = ?,
         pinned_donation_id = ?,
+        logo_url = ?,
+        background_style = ?,
+        bar_color = ?,
+        show_qr = ?,
+        show_recent_donations = ?,
+        show_live_indicator = ?,
+        show_goal = ?,
+        stage_message = ?,
+        stage_message_visible = ?,
+        feature_timer = ?,
+        feature_card_number = ?,
+        feature_table_number = ?,
+        bloomerang_api_key = ?,
+        bloomerang_last_sync_at = ?,
+        bloomerang_last_error = ?,
         settings_seq = ?,
         updated_at = ?
     WHERE id = 1
@@ -803,7 +939,6 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
     updated.control_pin,
     updated.milestones_json,
     updated.odometer_floor_cents,
-    updated.confetti_trigger,
     updated.theme_preset,
     updated.brand_hue,
     updated.brand_chroma,
@@ -811,7 +946,6 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
     updated.brand_radius_px,
     updated.major_gift_threshold_cents,
     updated.stage_delay_ms,
-    updated.confetti_on_milestone,
     updated.countdown_seconds ?? 300,
     updated.timer_status || "stopped",
     updated.timer_ends_at ?? null,
@@ -819,6 +953,21 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
     updated.embed_media_url || "",
     updated.trust_badge_text || "501(c)(3) Tax-Deductible Contribution",
     updated.pinned_donation_id ?? null,
+    updated.logo_url || "",
+    updated.background_style || "plain",
+    updated.bar_color || "",
+    updated.show_qr ?? 1,
+    updated.show_recent_donations ?? 1,
+    updated.show_live_indicator ?? 1,
+    updated.show_goal ?? 1,
+    updated.stage_message || "",
+    updated.stage_message_visible ?? 0,
+    updated.feature_timer ?? 0,
+    updated.feature_card_number ?? 0,
+    updated.feature_table_number ?? 0,
+    updated.bloomerang_api_key || "",
+    updated.bloomerang_last_sync_at ?? null,
+    updated.bloomerang_last_error || "",
     updated.settings_seq,
     now
   );

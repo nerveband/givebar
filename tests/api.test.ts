@@ -83,7 +83,7 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
     expect(data2.card_number).toBe("0777");
   });
 
-  test("POST /api/control actions: freeze, override, confetti, match", async () => {
+  test("POST /api/control actions: freeze, unfreeze, match", async () => {
     // 1. Freeze Screen
     const freezeReq = new Request("http://localhost:3000/api/control", {
       method: "POST",
@@ -93,29 +93,35 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
     const freezeRes = await handleControlRequest(freezeReq, db);
     expect(freezeRes.status).toBe(200);
 
-    // 2. Set Manual Override Total
-    const overrideReq = new Request("http://localhost:3000/api/control", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "set_override", override_cents: 125000000, pin: "9999" })
-    });
-    const overrideRes = await handleControlRequest(overrideReq, db);
-    expect(overrideRes.status).toBe(200);
-
     // Verify in stage state
     const stageRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db);
     const stageData = await stageRes.json();
-    expect(stageData.total_raised_cents).toBe(125000000);
     expect(stageData.is_frozen).toBe(true);
 
-    // 3. Trigger Confetti
-    const confettiReq = new Request("http://localhost:3000/api/control", {
+    // 2. Unfreeze Screen
+    const unfreezeReq = new Request("http://localhost:3000/api/control", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "trigger_confetti", pin: "9999" })
+      body: JSON.stringify({ action: "unfreeze", pin: "9999" })
     });
-    const confettiRes = await handleControlRequest(confettiReq, db);
-    expect(confettiRes.status).toBe(200);
+    const unfreezeRes = await handleControlRequest(unfreezeReq, db);
+    expect(unfreezeRes.status).toBe(200);
+
+    // 3. Set Match Grant
+    const matchReq = new Request("http://localhost:3000/api/control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "set_match",
+        is_active: true,
+        total_cents: 10000000,
+        ratio: 1.0,
+        sponsor_title: "Anonymous Matching Sponsor",
+        pin: "9999"
+      })
+    });
+    const matchRes = await handleControlRequest(matchReq, db);
+    expect(matchRes.status).toBe(200);
   });
 
   test("GET /api/export/csv generates RFC 4180 compliant auditable export", async () => {

@@ -189,6 +189,9 @@ class RollingOdometer {
     this.currentCents = effectiveCents;
     this.updateReels(this.formatAmount(this.currentCents), true);
   }
+  update(newCents, opts = {}) {
+    return this.set(newCents, opts);
+  }
 }
 
 // Export for browser global

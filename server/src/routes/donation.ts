@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { recordDonation, amendDonation, voidDonation, getEventState, CardSerialCollisionError, MajorGiftConfirmationRequiredError, type CreateDonationInput } from "../ledger";
+import { recordDonation, amendDonation, voidDonation, restoreDonation, getEventState, CardSerialCollisionError, MajorGiftConfirmationRequiredError, type CreateDonationInput } from "../ledger";
 export async function handleDonationRequest(req: Request, db: Database, pathParts: string[]): Promise<Response> {
   const method = req.method.toUpperCase();
 
@@ -123,6 +123,19 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to amend donation";
       return Response.json({ error: "AMEND_FAILED", message }, { status: 400 });
+    }
+  }
+
+  // Route: POST /api/donation/:id/restore
+  if (method === "POST" && pathParts.length === 4 && pathParts[3] === "restore") {
+    const donationId = pathParts[2];
+    try {
+      const body = await req.json().catch(() => ({})) as { entered_by?: string; reason?: string };
+      const seq = restoreDonation(db, donationId, body.entered_by, body.reason);
+      return Response.json({ ok: true, seq, donation_id: donationId, restored: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to restore donation";
+      return Response.json({ error: "RESTORE_FAILED", message }, { status: 400 });
     }
   }
 

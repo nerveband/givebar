@@ -1,5 +1,5 @@
 import { initDatabase } from "./db";
-import { handleStateRequest } from "./routes/state";
+import { handleStateRequest, handleStateStreamRequest } from "./routes/state";
 import { handleDonationRequest } from "./routes/donation";
 import { handleControlRequest } from "./routes/control";
 import { handleExportCSV } from "./routes/export";
@@ -82,6 +82,9 @@ export const server = Bun.serve({
       const parts = pathname.split("/").filter(Boolean); // ['api', 'state'] etc.
 
       if (parts[1] === "state") {
+        if (parts[2] === "stream") {
+          return handleStateStreamRequest(req, db);
+        }
         return handleStateRequest(req, db);
       }
 
@@ -117,24 +120,32 @@ export const server = Bun.serve({
       return serveStaticFile("client/public/index.html");
     }
 
-    if (pathname === "/stage" || pathname === "/stage.html") {
+    if (pathname === "/chart" || pathname === "/chart.html" || pathname === "/stage" || pathname === "/stage.html") {
       return serveStaticFile("client/public/stage.html");
     }
 
-    if (pathname === "/entry" || pathname === "/entry.html") {
-      return serveStaticFile("client/public/entry.html");
-    }
-
-    if (pathname === "/control" || pathname === "/control.html") {
+    if (pathname === "/donations" || pathname === "/donations.html" || pathname === "/control" || pathname === "/control.html") {
       return serveStaticFile("client/public/control.html");
     }
 
-    if (pathname === "/emcee" || pathname === "/emcee.html") {
+    if (pathname === "/add" || pathname === "/add.html" || pathname === "/entry" || pathname === "/entry.html") {
+      return serveStaticFile("client/public/entry.html");
+    }
+
+    if (pathname === "/presenter" || pathname === "/presenter.html" || pathname === "/emcee" || pathname === "/emcee.html") {
       return serveStaticFile("client/public/emcee.html");
     }
 
-    if (pathname === "/flyer" || pathname === "/flyer.html" || pathname === "/placard") {
-      return serveStaticFile("client/public/flyer.html");
+    if (pathname === "/settings" || pathname === "/settings.html") {
+      return serveStaticFile("client/public/settings.html");
+    }
+
+    if (pathname === "/testing" || pathname === "/testing.html") {
+      return serveStaticFile("client/public/testing.html");
+    }
+
+    if (pathname === "/history" || pathname === "/history.html") {
+      return serveStaticFile("client/public/history.html");
     }
 
     // --- Static Asset Serving (CSS, JS, Assets) ---

@@ -230,7 +230,6 @@ ALTER TABLE event_state ADD COLUMN brand_accent_hex         TEXT    DEFAULT '';
 ALTER TABLE event_state ADD COLUMN brand_radius_px          INTEGER DEFAULT 14;
 ALTER TABLE event_state ADD COLUMN major_gift_threshold_cents INTEGER DEFAULT 950000;
 ALTER TABLE event_state ADD COLUMN stage_delay_ms           INTEGER DEFAULT 8000;
-ALTER TABLE event_state ADD COLUMN confetti_on_milestone    INTEGER DEFAULT 1;
 ALTER TABLE event_state ADD COLUMN settings_seq             INTEGER DEFAULT 1;
 
 CREATE TABLE milestone (
@@ -421,7 +420,7 @@ Three tabs (`role="tablist"`, roving tabindex, `?tab=` deep-link) plus a **persi
 
 ```
 Total Raised $105,000 · 21% of $500,000 · ● Live Connected
-[ Pause Ballroom Screen ]  [ Launch Stage Confetti ]  [ Resync Ballroom Total ]
+[ Pause Ballroom Screen ]  [ Resync Ballroom Total ]
 ⚠ Ballroom screen is $500,000 above the verified total.  [ Resync Ballroom Total ]   ← only when drift ≠ 0
 ─────────────────────────────────────────────────────────────────────────────
  Live Stage Queue │ Donation List │ Event Setup
@@ -463,7 +462,7 @@ Below the fold: recent gifts and top gifts, as reference. Gated behind the entry
 | Group | Fields | Live effect |
 |---|---|---|
 | **Event Identity** | Title, Subtitle, Donation link (QR target) | Stage header + podium + QR regenerate |
-| **Goal & Milestones** | Goal dollars; milestone rows (25/50/75/100 % presets, editable label + %, add/remove/reorder); Celebrate with confetti automatically | Stage pips, podium gap, auto-confetti |
+| **Goal & Milestones** | Goal dollars; milestone rows (25/50/75/100 % presets, editable label + %, add/remove/reorder) | Stage pips, podium gap |
 | **Look & Feel** | Champagne Gold / Royal Sapphire / Emerald Green / Custom HEX; corner roundness slider | **All four surfaces re-token within 1 s** |
 | **Volunteer Quick Amounts** | Up to 6 tiers, dollar + label, drag to reorder, Custom always last | `/entry` preset grid |
 | **Matching Gift** | Sponsor name, pool $, ratio (1:1 / 2:1 / custom), Active toggle | Stage banner, podium badge, match engine |
@@ -499,11 +498,10 @@ Applies to every `<title>`, heading, button, badge, empty state, error, tooltip,
 | Clerk / entered_by | **Volunteer** |
 | `⚡ Rapid Burst (7 Pledges)` | **Test 7-Gift Burst** |
 | `⚠️ Inject Typo (Test Yank)` | **Add a Typo Gift (practise Hold)** |
-| `🎉 Trigger Confetti Burst` | **Launch Stage Confetti** |
 | Pledge Value (USD) | **How much?** |
 | Donor Legal Name * | **Donor name** |
 
-**Emoji are stripped from every button label** (17 occurrences). Emoji survive only as decorative `aria-hidden` glyphs in the confetti particle set. Error copy states what happened, what it means, and what to do next — never a raw exception string, which `postControl()` currently `alert()`s straight to the AV tech.
+**Emoji are stripped from every button label** (17 occurrences). Error copy states what happened, what it means, and what to do next — never a raw exception string, which `postControl()` currently `alert()`s straight to the AV tech.
 
 ---
 
@@ -606,7 +604,7 @@ Each phase is independently shippable and independently verifiable.
 ### Phase 5 — Copy & accessibility
 - **T5.1** Terminology sweep (§8) across HTML, JS, server strings, README, console banner.
 - **T5.2** Strip emoji from all action labels.
-- **T5.3** WCAG 2.2 AA pass: landmarks, heading order, labels, focus visibility (`:focus-visible` ring ≥ 2 px, ≥ 3:1), focus traps in modals, target sizes, `prefers-reduced-motion` for odometer/confetti/toast, `aria-live="polite"` on the live total (`assertive` on the guardrail).
+- **T5.3** WCAG 2.2 AA pass: landmarks, heading order, labels, focus visibility (`:focus-visible` ring ≥ 2 px, ≥ 3:1), focus traps in modals, target sizes, `prefers-reduced-motion` for odometer/toast, `aria-live="polite"` on the live total (`assertive` on the guardrail).
 - **Exit:** keyboard-only run of the full pledge → hold → void flow; automated axe pass; manual screen-reader check of `/entry` and `/control`.
 
 ### Phase 6 — Infrastructure

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>History — Givebar</title>
+  <link rel="stylesheet" href="css/app.css?v=5.0.0">
+  <style>
+    .timeline-wrap {
+      position: relative;
+      padding-left: 28px;
+      max-width: 860px;
+    }
+
+    /* Continuous vertical timeline ruler */
+    .timeline-wrap::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 14px;
+      bottom: 14px;
+      width: 2px;
+      background: #27282f;
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: var(--space-4);
+      background: #16171b;
+      border: 1px solid #25262c;
+      border-radius: var(--brand-radius);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      transition: border-color 0.12s ease;
+    }
+
+    .timeline-item:hover {
+      border-color: #383a42;
+    }
+
+    /* Square timeline node markers */
+    .timeline-node {
+      position: absolute;
+      left: -28px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 10px;
+      height: 10px;
+      background: #71747a;
+      border-radius: 2px;
+    }
+
+    .timeline-item:first-child .timeline-node {
+      background: #111215;
+      border: 2px solid #d4a359;
+      width: 10px;
+      height: 10px;
+    }
+
+    .timeline-main-content {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .timeline-primary-line {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      font-size: var(--text-sm);
+      color: #f4f5f6;
+      flex-wrap: wrap;
+    }
+
+    .timeline-action-tag {
+      font-weight: 800;
+      color: #f4f5f6;
+      letter-spacing: -0.01em;
+    }
+
+    .timeline-action-tag.added { color: #f4f5f6; }
+    .timeline-action-tag.edited { color: #d4a359; }
+    .timeline-action-tag.deleted { color: #f87171; }
+    .timeline-action-tag.restored { color: #4ade80; }
+
+    .timeline-sep {
+      color: #44464e;
+      font-weight: 300;
+    }
+
+    .timeline-donor {
+      font-weight: 600;
+      color: #f4f5f6;
+    }
+
+    .timeline-amount {
+      font-weight: 800;
+      color: #f4f5f6;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .timeline-sub-line {
+      font-size: var(--text-xs);
+      color: #88888e;
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+
+    .btn-timeline-action {
+      background: transparent;
+      border: none;
+      color: #88888e;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 4px 8px;
+      border-radius: var(--brand-radius);
+      font-family: var(--font-sans);
+      transition: color 0.12s ease;
+      white-space: nowrap;
+    }
+
+    .btn-timeline-action:hover {
+      color: #d4a359;
+      background: #202126;
+    }
+
+    /* Filter Strip */
+    .filter-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      margin-bottom: var(--space-5);
+      max-width: 860px;
+    }
+
+    .filter-chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .filter-chip {
+      background: #18191d;
+      border: 1px solid #282930;
+      border-radius: var(--brand-radius);
+      color: #88888e;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      font-family: var(--font-sans);
+    }
+
+    .filter-chip:hover {
+      color: #f4f5f6;
+      border-color: #383a42;
+    }
+
+    .filter-chip.active {
+      background: #22232a;
+      color: #ffffff;
+      border-color: #d4a359;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ops-shell">
+    <!-- Left Navigation Sidebar -->
+    <aside class="ops-sidebar">
+      <div class="ops-brand">
+        <div class="ops-brand-title">Givebar</div>
+        <div class="ops-brand-sub">Live Gala Fundraising</div>
+      </div>
+      <nav class="ops-nav" aria-label="Main Navigation">
+        <a href="/" class="ops-nav-item">Home</a>
+        <a href="/chart" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/donations" class="ops-nav-item">Manage Donations</a>
+        <a href="/add" class="ops-nav-item">Add Donation</a>
+        <a href="/presenter" class="ops-nav-item">Presenter View</a>
+        <a href="/settings" class="ops-nav-item">Settings</a>
+        <a href="/testing" class="ops-nav-item">Testing</a>
+        <a href="/history" class="ops-nav-item active">History</a>
+      </nav>
+    </aside>
+
+    <!-- Main Content Panel -->
+    <main class="ops-main">
+      <header style="margin-bottom: var(--space-5);">
+        <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0 0 6px 0; color: #f4f5f6; letter-spacing: -0.02em;">
+          History
+        </h1>
+        <p style="font-size: var(--text-sm); color: #88888e; margin: 0; line-height: 1.5;">
+          Immutable ledger timeline of added, edited, deleted, and restored transactions.
+        </p>
+      </header>
+
+      <!-- Filter Controls Row -->
+      <div class="filter-strip">
+        <div class="filter-chips" role="group" aria-label="Filter by action">
+          <button type="button" class="filter-chip active" data-filter="all">All</button>
+          <button type="button" class="filter-chip" data-filter="create">Added</button>
+          <button type="button" class="filter-chip" data-filter="amend">Edited</button>
+          <button type="button" class="filter-chip" data-filter="void">Deleted</button>
+          <button type="button" class="filter-chip" data-filter="restore">Restored</button>
+        </div>
+
+        <div class="search-wrap">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+            <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/>
+          </svg>
+          <input type="search" id="history-search" class="search-input" placeholder="Search donor or user" aria-label="Search history">
+        </div>
+      </div>
+
+      <!-- Dense Scannable Timeline -->
+      <div class="timeline-wrap" id="history-timeline">
+        <!-- Keyed timeline rows render here -->
+        <div style="color: #88888e; font-size: var(--text-sm); padding: var(--space-4) 0;">
+          Loading history timeline...
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="js/history.js?v=5.0.0"></script>
+</body>
+</html>

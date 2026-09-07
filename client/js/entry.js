@@ -1,520 +1,707 @@
 /**
- * Givebar — Volunteer Mobile Pledge Pad Controller
- * 2-Stage Progressive Input, Dual-Mode Accumulator, 8s Undo Toast, Offline Outbox
+ * Givebar — Add Donation Controller
+ * Single-screen pledge entry, direct numeric input (desktop) + 56px thumb keypad (mobile),
+ * accessible Anonymous switch with confirmation modal, dynamic 7-tier presets from Settings,
+ * inline recent entries with delivery state & row-level undo, guarded offline outbox.
  */
 
 (function () {
-  const basePath = window.location.pathname.replace(/\/[^/]*$/, '');
-  const API_BASE = (basePath === '/' || basePath === '') ? '/api' : `${basePath}/api`;
+  'use strict';
 
+  // State
   let volunteerId = localStorage.getItem('givebar_volunteer_id');
   if (!volunteerId) {
-    volunteerId = `V-${Math.floor(Math.random() * 899 + 100)}`;
+    volunteerId = `User-${Math.floor(Math.random() * 899 + 100)}`;
     localStorage.setItem('givebar_volunteer_id', volunteerId);
   }
-  let activeDonationId = generateUUID();
-  let pendingSubmission = null;
-  let undoTimeout = null;
-  let activeUndoDonationId = null;
-  let isFlushing = false;
-  let isPresetSelected = false;
-  let majorGiftThresholdCents = 950000;
-  let outbox = JSON.parse(localStorage.getItem('givebar_outbox') || '[]');
 
-  function saveOutbox() {
-    localStorage.setItem('givebar_outbox', JSON.stringify(outbox));
+  let currentAmountCents = 50000; // $500 default
+  let isAnonymousState = false;
+  let majorGiftThresholdCents = 950000; // $9,500
+  let isFlushing = false;
+  let outbox = JSON.parse(localStorage.getItem('givebar_outbox') || '[]');
+  let sessionRecentEntries = JSON.parse(localStorage.getItem('givebar_session_entries') || '[]');
+  let pendingMajorGiftPayload = null;
+  let pendingAnonTargetState = false;
+
+  // DOM Elements
+  const amountInput = document.getElementById('amount-numeric-input');
+  const presetGrid = document.getElementById('preset-grid');
+  const donorNameInput = document.getElementById('donor-name-input');
+  const donorPhoneticInput = document.getElementById('donor-phonetic-input');
+  const cardNumberInput = document.getElementById('card-number-input');
+  const tableNumberInput = document.getElementById('table-number-input');
+  const fieldCardWrap = document.getElementById('field-card-number-wrap');
+  const fieldTableWrap = document.getElementById('field-table-number-wrap');
+  const btnTogglePronunciation = document.getElementById('btn-toggle-pronunciation');
+  const pronunciationToggleLabel = document.getElementById('pronunciation-toggle-label');
+  const fieldDonorPhoneticWrap = document.getElementById('field-donor-phonetic-wrap');
+  const mobileKeypad = document.getElementById('mobile-keypad');
+  const btnSubmit = document.getElementById('btn-submit-add');
+  const errorBanner = document.getElementById('add-error-banner');
+  const outboxStatus = document.getElementById('outbox-status');
+  const outboxCount = document.getElementById('outbox-count');
+  const recentEntriesList = document.getElementById('recent-entries-list');
+  const recentCountLabel = document.getElementById('recent-count-label');
+
+  // Anonymous Switch Elements
+  const anonSwitchContainer = document.getElementById('anon-switch-container');
+  const anonSwitchBtn = document.getElementById('anon-switch-btn');
+  const anonStatusPill = document.getElementById('anon-status-pill');
+
+  // Anonymous Confirm Modal Elements
+  const anonConfirmModal = document.getElementById('anon-confirm-modal');
+  const anonDialogTitle = document.getElementById('anon-dialog-title');
+  const anonDialogBody = document.getElementById('anon-dialog-body');
+  const btnCancelAnon = document.getElementById('btn-cancel-anon');
+  const btnConfirmAnon = document.getElementById('btn-confirm-anon');
+
+  // Guardrail Modal Elements
+  const guardrailModal = document.getElementById('major-gift-modal');
+  const guardrailBody = document.getElementById('guardrail-body');
+  const btnCancelGuardrail = document.getElementById('btn-cancel-guardrail');
+  const btnConfirmGuardrail = document.getElementById('btn-confirm-guardrail');
+
+  function init() {
+    setupAmountInputs();
+    setupPresets();
+    setupMobileKeypad();
+    setupAnonymousSwitch();
+    setupPronunciationDisclosure();
+    setupSubmission();
+    setupGuardrailModal();
+    updateUI();
+    renderRecentEntries();
+    updateOutboxIndicator();
+
+    // Data sync
+    fetchState();
+    setInterval(fetchState, 3000);
+    setInterval(flushOutbox, 3000);
   }
 
-  function generateUUID() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
+  // --- State Sync (Features & 7-tier Ask Tiers) ---
+  async function fetchState() {
+    try {
+      const res = await fetch('/api/state?role=entry', {
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (data.major_gift_threshold_cents) {
+        majorGiftThresholdCents = data.major_gift_threshold_cents;
+      }
+
+      // Feature flags
+      if (fieldCardWrap) {
+        fieldCardWrap.style.display = data.feature_card_number ? 'block' : 'none';
+      }
+      if (fieldTableWrap) {
+        fieldTableWrap.style.display = data.feature_table_number ? 'block' : 'none';
+      }
+
+      // Dynamic ask tiers from server (full ladder driven by Settings)
+      if (Array.isArray(data.ask_tiers) && data.ask_tiers.length > 0 && presetGrid) {
+        const tiers = data.ask_tiers;
+        const existingData = Array.from(presetGrid.children).map(c => c.getAttribute('data-amount'));
+        const newData = tiers.map(t => String(Math.floor(t.cents / 100)));
+
+        if (existingData.join(',') !== newData.join(',')) {
+          presetGrid.innerHTML = tiers.map(t => {
+            const dollars = Math.floor(t.cents / 100);
+            return `<button type="button" class="preset-chip ${currentAmountCents === t.cents ? 'active' : ''}" data-amount="${dollars}">$${dollars.toLocaleString('en-US')}</button>`;
+          }).join('');
+          setupPresets();
+        }
+      }
+
+      // Ensure recent entries populate initial rows
+      if (sessionRecentEntries.length < 3) {
+        try {
+          const stRes = await fetch('/api/state?role=stage', { headers: { 'Cache-Control': 'no-cache' } });
+          if (stRes.ok) {
+            const stData = await stRes.json();
+            if (Array.isArray(stData.chyrons) && stData.chyrons.length > 0 && sessionRecentEntries.length < 3) {
+              const existingIds = new Set(sessionRecentEntries.map(e => e.id));
+              stData.chyrons.forEach(c => {
+                if (!existingIds.has(c.donation_id) && sessionRecentEntries.length < 3) {
+                  existingIds.add(c.donation_id);
+                  sessionRecentEntries.push({
+                    id: c.donation_id,
+                    donor: c.display_name || 'Anonymous Supporter',
+                    amountCents: c.amount_cents,
+                    createdAt: c.created_at || Date.now(),
+                    status: 'confirmed',
+                    isAnonymous: Boolean(c.is_anonymous)
+                  });
+                }
+              });
+              renderRecentEntries();
+            }
+          }
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('[Givebar Entry] State poll failed:', err);
     }
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-      const r = (Math.random() * 16) | 0;
-      const v = c === 'x' ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
+  }
+
+  // --- Anonymous Accessible Switch with Confirmation ---
+  function setupAnonymousSwitch() {
+    if (anonSwitchBtn) {
+      anonSwitchBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerAnonymousToggle();
+      });
+
+      anonSwitchBtn.addEventListener('keydown', (e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          triggerAnonymousToggle();
+        }
+      });
+    }
+
+    if (anonSwitchContainer) {
+      anonSwitchContainer.addEventListener('click', (e) => {
+        // If click was not on the button itself, toggle
+        if (e.target !== anonSwitchBtn && !anonSwitchBtn?.contains(e.target)) {
+          triggerAnonymousToggle();
+        }
+      });
+    }
+
+    // Modal listeners
+    if (btnCancelAnon) {
+      btnCancelAnon.addEventListener('click', closeAnonModal);
+    }
+
+    if (btnConfirmAnon) {
+      btnConfirmAnon.addEventListener('click', () => {
+        applyAnonymousState(pendingAnonTargetState);
+        closeAnonModal();
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && anonConfirmModal && anonConfirmModal.style.display !== 'none') {
+        closeAnonModal();
+      }
     });
   }
 
-  function init() {
-    const clerkBadge = document.getElementById('clerk-badge');
-    if (clerkBadge) clerkBadge.textContent = volunteerId;
-
-    setupNumpad();
-    setupTiers();
-    setupStageNavigation();
-    setupSubmission();
-    setupUndo();
-    setupGuardrailModal();
-
-    startPolling();
-    flushOutbox();
+  function triggerAnonymousToggle() {
+    const targetState = !isAnonymousState;
+    promptAnonymousConfirmation(targetState);
   }
 
-  // --- Numpad & Amount Controls ---
-  function updateAmountDisplay() {
-    const displayEl = document.getElementById('amount-display');
-    const confirmEl = document.getElementById('confirm-amount-text');
-    const submitBtn = document.getElementById('btn-submit-pledge');
+  function promptAnonymousConfirmation(targetState) {
+    pendingAnonTargetState = targetState;
 
-    const dollars = Math.floor(currentAmountCents / 100);
-    const formatted = `$${dollars.toLocaleString('en-US')}`;
+    if (targetState) {
+      // Turning ON
+      if (anonDialogTitle) anonDialogTitle.textContent = 'Make this donation anonymous?';
+      if (anonDialogBody) {
+        anonDialogBody.textContent = "The donor's name will not appear on the Fullscreen Bar Chart or Presenter View and will show as Anonymous instead.";
+      }
+      if (btnConfirmAnon) {
+        btnConfirmAnon.textContent = 'Make Anonymous';
+        btnConfirmAnon.className = 'btn-primary';
+      }
+    } else {
+      // Turning OFF
+      if (anonDialogTitle) anonDialogTitle.textContent = 'Show donor name?';
+      if (anonDialogBody) {
+        anonDialogBody.textContent = "The donor's name will appear publicly on the Fullscreen Bar Chart and Presenter View.";
+      }
+      if (btnConfirmAnon) {
+        btnConfirmAnon.textContent = 'Show Name';
+        btnConfirmAnon.className = 'btn-primary';
+      }
+    }
 
-    if (displayEl) displayEl.textContent = formatted;
-    if (confirmEl) confirmEl.textContent = formatted;
-    if (submitBtn) submitBtn.textContent = `Record Pledge (${formatted}) →`;
+    if (anonConfirmModal) {
+      anonConfirmModal.style.display = 'flex';
+      // Default focus on Cancel per contract
+      if (btnCancelAnon) btnCancelAnon.focus();
+    }
   }
 
-  function setupNumpad() {
-    const numpad = document.getElementById('numpad');
-    if (!numpad) return;
+  function closeAnonModal() {
+    if (anonConfirmModal) anonConfirmModal.style.display = 'none';
+    pendingAnonTargetState = isAnonymousState;
+    if (anonSwitchBtn) anonSwitchBtn.focus();
+  }
 
-    numpad.addEventListener('click', (e) => {
-      const btn = e.target.closest('.numpad-btn');
+  function applyAnonymousState(newState) {
+    isAnonymousState = Boolean(newState);
+    if (anonSwitchBtn) {
+      anonSwitchBtn.setAttribute('aria-checked', isAnonymousState ? 'true' : 'false');
+    }
+    if (anonStatusPill) {
+      anonStatusPill.textContent = isAnonymousState ? 'ON' : 'OFF';
+    }
+    if (anonSwitchContainer) {
+      anonSwitchContainer.classList.toggle('is-anon', isAnonymousState);
+    }
+  }
+
+  // Programmatic reset (never fires confirmation)
+  function resetAnonymousState() {
+    isAnonymousState = false;
+    if (anonSwitchBtn) {
+      anonSwitchBtn.setAttribute('aria-checked', 'false');
+    }
+    if (anonStatusPill) {
+      anonStatusPill.textContent = 'OFF';
+    }
+    if (anonSwitchContainer) {
+      anonSwitchContainer.classList.remove('is-anon');
+    }
+  }
+
+  // --- Compact Name Pronunciation Disclosure ---
+  function setupPronunciationDisclosure() {
+    if (!btnTogglePronunciation || !fieldDonorPhoneticWrap) return;
+
+    btnTogglePronunciation.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isExpanded = btnTogglePronunciation.getAttribute('aria-expanded') === 'true';
+      setPronunciationExpanded(!isExpanded);
+    });
+  }
+
+  function setPronunciationExpanded(expanded) {
+    if (!btnTogglePronunciation || !fieldDonorPhoneticWrap) return;
+    btnTogglePronunciation.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    fieldDonorPhoneticWrap.style.display = expanded ? 'block' : 'none';
+    if (pronunciationToggleLabel) {
+      pronunciationToggleLabel.textContent = expanded ? '− Remove pronunciation' : '+ Add pronunciation';
+    }
+    if (expanded && donorPhoneticInput) {
+      donorPhoneticInput.focus();
+    }
+  }
+
+  // --- Amount & Keypad Handling ---
+  function setupAmountInputs() {
+    if (amountInput) {
+      amountInput.addEventListener('input', () => {
+        const raw = amountInput.value.replace(/[^0-9]/g, '');
+        const dollars = raw ? parseInt(raw, 10) : 0;
+        currentAmountCents = dollars * 100;
+        updateUI();
+        syncPresetHighlight();
+      });
+
+      amountInput.addEventListener('blur', () => {
+        amountInput.value = formatCurrency(currentAmountCents);
+      });
+
+      amountInput.addEventListener('focus', () => {
+        const dollars = Math.floor(currentAmountCents / 100);
+        amountInput.value = dollars > 0 ? String(dollars) : '';
+      });
+    }
+  }
+
+  function setupPresets() {
+    if (!presetGrid) return;
+    const chips = presetGrid.querySelectorAll('.preset-chip');
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        const dollars = parseInt(chip.getAttribute('data-amount') || '500', 10);
+        currentAmountCents = dollars * 100;
+        updateUI();
+        syncPresetHighlight();
+        if (donorNameInput) donorNameInput.focus();
+      });
+    });
+  }
+
+  function syncPresetHighlight() {
+    if (!presetGrid) return;
+    const currentDollars = Math.floor(currentAmountCents / 100);
+    presetGrid.querySelectorAll('.preset-chip').forEach(chip => {
+      const chipDollars = parseInt(chip.getAttribute('data-amount') || '0', 10);
+      chip.classList.toggle('active', chipDollars === currentDollars);
+    });
+  }
+
+  function setupMobileKeypad() {
+    if (!mobileKeypad) return;
+
+    mobileKeypad.addEventListener('click', e => {
+      const btn = e.target.closest('.keypad-key');
       if (!btn) return;
 
       const key = btn.getAttribute('data-key');
       let currentDollars = Math.floor(currentAmountCents / 100);
 
-      if (isPresetSelected) {
-        if (/^\d+$/.test(key)) {
-          currentDollars = parseInt(key, 10);
-        } else if (key === '00') {
-          currentDollars = 0;
-        } else if (key === 'backspace') {
-          currentDollars = 0;
-        }
-        isPresetSelected = false;
-        clearPresetHighlights();
-      } else {
-        if (key === 'backspace') {
-          const str = currentDollars.toString();
-          currentDollars = str.length > 1 ? parseInt(str.slice(0, -1), 10) : 0;
-        } else if (key === '00') {
-          currentDollars = Math.min(currentDollars * 100, 10000000);
-        } else if (/^\d+$/.test(key)) {
-          const digit = parseInt(key, 10);
-          currentDollars = Math.min(currentDollars * 10 + digit, 10000000);
-        }
+      if (key === 'backspace') {
+        const str = currentDollars.toString();
+        currentDollars = str.length > 1 ? parseInt(str.slice(0, -1), 10) : 0;
+      } else if (key === '.') {
+        // Whole dollars only for live gala pledge pad
+      } else if (/^\d$/.test(key)) {
+        const digit = parseInt(key, 10);
+        currentDollars = Math.min(currentDollars * 10 + digit, 5000000); // $5M max
       }
 
       currentAmountCents = currentDollars * 100;
-      updateAmountDisplay();
+      updateUI();
+      syncPresetHighlight();
     });
   }
 
-  function clearPresetHighlights() {
-    document.querySelectorAll('#tier-grid .tier-btn').forEach(b => {
-      b.classList.toggle('selected', b.getAttribute('data-cents') === '0');
-    });
-  }
-
-  function setupTiers() {
-    const tierGrid = document.getElementById('tier-grid');
-    if (!tierGrid) return;
-
-    tierGrid.addEventListener('click', (e) => {
-      const btn = e.target.closest('.tier-btn');
-      if (!btn) return;
-
-      document.querySelectorAll('#tier-grid .tier-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-
-      const cents = parseInt(btn.getAttribute('data-cents') || '0', 10);
-      if (cents > 0) {
-        currentAmountCents = cents;
-        isPresetSelected = true;
-      } else {
-        isPresetSelected = false;
-      }
-      updateAmountDisplay();
-    });
-  }
-
-  // --- 2-Stage Progressive Navigation ---
-  function setupStageNavigation() {
-    const nextBtn = document.getElementById('btn-next-step');
-    const backBtn = document.getElementById('btn-back-to-stage-1');
-    const pane1 = document.getElementById('pane-stage-1');
-    const pane2 = document.getElementById('pane-stage-2');
-
-    if (nextBtn) {
-      nextBtn.addEventListener('click', () => {
-        if (currentAmountCents <= 0) {
-          // Highlight amount display
-          const hero = document.querySelector('.amount-hero');
-          if (hero) {
-            hero.style.borderColor = 'var(--color-danger)';
-            setTimeout(() => hero.style.borderColor = '', 1000);
-          }
-          return;
-        }
-
-        pane1.style.display = 'none';
-        pane2.style.display = 'flex';
-
-        // Auto-focus donor name input
-        const nameInput = document.getElementById('input-donor-name');
-        if (nameInput) {
-          setTimeout(() => nameInput.focus(), 50);
-        }
-      });
+  function updateUI() {
+    const formatted = formatCurrency(currentAmountCents);
+    if (amountInput && document.activeElement !== amountInput) {
+      amountInput.value = formatted;
     }
-
-    if (backBtn) {
-      backBtn.addEventListener('click', () => {
-        pane2.style.display = 'none';
-        pane1.style.display = 'flex';
-      });
+    if (btnSubmit) {
+      btnSubmit.textContent = `Add ${formatted}`;
     }
   }
 
-  // --- Submission & Guardrails ---
+  // --- Submission Handling ---
   function setupSubmission() {
-    const submitBtn = document.getElementById('btn-submit-pledge');
-    if (!submitBtn) return;
+    if (btnSubmit) {
+      btnSubmit.addEventListener('click', handleSubmit);
+    }
 
-    submitBtn.addEventListener('click', async () => {
-      const nameInput = document.getElementById('input-donor-name');
-      const donorName = (nameInput ? nameInput.value : '').trim();
-      const phoneticInput = document.getElementById('input-donor-phonetic');
-      const phonetic = (phoneticInput ? phoneticInput.value : '').trim();
-      const isAnon = document.getElementById('input-is-anon')?.checked || false;
-      const cardInput = document.getElementById('input-card-number');
-      const cardNumber = (cardInput ? cardInput.value : '').trim();
-      const tableInput = document.getElementById('input-table-number');
-      const tableNumber = (tableInput ? tableInput.value : '').trim();
-      const notesInput = document.getElementById('input-donor-notes');
-      const notes = (notesInput ? notesInput.value : '').trim();
-      const errorEl = document.getElementById('error-donor-name');
-
-      if (!donorName) {
-        if (errorEl) errorEl.style.display = 'block';
-        if (nameInput) {
-          nameInput.style.borderColor = 'var(--color-danger)';
-          nameInput.focus();
-        }
-        return;
-      }
-
-      if (errorEl) errorEl.style.display = 'none';
-      if (nameInput) nameInput.style.borderColor = '';
-
-      const payload = {
-        donation_id: activeDonationId,
-        amount_cents: currentAmountCents,
-        donor_name: donorName,
-        display_name: isAnon ? 'Anonymous Supporter' : donorName,
-        donor_phonetic: phonetic || null,
-        table_number: tableNumber || null,
-        is_anonymous: isAnon,
-        payment_method: 'pledge',
-        source: 'manual',
-        card_number: cardNumber || null,
-        notes: notes || null,
-        entered_by: volunteerId
-      };
-
-      // Check Major Gift Guardrail (>= $9,500)
-      if (currentAmountCents >= majorGiftThresholdCents) {
-        pendingSubmission = payload;
-        showGuardrailModal(payload);
-      } else {
-        await executeSubmission(payload);
-      }
-    });
-  }
-
-  function showGuardrailModal(payload) {
-    const modal = document.getElementById('guardrail-modal');
-    const amountEl = document.getElementById('guardrail-amount-text');
-    const donorEl = document.getElementById('guardrail-donor-text');
-
-    const dollars = Math.floor(payload.amount_cents / 100);
-    if (amountEl) amountEl.textContent = `$${dollars.toLocaleString('en-US')}`;
-    if (donorEl) donorEl.textContent = payload.donor_name;
-
-    if (modal) modal.style.display = 'flex';
-  }
-
-  function setupGuardrailModal() {
-    const modal = document.getElementById('guardrail-modal');
-    const confirmBtn = document.getElementById('btn-guardrail-confirm');
-    const cancelBtn = document.getElementById('btn-guardrail-cancel');
-
-    if (confirmBtn) {
-      confirmBtn.addEventListener('click', async () => {
-        if (modal) modal.style.display = 'none';
-        if (pendingSubmission) {
-          const item = { ...pendingSubmission, confirmed_major_gift: true };
-          pendingSubmission = null;
-          await executeSubmission(item);
+    if (donorNameInput) {
+      donorNameInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleSubmit();
         }
       });
     }
-
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => {
-        if (modal) modal.style.display = 'none';
-        pendingSubmission = null;
-      });
-    }
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modal && modal.style.display === 'flex') {
-        modal.style.display = 'none';
-        pendingSubmission = null;
-      }
-    });
   }
 
-  async function executeSubmission(payload) {
-    const collisionCard = document.getElementById('collision-card');
-    if (collisionCard) collisionCard.style.display = 'none';
+  async function handleSubmit() {
+    clearError();
+
+    const donorName = (donorNameInput?.value || '').trim();
+
+    if (currentAmountCents <= 0) {
+      showError('Please enter a valid donation amount.');
+      if (amountInput) amountInput.focus();
+      return;
+    }
+
+    if (!donorName && !isAnonymousState) {
+      showError('Please enter donor name, or mark as Anonymous.');
+      if (donorNameInput) donorNameInput.focus();
+      return;
+    }
+
+    const payload = {
+      donation_id: crypto.randomUUID(),
+      amount_cents: currentAmountCents,
+      donor_name: donorName || 'Anonymous',
+      display_name: isAnonymousState ? 'Anonymous Supporter' : donorName,
+      is_anonymous: isAnonymousState,
+      payment_method: 'pledge',
+      source: 'manual',
+      entered_by: volunteerId,
+      card_number: cardNumberInput?.value?.trim() || undefined,
+      table_number: tableNumberInput?.value?.trim() || undefined,
+      donor_phonetic: donorPhoneticInput?.value?.trim() || undefined,
+      created_at: Date.now()
+    };
+
+    // Major gift guardrail intercept
+    if (currentAmountCents >= majorGiftThresholdCents) {
+      promptMajorGiftGuardrail(payload);
+      return;
+    }
+
+    await dispatchDonation(payload);
+  }
+
+  async function dispatchDonation(payload) {
+    // Optimistically record in local session entries
+    const sessionEntry = {
+      id: payload.donation_id,
+      donor: payload.donor_name,
+      amountCents: payload.amount_cents,
+      createdAt: payload.created_at,
+      status: 'pending',
+      isAnonymous: payload.is_anonymous
+    };
+    addSessionEntry(sessionEntry);
+
+    // Reset inputs immediately without confirmation prompt and return focus to fresh amount without navigation
+    resetFormForNextEntry();
 
     try {
-      const res = await fetch(`${API_BASE}/donation/${payload.donation_id}`, {
+      const res = await fetch(`/api/donation/${payload.donation_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      if (res.status === 409) {
-        const collision = await res.json();
-        // Keep user on Pane 2 and keep input intact
-        const collisionTitle = document.getElementById('collision-title');
-        const collisionDesc = document.getElementById('collision-desc');
-        if (collisionCard && collisionTitle && collisionDesc) {
-          collisionTitle.innerHTML = `<svg class="icon" viewBox="0 0 256 256"><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM120,104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm8,88a12,12,0,1,1,12-12A12,12,0,0,1,128,192Z"/></svg> Card #${collision.card_number} Already Entered`;
-          collisionDesc.textContent = `Entered by ${collision.prior_entered_by || 'another volunteer'}. Please verify physical card.`;
-          collisionCard.style.display = 'block';
-        }
-        return;
-      }
-
       if (res.ok) {
-        resetForm();
-        const pane1 = document.getElementById('pane-stage-1');
-        const pane2 = document.getElementById('pane-stage-2');
-        if (pane1 && pane2) {
-          pane2.style.display = 'none';
-          pane1.style.display = 'flex';
+        updateSessionEntryStatus(payload.donation_id, 'confirmed');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        if (res.status >= 400 && res.status < 500) {
+          showError(`Submission error (${res.status}): ${data.message || data.error}`);
+          updateSessionEntryStatus(payload.donation_id, 'failed');
+        } else {
+          queueOffline(payload);
         }
-        showUndoToast(payload);
-        return;
       }
-    } catch {
-      // Offline fallback: Queue in outbox
-      outbox.push(payload);
-      saveOutbox();
-      resetForm();
-      const pane1 = document.getElementById('pane-stage-1');
-      const pane2 = document.getElementById('pane-stage-2');
-      if (pane1 && pane2) {
-        pane2.style.display = 'none';
-        pane1.style.display = 'flex';
-      }
+    } catch (err) {
+      console.warn('[Givebar] Network error, queuing offline:', err);
+      queueOffline(payload);
     }
   }
 
-  // --- Outbox Flush Loop (with Mutex) ---
+  function resetFormForNextEntry() {
+    if (donorNameInput) donorNameInput.value = '';
+    resetAnonymousState(); // Silent reset without confirmation modal
+    if (cardNumberInput) cardNumberInput.value = '';
+    if (tableNumberInput) tableNumberInput.value = '';
+    if (donorPhoneticInput) donorPhoneticInput.value = '';
+    setPronunciationExpanded(false);
+
+    // Return focus to fresh amount without navigation
+    if (amountInput) {
+      amountInput.focus();
+      amountInput.select();
+    }
+  }
+
+  // --- Major Gift Guardrail ---
+  function setupGuardrailModal() {
+    if (btnCancelGuardrail) {
+      btnCancelGuardrail.addEventListener('click', () => {
+        if (guardrailModal) guardrailModal.style.display = 'none';
+        pendingMajorGiftPayload = null;
+        if (amountInput) amountInput.focus();
+      });
+    }
+
+    if (btnConfirmGuardrail) {
+      btnConfirmGuardrail.addEventListener('click', async () => {
+        if (!pendingMajorGiftPayload) return;
+        const payload = pendingMajorGiftPayload;
+        payload.confirmed_major_gift = true;
+        if (guardrailModal) guardrailModal.style.display = 'none';
+        pendingMajorGiftPayload = null;
+        await dispatchDonation(payload);
+      });
+    }
+  }
+
+  function promptMajorGiftGuardrail(payload) {
+    pendingMajorGiftPayload = payload;
+    const formatted = formatCurrency(payload.amount_cents);
+
+    if (guardrailBody) {
+      guardrailBody.textContent = `A pledge of ${formatted} from "${payload.donor_name}" exceeds the verification threshold of ${formatCurrency(majorGiftThresholdCents)}. Please confirm this is not an extra-zero typo.`;
+    }
+
+    if (guardrailModal) {
+      guardrailModal.style.display = 'flex';
+      if (btnCancelGuardrail) btnCancelGuardrail.focus();
+    }
+  }
+
+  // --- Offline Outbox with Single In-Flight Guard ---
+  function queueOffline(payload) {
+    if (!outbox.some(i => i.donation_id === payload.donation_id)) {
+      outbox.push(payload);
+      saveOutbox();
+    }
+    updateOutboxIndicator();
+  }
+
+  function saveOutbox() {
+    localStorage.setItem('givebar_outbox', JSON.stringify(outbox));
+  }
+
   async function flushOutbox() {
     if (isFlushing || outbox.length === 0) return;
     isFlushing = true;
 
     try {
-      const queue = [...outbox];
-      for (const item of queue) {
-        const res = await fetch(`${API_BASE}/donation/${item.donation_id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(item)
-        });
+      const itemsToFlush = [...outbox];
+      for (const item of itemsToFlush) {
+        try {
+          const res = await fetch(`/api/donation/${item.donation_id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item)
+          });
 
-        if (res.ok || res.status === 409) {
-          outbox = outbox.filter(i => i.donation_id !== item.donation_id);
-          saveOutbox();
-          if (res.ok) showUndoToast(item);
+          if (res.ok) {
+            outbox = outbox.filter(i => i.donation_id !== item.donation_id);
+            saveOutbox();
+            updateSessionEntryStatus(item.donation_id, 'confirmed');
+          } else if (res.status >= 400 && res.status < 500) {
+            const errData = await res.json().catch(() => ({}));
+            outbox = outbox.filter(i => i.donation_id !== item.donation_id);
+            saveOutbox();
+            showError(`Offline item rejected (${res.status}): ${errData.message || errData.error}`);
+            updateSessionEntryStatus(item.donation_id, 'failed');
+          }
+        } catch {
+          break;
         }
       }
-    } catch {
-      // Network offline
     } finally {
       isFlushing = false;
-    }
-  }
-  // --- 8-Second Floating Undo Toast ---
-  function showUndoToast(item) {
-    lastSubmittedDonation = item;
-    const toast = document.getElementById('undo-toast');
-    const desc = document.getElementById('undo-toast-desc');
-
-    if (!toast || !desc) return;
-
-    const dollars = Math.floor(item.amount_cents / 100);
-    desc.textContent = `$${dollars.toLocaleString('en-US')} — ${item.donor_name}`;
-    toast.style.display = 'flex';
-
-    clearTimeout(undoTimeout);
-    undoTimeout = setTimeout(() => {
-      toast.style.display = 'none';
-      lastSubmittedDonation = null;
-    }, 8000); // 8-second staging window
-  }
-
-  function setupUndo() {
-    const undoBtn = document.getElementById('btn-toast-undo');
-    if (!undoBtn) return;
-
-    undoBtn.addEventListener('click', async () => {
-      if (!lastSubmittedDonation) return;
-
-      const item = lastSubmittedDonation;
-      const toast = document.getElementById('undo-toast');
-      if (toast) toast.style.display = 'none';
-
-      try {
-        const res = await fetch(`${API_BASE}/donation/${item.donation_id}/void`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            entered_by: volunteerId,
-            reason: '1-tap volunteer undo from mobile pad'
-          })
-        });
-
-        if (res.ok) {
-          lastSubmittedDonation = null;
-          pollState();
-        }
-      } catch {
-        // Silently fail if unreachable
-      }
-    });
-  }
-
-  // --- 1-Second State Polling & Theme Sync ---
-  async function pollState() {
-    try {
-      const res = await fetch(`${API_BASE}/state?role=entry&volunteer_id=${encodeURIComponent(volunteerId)}`);
-      const connDot = document.getElementById('conn-dot');
-
-      if (!res.ok) {
-        if (connDot) connDot.style.background = 'var(--color-danger)';
-        return;
-      }
-
-      if (connDot) connDot.style.background = 'var(--color-success)';
-
-      const data = await res.json();
-
-      // Update major gift threshold
-      if (data.major_gift_threshold_cents) {
-        majorGiftThresholdCents = data.major_gift_threshold_cents;
-      }
-
-      // Update live total snippet
-      const totalSnippet = document.getElementById('live-total-snippet');
-      if (totalSnippet && data.total_raised_cents !== undefined) {
-        const dollars = Math.floor(data.total_raised_cents / 100);
-        totalSnippet.textContent = `$${dollars.toLocaleString('en-US')}`;
-      }
-
-      // Apply live theme custom properties
-      if (data.theme) {
-        document.documentElement.style.setProperty('--brand-hue', data.theme.hue);
-        document.documentElement.style.setProperty('--brand-chroma', data.theme.chroma);
-        if (data.theme.radius_px) {
-          document.documentElement.style.setProperty('--brand-radius', `${data.theme.radius_px}px`);
-        }
-      }
-      // Render dynamic ask tiers if supplied
-      if (Array.isArray(data.ask_tiers) && data.ask_tiers.length > 0 && !isPresetSelected && currentAmountCents === 0) {
-        const tierGrid = document.getElementById('tier-grid');
-        if (tierGrid && tierGrid.children.length !== data.ask_tiers.length + 1) {
-          tierGrid.innerHTML = data.ask_tiers.map(t =>
-            `<button type="button" class="tier-btn" data-cents="${t.cents}">${escapeHTML(t.label)}</button>`
-          ).join('') + `<button type="button" class="tier-btn selected" data-cents="0">Custom</button>`;
-          setupTiers();
-        }
-      }
-
-      // Render personal audit log
-      renderPersonalLog(data.personal_log || []);
-    } catch {
-      const connDot = document.getElementById('conn-dot');
-      if (connDot) connDot.style.background = 'var(--color-danger)';
+      updateOutboxIndicator();
     }
   }
 
-  function renderPersonalLog(logs) {
-    const container = document.getElementById('personal-log-container');
-    if (!container) return;
+  function updateOutboxIndicator() {
+    if (!outboxStatus || !outboxCount) return;
+    if (outbox.length > 0) {
+      outboxCount.textContent = outbox.length;
+      outboxStatus.style.display = 'inline-block';
+    } else {
+      outboxStatus.style.display = 'none';
+    }
+  }
 
-    if (logs.length === 0) {
-      container.innerHTML = `
-        <div style="padding: var(--space-4); text-align: center; color: var(--ink-muted); font-size: var(--text-sm);">
-          Awaiting first entry in this session...
+  // --- Recent Entries & Row Undo ---
+  function addSessionEntry(entry) {
+    sessionRecentEntries.unshift(entry);
+    if (sessionRecentEntries.length > 20) {
+      sessionRecentEntries = sessionRecentEntries.slice(0, 20);
+    }
+    localStorage.setItem('givebar_session_entries', JSON.stringify(sessionRecentEntries));
+    renderRecentEntries();
+  }
+
+  function updateSessionEntryStatus(donationId, status) {
+    const entry = sessionRecentEntries.find(e => e.id === donationId);
+    if (entry) {
+      entry.status = status;
+      localStorage.setItem('givebar_session_entries', JSON.stringify(sessionRecentEntries));
+      renderRecentEntries();
+    }
+  }
+
+  function renderRecentEntries() {
+    if (!recentEntriesList) return;
+
+    if (recentCountLabel) {
+      recentCountLabel.textContent = `${sessionRecentEntries.length} entries`;
+    }
+
+    if (sessionRecentEntries.length === 0) {
+      recentEntriesList.innerHTML = `
+        <div style="color: #88888e; font-size: var(--text-sm); padding: var(--space-4) 0; text-align: center;">
+          No recent entries in this session.
         </div>
       `;
       return;
     }
 
-    let html = `
-      <table class="table-luxury">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Amount</th>
-            <th>Donor</th>
-            <th>Card #</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
+    recentEntriesList.innerHTML = sessionRecentEntries.slice(0, 10).map((entry, index) => {
+      const formattedAmount = formatCurrency(entry.amountCents);
+      const relativeTime = formatRelativeTime(entry.createdAt);
+      const isFirst = index === 0;
 
-    logs.forEach((item) => {
-      const timeStr = new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const amountStr = `$${Math.floor(item.amount_cents / 100).toLocaleString('en-US')}`;
-      const statusBadge = item.is_voided
-        ? `<span class="badge badge-held">VOIDED</span>`
-        : `<span class="badge badge-live">ACTIVE</span>`;
+      let statusHtml = '';
+      if (entry.status === 'voided') {
+        statusHtml = `<span style="color: #88888e; text-decoration: line-through;">Voided</span>`;
+      } else if (entry.status === 'failed') {
+        statusHtml = `<span style="color: #f87171;">Failed</span>`;
+      } else if (isFirst || Date.now() - entry.createdAt < 45000) {
+        statusHtml = `<button type="button" class="recent-undo-btn" data-undo-id="${entry.id}">Undo</button>`;
+      } else if (entry.status === 'confirmed') {
+        statusHtml = `<span class="recent-status confirmed">&#x2713; Confirmed</span>`;
+      } else {
+        statusHtml = `<span class="recent-status pending">&#x1F552; Pending</span>`;
+      }
 
-      html += `
-        <tr style="${item.is_voided ? 'opacity: 0.45; text-decoration: line-through;' : ''}">
-          <td style="color: var(--ink-muted); font-size: var(--text-xs);">${timeStr}</td>
-          <td style="font-weight: 800; color: var(--brand-accent);">${amountStr}</td>
-          <td style="font-weight: 600;">${escapeHTML(item.donor_name)}</td>
-          <td class="mono" style="font-size: var(--text-xs);">${escapeHTML(item.card_number || '-')}</td>
-          <td>${statusBadge}</td>
-        </tr>
+      return `
+        <div class="recent-row ${isFirst ? 'highlight' : ''}" data-entry-id="${entry.id}">
+          <span class="recent-donor" title="${escapeHTML(entry.donor)}">${escapeHTML(entry.donor)}</span>
+          <span class="recent-amount">${formattedAmount}</span>
+          <span class="recent-time">${relativeTime}</span>
+          <span class="recent-status">${statusHtml}</span>
+        </div>
       `;
-    });
+    }).join('');
 
-    html += `</tbody></table>`;
-    container.innerHTML = html;
+    recentEntriesList.querySelectorAll('.recent-undo-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-undo-id');
+        if (!id) return;
+        await executeRowUndo(id);
+      });
+    });
+  }
+
+  async function executeRowUndo(donationId) {
+    try {
+      const res = await fetch(`/api/donation/${donationId}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entered_by: volunteerId,
+          reason: '1-tap inline undo from recent list'
+        })
+      });
+
+      if (res.ok) {
+        updateSessionEntryStatus(donationId, 'voided');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showError(`Undo failed: ${err.message || 'Could not void donation'}`);
+      }
+    } catch (err) {
+      console.error('[Givebar] Undo error:', err);
+    }
+  }
+
+  // --- Helpers ---
+  function showError(msg) {
+    if (errorBanner) {
+      errorBanner.textContent = msg;
+      errorBanner.style.display = 'block';
+    }
+  }
+
+  function clearError() {
+    if (errorBanner) {
+      errorBanner.style.display = 'none';
+      errorBanner.textContent = '';
+    }
+  }
+
+  function formatCurrency(cents) {
+    return `$${Math.floor(cents / 100).toLocaleString('en-US')}`;
+  }
+
+  function formatRelativeTime(epochMs) {
+    const sec = Math.max(0, Math.floor((Date.now() - epochMs) / 1000));
+    if (sec < 60) return `${sec}s`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m`;
+    const hrs = Math.floor(min / 60);
+    return `${hrs}h`;
   }
 
   function escapeHTML(str) {
-    if (str === null || str === undefined) return '';
+    if (!str) return '';
     return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+      .replace(/'/g, '&#039;');
   }
 
-  function startPolling() {
-    pollState();
-    setInterval(pollState, 2000);
-    setInterval(flushOutbox, 3000);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  document.addEventListener('DOMContentLoaded', init);
 })();

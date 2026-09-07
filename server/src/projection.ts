@@ -142,12 +142,8 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
 
   // Determine stage total
   const stagedCalculated = stagedFold.total_raised_cents;
-  const rawStageTotal = eventState.manual_override_cents !== null && eventState.manual_override_cents !== undefined
-    ? eventState.manual_override_cents
-    : stagedCalculated;
-
   // Floor ratchet applies dynamically to staged total
-  const stageTotal = Math.max(rawStageTotal, eventState.odometer_floor_cents);
+  const stageTotal = Math.max(stagedCalculated, eventState.odometer_floor_cents);
   if (stagedCalculated > eventState.odometer_floor_cents && !eventState.is_frozen) {
     db.query(`UPDATE event_state SET odometer_floor_cents = ? WHERE id = 1`).run(stagedCalculated);
   }
@@ -222,9 +218,18 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
     qr_bg_color: eventState.qr_bg_color || "#FFFFFF",
     theme: getThemeTokens(eventState),
     settings_seq: eventState.settings_seq || 1,
+    logo_url: eventState.logo_url || "",
+    background_style: eventState.background_style || "plain",
+    bar_color: eventState.bar_color || "",
+    show_qr: Boolean(eventState.show_qr ?? 1),
+    show_recent_donations: Boolean(eventState.show_recent_donations ?? 1),
+    show_live_indicator: Boolean(eventState.show_live_indicator ?? 1),
+    show_goal: Boolean(eventState.show_goal ?? 1),
+    stage_message: eventState.stage_message || "",
+    stage_message_visible: Boolean(eventState.stage_message_visible ?? 0),
+    feature_timer: Boolean(eventState.feature_timer ?? 0),
     milestones,
     chyrons: chyrons.slice(0, 30),
-    confetti_trigger: eventState.confetti_trigger,
     server_time: now
   };
 }
@@ -238,9 +243,7 @@ export function getEmceeState(db: Database) {
   const fullFold = foldLedger(db);
   const now = Date.now();
 
-  const totalRaised = eventState.manual_override_cents !== null && eventState.manual_override_cents !== undefined
-    ? eventState.manual_override_cents
-    : fullFold.total_raised_cents;
+  const totalRaised = fullFold.total_raised_cents;
 
   const milestones = getMilestones(db, eventState.goal_cents);
   milestones.sort((a, b) => a.cents - b.cents);
@@ -269,11 +272,11 @@ export function getEmceeState(db: Database) {
       donation_id: d.donation_id,
       display_name: d.is_anonymous ? "Anonymous Supporter" : d.donor_name,
       amount_cents: d.amount_cents,
-      is_anonymous: d.is_anonymous,
-      donor_phonetic: d.donor_phonetic || null,
-      table_number: d.table_number || null,
-      notes: d.notes,
-      entered_by: d.entered_by
+      is_anonymous: Boolean(d.is_anonymous),
+      donor_phonetic: d.is_anonymous ? null : (d.donor_phonetic || null),
+      table_number: d.is_anonymous ? null : (d.table_number || null),
+      notes: d.is_anonymous ? null : (d.notes || null),
+      entered_by: d.is_anonymous ? null : (d.entered_by || null)
     }));
 
   // Recent 10 gifts for stream pacing (excludes held items)
@@ -285,10 +288,10 @@ export function getEmceeState(db: Database) {
       donation_id: d.donation_id,
       display_name: d.is_anonymous ? "Anonymous Supporter" : d.donor_name,
       amount_cents: d.amount_cents,
-      is_anonymous: d.is_anonymous,
-      donor_phonetic: d.donor_phonetic || null,
-      table_number: d.table_number || null,
-      notes: d.notes,
+      is_anonymous: Boolean(d.is_anonymous),
+      donor_phonetic: d.is_anonymous ? null : (d.donor_phonetic || null),
+      table_number: d.is_anonymous ? null : (d.table_number || null),
+      notes: d.is_anonymous ? null : (d.notes || null),
       created_at: d.created_at,
       seconds_ago: Math.max(0, Math.floor((now - d.created_at) / 1000))
     }));
@@ -341,13 +344,9 @@ export function getControlState(db: Database) {
   const heldMap = new Map(heldRows.map(r => [r.donation_id, r]));
 
   const stageDisplayTotal = Math.max(
-    eventState.manual_override_cents !== null && eventState.manual_override_cents !== undefined
-      ? eventState.manual_override_cents
-      : fullFold.total_raised_cents,
+    fullFold.total_raised_cents,
     eventState.odometer_floor_cents
   );
-
-  const driftCents = stageDisplayTotal - fullFold.total_raised_cents;
 
   // Staging queue: Donations from the last 90 seconds
   const stagedChyrons = Array.from(fullFold.active_donations.values())
@@ -388,14 +387,17 @@ export function getControlState(db: Database) {
     `SELECT * FROM ledger ORDER BY seq DESC LIMIT 50`
   ).all();
 
-  // Sanitize state payload (omit PINs from state object)
-  const { control_pin: _c, entry_pin: _e, ...sanitizedState } = eventState;
-
+  // Sanitize state payload (omit PINs and API keys from state object)
+  const { control_pin: _c, entry_pin: _e, bloomerang_api_key: _b, ...sanitizedState } = eventState;
+  const hasBloomerangKey = Boolean(eventState.bloomerang_api_key && eventState.bloomerang_api_key.trim() !== "");
+  const bloomerangKeyMasked = hasBloomerangKey ? "••••••••••••••" : "";
   return {
     seq: fullFold.latest_seq,
     event_state: sanitizedState,
     has_control_pin: Boolean(eventState.control_pin && eventState.control_pin.trim() !== ""),
     has_entry_pin: Boolean(eventState.entry_pin && eventState.entry_pin.trim() !== ""),
+    has_bloomerang_api_key: hasBloomerangKey,
+    bloomerang_key_masked: bloomerangKeyMasked,
     theme: getThemeTokens(eventState),
     settings_seq: eventState.settings_seq || 1,
     milestones: getMilestones(db, eventState.goal_cents),
@@ -411,8 +413,6 @@ export function getControlState(db: Database) {
     stage_preview: {
       stage_total_cents: stageDisplayTotal,
       verified_total_cents: fullFold.total_raised_cents,
-      drift_cents: driftCents,
-      is_drifted: driftCents !== 0,
       odometer_floor_cents: eventState.odometer_floor_cents,
       is_frozen: Boolean(eventState.is_frozen)
     },
@@ -441,7 +441,10 @@ export function getVolunteerState(db: Database, volunteerId?: string) {
 
   return {
     seq: fullFold.latest_seq,
-    event_name: eventState.event_name,
+    theme: getThemeTokens(eventState),
+    feature_card_number: Boolean(eventState.feature_card_number ?? 0),
+    feature_table_number: Boolean(eventState.feature_table_number ?? 0),
+    feature_timer: Boolean(eventState.feature_timer ?? 0),
     event_subtitle: eventState.event_subtitle,
     total_raised_cents: fullFold.total_raised_cents,
     goal_cents: eventState.goal_cents,

@@ -34,4 +34,5 @@ Givebar is a live fundraising thermometer and stage presentation suite for high-
 ## 4. Deployment & Infrastructure
 * **Production Deployment**: Hosted on `wavedepth` (`root@172.245.248.17`) running Dokploy on `panel.wavedepth.com` with Traefik reverse proxy and persistent SQLite volume mounted at `/app/data`.
 * **Single Canonical Tree**: The application serves directly from `client/` and `server/` via Bun. Never reintroduce mock backends or static preview duplicates.
-* **Test Verification**: Always run `bun test` before committing. All 42+ automated tests must pass.
+* **Scoped verification**: After changes, run the relevant `bun test` coverage once; before an authorized commit, run `bun test`. Judge observable ledger, financial, privacy, and staging behavior, not a fixed test count. Documentation-only work does not require the application suite.
+* **Approval boundary**: Source edits do not authorize production deployment or changes to live financial data. Preserve the persistent SQLite volume.
