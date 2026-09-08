@@ -4,294 +4,576 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fullscreen Bar Chart — Givebar</title>
-  <link rel="stylesheet" href="css/app.css?v=5.0.0">
+  <link rel="stylesheet" href="css/app.css?v=6.0.0">
   <style>
     /* =========================================================================
        Fullscreen Bar Chart (Direction B — Presentation Contrast)
+
+       Audience-facing surface. This is the ONE screen that carries a richer
+       treatment: lit bar, restrained glass panels, luminous figures.
+       Operational screens stay flat.
+
+       Runtime-set custom properties (see stage.js):
+         --stage-bar / --stage-bar-lo / --stage-bar-hi / --stage-bar-peak
+         --stage-glow / --stage-glow-soft
+         --stage-ink / --stage-ink-dim
+         --stage-font
        ========================================================================= */
 
-    * {
-      box-sizing: border-box;
+    :root {
+      --stage-bar: #d4a359;
+      --stage-bar-lo: #8a6a33;
+      --stage-bar-hi: #e8c68c;
+      --stage-bar-peak: #fbedd2;
+      --stage-glow: rgba(212, 163, 89, 0.28);
+      --stage-glow-soft: rgba(212, 163, 89, 0.12);
+      --stage-ink: #f4f5f6;
+      --stage-ink-dim: #9ea1a8;
+      --stage-font: var(--font-sans);
+
+      --bar-h: clamp(56px, 8.4vh, 104px);
+      --thermo-w: clamp(84px, 8.6vw, 148px);
+      --row-h: clamp(40px, 4.6vh, 62px);
+      --row-gap: clamp(8px, 1.1vh, 16px);
+      --logo-h: clamp(38px, 4.4vh, 62px);
+      --stage-radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
     }
 
     body {
-      margin: 0;
-      padding: 0;
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background-color: #090a0c;
-      color: #f4f5f6;
-      font-family: var(--font-sans);
+      background-color: #07080a;
+      color: var(--stage-ink);
+      font-family: var(--stage-font);
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* Background Styles */
-    body[data-bg-style="plain"] {
-      background: #090a0c;
-    }
-
+    /* ---- Background styles ------------------------------------------------ */
+    body[data-bg-style="plain"] { background: #07080a; }
     body[data-bg-style="subtle-gradient"] {
-      background: radial-gradient(ellipse at 50% 25%, #161820 0%, #090a0c 100%);
+      background: radial-gradient(ellipse 120% 90% at 50% 12%, #16181f 0%, #07080a 72%);
     }
-
     body[data-bg-style="vignette"] {
-      background: radial-gradient(ellipse at center, #121318 35%, #050507 100%);
+      background: radial-gradient(ellipse 90% 80% at 50% 50%, #131419 30%, #030304 100%);
     }
 
     #stage-canvas {
-      width: 100vw;
-      height: 100vh;
-      max-width: 1920px;
-      max-height: 1080px;
-      padding: 3vh 4vw;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+      width: 100%;
+      height: 100%;
+      padding: clamp(20px, 3.2vh, 46px) clamp(24px, 3.4vw, 72px);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      row-gap: clamp(12px, 2vh, 32px);
       position: relative;
     }
 
-    /* Top Navigation / Status Header */
+    /* =========================================================================
+       Header — logo slot, event title, live/status cluster
+       ========================================================================= */
     .stage-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      width: 100%;
-      min-height: 48px;
+      gap: clamp(16px, 2vw, 40px);
+      min-height: var(--logo-h);
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: clamp(14px, 1.6vw, 28px);
+      min-width: 0;
+    }
+
+    /* Logo area reserves its row height permanently so an absent, empty, or
+       broken logo never changes the header's vertical rhythm. Only its width
+       collapses, which keeps the title from sitting next to a visible hole. */
+    .logo-slot {
+      height: var(--logo-h);
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      transition: width var(--dur-conf) var(--ease-out);
+    }
+
+    .logo-slot[data-state="empty"],
+    .logo-slot[data-state="error"] {
+      width: 0;
+      margin-right: calc(-1 * clamp(14px, 1.6vw, 28px));
+    }
+
+    .logo-slot[data-state="ready"] {
+      width: auto;
+      max-width: clamp(160px, 18vw, 340px);
+    }
+
+    .logo-slot img {
+      height: var(--logo-h);
+      max-width: clamp(160px, 18vw, 340px);
+      object-fit: contain;
+      display: block;
+    }
+
+    .event-title {
+      margin: 0;
+      font-size: clamp(1.45rem, 2.35vw, 3rem);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.015em;
+      color: var(--stage-ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+
+    .status-cluster {
+      display: flex;
+      align-items: center;
+      gap: clamp(10px, 1.1vw, 20px);
+      flex-shrink: 0;
     }
 
     .live-indicator {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      font-size: var(--text-sm);
+      gap: 10px;
+      font-size: clamp(1rem, 1.15vw, 1.45rem);
       font-weight: 700;
-      color: #d4a359;
-      letter-spacing: 0.04em;
+      color: var(--stage-bar);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
     }
 
     .live-indicator .pulse-dot {
-      width: 10px;
-      height: 10px;
-      background: #d4a359;
+      width: 0.62em;
+      height: 0.62em;
+      background: var(--stage-bar);
     }
 
-    .logo-container {
-      display: none;
+    .live-indicator[data-state="stale"] { color: var(--stage-ink-dim); }
+
+    .matching-banner,
+    .paused-banner,
+    .stage-degraded {
+      display: inline-flex;
       align-items: center;
+      gap: 8px;
+      border-radius: var(--stage-radius);
+      padding: 0.42em 0.9em;
+      font-size: clamp(0.95rem, 1.05vw, 1.3rem);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
-    .logo-container img {
-      max-height: 44px;
-      max-width: 180px;
-      object-fit: contain;
-      display: block;
+    .matching-banner {
+      background: rgba(212, 163, 89, 0.1);
+      border: 1px solid var(--stage-bar);
+      color: var(--stage-bar);
     }
 
-    .stage-message-line {
-      font-size: var(--text-sm);
-      color: #a1a4aa;
-      font-weight: 500;
-      letter-spacing: 0.02em;
+    .paused-banner {
+      background: rgba(239, 68, 68, 0.14);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
     }
 
-    /* Middle / Hero Section: Total Raised + Progress Bar */
-    .stage-centerpiece {
-      width: 100%;
+    .stage-degraded {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: var(--stage-ink-dim);
+    }
+
+    [hidden] { display: none !important; }
+
+    /* =========================================================================
+       Body — figure block, horizontal bar / vertical thermometer, message
+       ========================================================================= */
+    .stage-body {
+      min-height: 0;
       display: flex;
       flex-direction: column;
-      margin: auto 0;
-      transition: all 0.3s ease;
+      justify-content: center;
+      gap: clamp(10px, 1.6vh, 26px);
     }
 
-    .total-and-goal-row {
+    .figure-block {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .figure-label {
+      font-size: clamp(1rem, 1.35vw, 1.75rem);
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--stage-ink-dim);
+      margin-bottom: 0.35em;
+    }
+
+    .figure-row {
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
-      margin-bottom: 8px;
-    }
-
-    .total-raised-group {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .total-raised-label {
-      font-size: var(--text-base);
-      font-weight: 600;
-      color: #f4f5f6;
-      margin-bottom: 4px;
-      letter-spacing: 0.02em;
+      gap: clamp(16px, 2.5vw, 56px);
+      flex-wrap: nowrap;
     }
 
     .stage-odometer-text {
-      font-size: clamp(4.5rem, 8.5vw, 8rem);
-      line-height: 1.05;
+      --odo-ink: var(--stage-bar);
+      --odo-sep: var(--stage-bar);
+      font-size: clamp(4.5rem, 11.5vw, 14rem);
+      line-height: 1;
       font-weight: 900;
-      color: #d4a359;
+      letter-spacing: -0.035em;
+      color: var(--stage-bar);
       font-variant-numeric: tabular-nums;
-      letter-spacing: -0.03em;
-    }
-
-    .stage-odometer-text .odometer-separator {
-      color: inherit !important;
+      text-shadow: 0 0 clamp(24px, 3vw, 64px) var(--stage-glow-soft);
     }
 
     .goal-display {
-      font-size: clamp(1.25rem, 2.2vw, 2rem);
-      font-weight: 700;
-      color: #d4a359;
+      display: flex;
+      align-items: baseline;
+      gap: 0.4em;
+      font-size: clamp(1.4rem, 2.5vw, 3.1rem);
+      font-weight: 800;
+      color: var(--stage-ink);
       font-variant-numeric: tabular-nums;
-      padding-bottom: 8px;
-      letter-spacing: -0.01em;
+      letter-spacing: -0.02em;
+      padding-bottom: 0.18em;
+      white-space: nowrap;
     }
 
-    /* Progress Bar */
-    .progress-bar-wrap {
-      width: 100%;
+    .goal-label {
+      font-size: 0.62em;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--stage-ink-dim);
+    }
+
+    /* ---- Horizontal bar --------------------------------------------------- */
+    .barh {
+      padding-bottom: clamp(46px, 6vh, 84px);
+    }
+
+    .barh-shell,
+    .thermo-shell {
       position: relative;
-      margin: 12px 0 6px 0;
+      border-radius: calc(var(--stage-radius) + 4px);
     }
 
-    .bar-track {
+    .barh-track {
+      position: relative;
       width: 100%;
-      height: 40px;
-      background: #15161a;
-      border: 1.5px solid #d4a359;
-      border-radius: 9999px;
+      height: var(--bar-h);
+      border-radius: var(--stage-radius);
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0) 42%),
+        #101116;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow:
+        inset 0 2px 6px rgba(0, 0, 0, 0.65),
+        0 0 clamp(30px, 3.4vw, 70px) -12px var(--stage-glow);
+    }
+
+    /* The fill is a full-width layer scaled on the X axis: a compositor-only
+       transform, no per-frame layout. Corners are square so scaling cannot
+       distort a radius; the track's own radius + overflow clips the ends. */
+    .barh-fill {
+      position: absolute;
+      inset: 0;
+      transform-origin: left center;
+      transform: scaleX(0);
+      transition: transform var(--dur-roll) var(--ease-out);
+      background: linear-gradient(
+        90deg,
+        var(--stage-bar-lo) 0%,
+        var(--stage-bar) 58%,
+        var(--stage-bar-hi) 92%,
+        var(--stage-bar-peak) 100%
+      );
+      box-shadow:
+        inset 0 2px 0 rgba(255, 255, 255, 0.34),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.28),
+        inset 0 -14px 22px -14px rgba(0, 0, 0, 0.5);
+      will-change: transform;
+    }
+
+    /* ---- Vertical thermometer --------------------------------------------- */
+    .thermo {
+      display: none;
+      justify-content: center;
+      height: 100%;
+      min-height: 0;
+    }
+
+    .thermo-shell {
+      height: 100%;
+      width: var(--thermo-w);
+    }
+
+    .thermo-track {
+      position: relative;
+      height: 100%;
+      width: 100%;
+      border-radius: var(--stage-radius);
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0) 42%),
+        #101116;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow:
+        inset 2px 0 6px rgba(0, 0, 0, 0.65),
+        0 0 clamp(30px, 3.4vw, 70px) -12px var(--stage-glow);
+    }
+
+    .thermo-fill {
+      position: absolute;
+      inset: 0;
+      transform-origin: center bottom;
+      transform: scaleY(0);
+      transition: transform var(--dur-roll) var(--ease-out);
+      background: linear-gradient(
+        0deg,
+        var(--stage-bar-lo) 0%,
+        var(--stage-bar) 58%,
+        var(--stage-bar-hi) 92%,
+        var(--stage-bar-peak) 100%
+      );
+      box-shadow:
+        inset 2px 0 0 rgba(255, 255, 255, 0.3),
+        inset -1px 0 0 rgba(0, 0, 0, 0.28),
+        inset -14px 0 22px -14px rgba(0, 0, 0, 0.5);
+      will-change: transform;
+    }
+
+    /* ---- Single decaying glow pulse --------------------------------------- */
+    .bar-pulse {
+      position: absolute;
+      inset: -5px;
+      border-radius: calc(var(--stage-radius) + 5px);
+      pointer-events: none;
+      opacity: 0;
+      box-shadow:
+        0 0 0 2px var(--stage-glow),
+        0 0 clamp(40px, 5vw, 110px) 6px var(--stage-glow);
+      will-change: opacity, transform;
+    }
+
+    .bar-pulse[data-pulse="on"] {
+      animation: barPulseDecay var(--dur-pulse) var(--ease-out) 1 both;
+    }
+
+    @keyframes barPulseDecay {
+      0%   { opacity: 0;    transform: scale(1); }
+      14%  { opacity: 1;    transform: scale(1.014); }
+      100% { opacity: 0;    transform: scale(1); }
+    }
+
+    /* ---- Milestone markers ------------------------------------------------ */
+    .milestones {
+      position: absolute;
+      pointer-events: none;
+    }
+
+    .milestones-h { left: 0; right: 0; top: 0; height: var(--bar-h); }
+    .milestones-v { top: 0; bottom: 0; left: 0; width: 100%; }
+
+    .mtick { position: absolute; }
+
+    .milestones-h .mtick {
+      top: 0;
+      height: 100%;
+      transform: translateX(-50%);
+    }
+
+    .milestones-v .mtick {
+      left: 0;
+      width: 100%;
+      transform: translateY(50%);
+    }
+
+    .mtick-line {
+      background: rgba(255, 255, 255, 0.2);
+      transition: background-color var(--dur-ins) var(--ease-out);
+    }
+
+    .milestones-h .mtick-line { width: 2px; height: 100%; }
+    .milestones-v .mtick-line { height: 2px; width: 100%; }
+
+    .mtick[data-reached="1"] .mtick-line { background: rgba(0, 0, 0, 0.42); }
+
+    .mtick-label {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      white-space: nowrap;
+      line-height: 1.15;
+      transition: color var(--dur-ins) var(--ease-out);
+      color: var(--stage-ink-dim);
+    }
+
+    .mtick-name {
+      font-size: clamp(0.95rem, 1.15vw, 1.5rem);
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    .mtick-amt {
+      font-size: clamp(0.85rem, 1vw, 1.3rem);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      opacity: 0.72;
+    }
+
+    .mtick[data-reached="1"] .mtick-label { color: var(--stage-bar); }
+    .mtick[data-reached="1"] .mtick-name { font-weight: 800; }
+
+    .milestones-h .mtick-label {
+      top: calc(100% + clamp(8px, 1vh, 14px));
+      left: 50%;
+      transform: translateX(-50%);
+      align-items: center;
+    }
+
+    .milestones-h .mtick[data-edge="start"] .mtick-label {
+      left: 0;
+      transform: none;
+      align-items: flex-start;
+    }
+
+    .milestones-h .mtick[data-edge="end"] .mtick-label {
+      left: 100%;
+      transform: translateX(-100%);
+      align-items: flex-end;
+    }
+
+    .milestones-v .mtick-label {
+      left: calc(100% + clamp(12px, 1vw, 22px));
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    /* ---- Stage message ---------------------------------------------------- */
+    .stage-message {
+      font-size: clamp(1.25rem, 1.95vw, 2.6rem);
+      font-weight: 600;
+      line-height: 1.25;
+      color: var(--stage-ink);
+      letter-spacing: -0.005em;
+      padding-top: clamp(2px, 0.6vh, 10px);
+    }
+
+    /* =========================================================================
+       Bottom — recent donations feed + QR block (restrained glass)
+       ========================================================================= */
+    .stage-bottom-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: clamp(18px, 2.4vw, 44px);
+      align-items: stretch;
+    }
+
+    .stage-panel {
+      background: rgba(255, 255, 255, 0.035);
+      backdrop-filter: blur(20px) saturate(115%);
+      -webkit-backdrop-filter: blur(20px) saturate(115%);
+      border: 1px solid rgba(255, 255, 255, 0.075);
+      border-radius: var(--stage-radius);
+      padding: clamp(14px, 1.9vh, 26px) clamp(16px, 1.6vw, 30px);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      min-width: 0;
+    }
+
+    .panel-title {
+      font-size: clamp(0.95rem, 1.15vw, 1.4rem);
+      font-weight: 700;
+      color: var(--stage-ink-dim);
+      margin: 0 0 clamp(8px, 1.2vh, 16px) 0;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    /* Fixed-height viewport: the row count and row height never change, so an
+       arriving donation cannot reflow anything below it. */
+    .recent-viewport {
+      height: calc(3 * var(--row-h) + 2 * var(--row-gap));
       overflow: hidden;
       position: relative;
     }
 
-    .bar-fill {
-      height: 100%;
-      background: #d4a359;
-      border-radius: 9999px 0 0 9999px;
-      transition: width 1000ms var(--ease-spring);
-      width: 0%;
-    }
-
-    /* Milestones Scale Ticks */
-    .milestones-scale {
-      width: 100%;
-      position: relative;
-      height: 28px;
-      margin-top: 4px;
-    }
-
-    .milestones-scale-axis {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 1px;
-      background: #d4a359;
-      opacity: 0.4;
-    }
-
-    .scale-tick {
-      position: absolute;
-      transform: translateX(-50%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      top: 0;
-    }
-
-    .scale-tick-line {
-      width: 1px;
-      height: 6px;
-      background: #d4a359;
-    }
-
-    .scale-tick-label {
-      font-size: var(--text-xs);
-      color: #d4a359;
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-      margin-top: 2px;
-      white-space: nowrap;
-    }
-
-    /* Bottom Section: Recent Donations + QR Code */
-    .stage-bottom-grid {
-      display: grid;
-      grid-template-columns: 1fr 1px 1fr;
-      gap: 3vw;
-      align-items: center;
-      width: 100%;
-      min-height: 160px;
-      margin-top: auto;
-      padding-top: 2vh;
-    }
-
-    .bottom-divider {
-      background: #d4a359;
-      opacity: 0.25;
-      height: 100%;
-      min-height: 130px;
-    }
-
-    .bottom-section-title {
-      font-size: var(--text-base);
-      font-weight: 700;
-      color: #f4f5f6;
-      margin: 0 0 14px 0;
-      letter-spacing: 0.02em;
-    }
-
-    /* Recent Donations List */
     .recent-feed-list {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: var(--row-gap);
+      will-change: transform;
     }
 
     .recent-feed-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
-    }
-
-    .recent-feed-avatar {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: #d4a359;
+      gap: clamp(10px, 1.2vw, 22px);
+      height: var(--row-h);
       flex-shrink: 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.055);
     }
 
     .recent-feed-donor {
-      font-size: var(--text-sm);
+      font-size: clamp(1.05rem, 1.45vw, 1.9rem);
       font-weight: 600;
-      color: #f4f5f6;
+      color: var(--stage-ink);
       flex: 1;
+      min-width: 0;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
     .recent-feed-amount {
-      font-size: var(--text-base);
+      font-size: clamp(1.2rem, 1.7vw, 2.25rem);
       font-weight: 800;
-      color: #d4a359;
+      color: var(--stage-bar);
       font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
     }
 
-    /* QR Code + Link Block */
+    .recent-empty {
+      height: var(--row-h);
+      display: flex;
+      align-items: center;
+      color: var(--stage-ink-dim);
+      font-size: clamp(1.05rem, 1.35vw, 1.7rem);
+    }
+
+    /* Entering row: fades up into a slot that already exists at final size. */
+    .recent-feed-item[data-enter="pending"] { opacity: 0; }
+    .recent-feed-item { opacity: 1; transition: opacity var(--dur-conf) var(--ease-out); }
+
     .qr-block {
       display: flex;
       align-items: center;
-      gap: 24px;
+      gap: clamp(16px, 1.8vw, 32px);
     }
 
+    /* No white plate until the code actually loads, so a slow or missing QR
+       never flashes a blank card at the room. */
     .qr-image-frame {
-      width: 120px;
-      height: 120px;
-      background: #ffffff;
+      width: clamp(104px, 11vh, 168px);
+      height: clamp(104px, 11vh, 168px);
       padding: 6px;
       border-radius: 4px;
       flex-shrink: 0;
@@ -301,184 +583,329 @@
       width: 100%;
       height: 100%;
       display: block;
-    }
-    #stage-canvas[data-layout="full"] .stage-bottom-grid {
-      display: grid;
-      grid-template-columns: 1fr 1px 1fr;
+      background: #ffffff;
     }
 
-    /* 2. Recent Only (QR off) */
-    #stage-canvas[data-layout="recent-only"] .stage-bottom-grid {
-      display: flex;
-      justify-content: center;
-    }
-    #stage-canvas[data-layout="recent-only"] #stage-recent-panel {
-      max-width: 600px;
-      width: 100%;
-    }
-    #stage-canvas[data-layout="recent-only"] .bottom-divider,
-    #stage-canvas[data-layout="recent-only"] #stage-qr-panel {
-      display: none !important;
+    .qr-image-frame img:not([src]) { display: none; }
+
+    .qr-url-text {
+      font-size: clamp(1.1rem, 1.55vw, 2.05rem);
+      font-weight: 700;
+      color: var(--stage-ink);
+      letter-spacing: -0.01em;
+      word-break: break-word;
+      min-width: 0;
     }
 
-    /* 3. QR Only (Recent off) */
+    /* =========================================================================
+       Layout reflow states — toggles must move layout, never leave holes
+       ========================================================================= */
+    #stage-canvas[data-layout="recent-only"] .stage-bottom-grid,
     #stage-canvas[data-layout="qr-only"] .stage-bottom-grid {
-      display: flex;
-      justify-content: center;
-    }
-    #stage-canvas[data-layout="qr-only"] #stage-qr-panel {
-      max-width: 600px;
-      width: 100%;
-    }
-    #stage-canvas[data-layout="qr-only"] .bottom-divider,
-    #stage-canvas[data-layout="qr-only"] #stage-recent-panel {
-      display: none !important;
+      grid-template-columns: minmax(0, 1fr);
     }
 
-    /* 4. Minimal Layout (Both Recent and QR off -> Center and Scale Up) */
-    #stage-canvas[data-layout="minimal"] .stage-bottom-grid {
-      display: none !important;
+    #stage-canvas[data-layout="recent-only"] #stage-qr-panel,
+    #stage-canvas[data-layout="qr-only"] #stage-recent-panel {
+      display: none;
     }
-    #stage-canvas[data-layout="minimal"] .stage-centerpiece {
-      margin: auto 0;
-      padding: 4vh 4vw;
-    }
+
+    #stage-canvas[data-layout="minimal"] .stage-bottom-grid { display: none; }
+    #stage-canvas[data-layout="minimal"] { grid-template-rows: auto minmax(0, 1fr); }
+
     #stage-canvas[data-layout="minimal"] .stage-odometer-text {
-      font-size: clamp(6.5rem, 14vw, 11rem);
-    }
-    #stage-canvas[data-layout="minimal"] .total-raised-label {
-      font-size: var(--text-xl);
-    }
-    #stage-canvas[data-layout="minimal"] .bar-track {
-      height: 60px;
-      border-width: 2px;
+      font-size: clamp(6rem, 15vw, 19rem);
     }
     #stage-canvas[data-layout="minimal"] .goal-display {
-      font-size: clamp(2rem, 3.5vw, 3rem);
+      font-size: clamp(1.8rem, 3.2vw, 4rem);
     }
-    .matching-banner {
-      display: none;
+    #stage-canvas[data-layout="minimal"] { --bar-h: clamp(72px, 11vh, 140px); }
+
+    /* =========================================================================
+       Vertical thermometer orientation
+       ========================================================================= */
+    body[data-orientation="vertical"] .barh { display: none; }
+    body[data-orientation="vertical"] .thermo { display: flex; }
+
+    body[data-orientation="vertical"] .stage-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(clamp(120px, 11vw, 220px), 1fr);
+      grid-template-rows: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "figure thermo gutter"
+        "message thermo gutter";
+      column-gap: clamp(24px, 3vw, 64px);
+      row-gap: clamp(8px, 1.2vh, 20px);
       align-items: center;
-      gap: 10px;
-      background: #191712;
-      border: 1px solid #d4a359;
-      border-radius: var(--brand-radius);
-      padding: 6px 14px;
-      font-size: var(--text-xs);
-      font-weight: 700;
-      color: #d4a359;
-      letter-spacing: 0.04em;
     }
 
-    /* Paused Banner */
-    .paused-banner {
-      display: none;
+    body[data-orientation="vertical"] .figure-block {
+      grid-area: figure;
+      justify-self: end;
+      align-self: end;
+      text-align: right;
+      align-items: flex-end;
+    }
+
+    body[data-orientation="vertical"] .figure-row {
+      flex-direction: column;
+      align-items: flex-end;
+      gap: clamp(4px, 0.8vh, 12px);
+    }
+
+    body[data-orientation="vertical"] .stage-odometer-text {
+      font-size: clamp(3.5rem, 8vw, 11rem);
+    }
+
+    body[data-orientation="vertical"] .goal-display {
+      padding-bottom: 0;
+      font-size: clamp(1.3rem, 2.1vw, 2.7rem);
+    }
+
+    body[data-orientation="vertical"] .thermo { grid-area: thermo; align-self: stretch; }
+    body[data-orientation="vertical"] .stage-message {
+      grid-area: message;
+      justify-self: end;
+      text-align: right;
+      max-width: 100%;
+    }
+
+    /* Portrait projector / pillar screen: give the tube more presence. */
+    @media (max-aspect-ratio: 1/1) {
+      body[data-orientation="vertical"] { --thermo-w: clamp(110px, 22vw, 260px); }
+      body[data-orientation="vertical"] .stage-odometer-text {
+        font-size: clamp(3rem, 11vw, 9rem);
+      }
+      body[data-orientation="vertical"] .stage-bottom-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    /* =========================================================================
+       WYSIWYG edit mode — every affordance below is inert without ?edit=1,
+       and the markup that carries it is injected by stage.js only in edit mode.
+       ========================================================================= */
+    [data-editable] {
+      outline: 2px dashed rgba(212, 163, 89, 0.55);
+      outline-offset: 6px;
+      border-radius: 3px;
+      cursor: text;
+      transition: outline-color var(--dur-ack) var(--ease-out),
+                  background-color var(--dur-ack) var(--ease-out);
+    }
+
+    [data-editable]:hover { outline-color: var(--stage-bar); background: rgba(212, 163, 89, 0.07); }
+    [data-editable]:focus { outline: 2px solid var(--stage-bar); background: rgba(212, 163, 89, 0.1); }
+    [data-editable][data-empty="1"]::before {
+      content: attr(data-placeholder);
+      color: var(--stage-ink-dim);
+      font-style: italic;
+    }
+
+    .edit-bar {
+      position: fixed;
+      left: 50%;
+      bottom: clamp(14px, 2vh, 28px);
+      transform: translateX(-50%);
+      z-index: 60;
+      display: flex;
       align-items: center;
-      gap: 6px;
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid #ef4444;
-      border-radius: var(--brand-radius);
-      padding: 6px 12px;
-      font-size: var(--text-xs);
+      gap: clamp(10px, 1vw, 18px);
+      background: rgba(18, 19, 23, 0.94);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--stage-bar);
+      border-radius: var(--stage-radius);
+      padding: 10px 16px;
+      box-shadow: 0 18px 46px rgba(0, 0, 0, 0.7);
+      font-size: 15px;
+    }
+
+    .edit-bar-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       font-weight: 700;
-      color: #ef4444;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
+      color: var(--stage-bar);
+      font-size: 13px;
+    }
+
+    .edit-bar-status {
+      color: var(--stage-ink-dim);
+      min-width: 15ch;
+      font-size: 14px;
+    }
+
+    .edit-bar-status[data-tone="ok"] { color: #86efac; }
+    .edit-bar-status[data-tone="err"] { color: #fca5a5; }
+
+    .edit-btn {
+      font: inherit;
+      font-weight: 700;
+      border-radius: 4px;
+      padding: 9px 16px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      background: var(--stage-bar);
+      color: #16130c;
+      transition: filter var(--dur-ack) var(--ease-out);
+    }
+
+    .edit-btn:hover { filter: brightness(1.1); }
+    .edit-btn[disabled] { opacity: 0.5; cursor: default; }
+
+    .edit-btn.ghost {
+      background: transparent;
+      color: var(--stage-ink);
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+
+    .edit-pin-input {
+      font: inherit;
+      background: #0c0d10;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 4px;
+      color: var(--stage-ink);
+      padding: 8px 12px;
+      width: 11ch;
+      letter-spacing: 0.2em;
+    }
+
+    .fullscreen-hint {
+      position: fixed;
+      left: 50%;
+      bottom: clamp(14px, 2vh, 28px);
+      transform: translateX(-50%);
+      z-index: 55;
+      background: rgba(18, 19, 23, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: var(--stage-radius);
+      padding: 10px 18px;
+      color: var(--stage-ink);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: opacity var(--dur-conf) var(--ease-out);
+    }
+
+    .fullscreen-hint[data-leaving="1"] { opacity: 0; }
+
+    /* =========================================================================
+       Reduced motion — same information, no spatial travel.
+       These override the global kill switch in base.css on purpose: a
+       cross-fade is the reduced equivalent, not the absence of feedback.
+       ========================================================================= */
+    @media (prefers-reduced-motion: reduce) {
+      .barh-fill,
+      .thermo-fill {
+        transition: none !important;
+      }
+
+      .bar-pulse[data-pulse="on"] {
+        animation: barPulseFade var(--dur-pulse) linear 1 both !important;
+      }
+
+      @keyframes barPulseFade {
+        0%   { opacity: 0; }
+        14%  { opacity: 1; }
+        100% { opacity: 0; }
+      }
+
+      .recent-feed-list { transition: none !important; transform: none !important; }
+      .recent-feed-item { transition: opacity var(--dur-ins) linear !important; }
+      .logo-slot { transition: none !important; }
     }
   </style>
 </head>
-<body data-bg-style="plain">
+<body data-bg-style="plain" data-orientation="horizontal">
 
   <main id="stage-canvas" data-layout="full">
 
-    <!-- Top Header -->
     <header class="stage-header">
-      <div style="display: flex; align-items: center; gap: 24px;">
-        <!-- Live Indicator -->
-        <div id="stage-live-indicator" class="live-indicator">
-          <span class="pulse-dot"></span>
-          <span>Live</span>
+      <div class="brand-cluster">
+        <div id="stage-logo-slot" class="logo-slot" data-state="empty">
+          <img id="stage-logo-img" src="" alt="">
         </div>
-
-        <!-- Degraded Connection Notice -->
-        <div id="stage-degraded-banner" class="degraded-banner" style="display: none;">
-          <span>Reconnecting to server...</span>
-        </div>
-        <div id="stage-logo-wrap" class="logo-container">
-          <img id="stage-logo-img" src="" alt="Event Logo">
-        </div>
-
-        <!-- Stage Message -->
-        <div id="stage-message-bar" class="stage-message-line" style="display: none;"></div>
+        <h1 id="stage-event-title" class="event-title">Givebar</h1>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 16px;">
-        <!-- Matching Sponsor Banner -->
-        <div id="stage-match-banner" class="matching-banner">
+      <div class="status-cluster">
+        <div id="stage-match-banner" class="matching-banner" hidden>
           <span id="stage-match-text">Matching Sponsor &bull; Double Your Impact</span>
         </div>
 
-        <!-- Paused Screen Banner -->
-        <div id="stage-freeze-banner" class="paused-banner">
-          Display Paused
+        <div id="stage-freeze-banner" class="paused-banner" hidden>Display Paused</div>
+
+        <div id="stage-degraded-banner" class="stage-degraded" hidden>Reconnecting</div>
+
+        <div id="stage-live-indicator" class="live-indicator" data-state="live">
+          <span class="pulse-dot"></span>
+          <span class="live-label">Live</span>
         </div>
       </div>
     </header>
 
-    <!-- Centerpiece Hero: Total Raised + Rolling Odometer + Progress Bar -->
-    <section class="stage-centerpiece" aria-label="Fundraising Progress">
-      <div class="total-and-goal-row">
-        <div class="total-raised-group">
-          <span class="total-raised-label">Total Raised</span>
-          <div id="main-odometer" class="stage-odometer-text"></div>
-        </div>
-
-        <div id="stage-goal-wrap" class="goal-display">
-          Goal <span id="goal-amount-text">$500k</span>
-        </div>
-      </div>
-
-      <!-- Horizontal Progress Bar Capsule -->
-      <div class="progress-bar-wrap">
-        <div class="bar-track" id="stage-bar-track">
-          <div id="progress-bar-fill" class="bar-fill"></div>
+    <section class="stage-body" aria-label="Fundraising Progress">
+      <div class="figure-block">
+        <span class="figure-label">Total Raised</span>
+        <div class="figure-row">
+          <div id="main-odometer" class="stage-odometer-text" role="img" aria-label="Total raised $0"></div>
+          <div id="stage-goal-wrap" class="goal-display">
+            <span class="goal-label">Goal</span>
+            <span id="goal-amount-text">$500k</span>
+          </div>
         </div>
       </div>
 
-      <!-- Milestone Markers (Scale Underneath) -->
-      <div id="stage-milestones-scale" class="milestones-scale">
-        <div class="milestones-scale-axis"></div>
-        <!-- Ticks dynamically render here -->
+      <!-- Horizontal bar -->
+      <div id="stage-bar-h" class="barh">
+        <div class="barh-shell">
+          <div class="barh-track" id="stage-bar-track">
+            <div id="progress-bar-fill" class="barh-fill"></div>
+          </div>
+          <div id="stage-milestones-h" class="milestones milestones-h"></div>
+          <div id="stage-bar-pulse" class="bar-pulse" aria-hidden="true"></div>
+        </div>
       </div>
+
+      <!-- Vertical thermometer -->
+      <div id="stage-thermo" class="thermo">
+        <div class="thermo-shell">
+          <div class="thermo-track" id="stage-thermo-track">
+            <div id="thermo-bar-fill" class="thermo-fill"></div>
+          </div>
+          <div id="stage-milestones-v" class="milestones milestones-v"></div>
+          <div id="stage-thermo-pulse" class="bar-pulse" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <div id="stage-message-bar" class="stage-message" hidden></div>
     </section>
 
-    <!-- Bottom Lower Section: Recent Donations Feed & Scan to Donate Block -->
     <footer id="stage-bottom-section" class="stage-bottom-grid">
-      <!-- Recent Donations List -->
-      <div id="stage-recent-panel">
-        <h2 class="bottom-section-title">Recent Donations</h2>
-        <div id="recent-donations-feed" class="recent-feed-list">
-          <!-- Recent 3 donation rows render here -->
+      <div id="stage-recent-panel" class="stage-panel">
+        <h2 class="panel-title">Recent Donations</h2>
+        <div class="recent-viewport">
+          <div id="recent-donations-feed" class="recent-feed-list"></div>
         </div>
       </div>
 
-      <!-- Vertical Divider -->
-      <div class="bottom-divider"></div>
-
-      <!-- Scan to Donate QR + URL Block -->
-      <div id="stage-qr-panel">
-        <h2 class="bottom-section-title">Scan to Donate</h2>
+      <div id="stage-qr-panel" class="stage-panel">
+        <h2 class="panel-title">Scan to Donate</h2>
         <div class="qr-block">
           <div class="qr-image-frame">
-            <img id="stage-qr-img" src="" alt="Donation QR Code">
+            <img id="stage-qr-img" src="" alt="Donation QR code">
           </div>
-          <div id="stage-qr-url" class="qr-url-text">example.org/donate</div>
+          <div id="stage-qr-url" class="qr-url-text"></div>
         </div>
       </div>
     </footer>
 
   </main>
 
-  <script src="js/odometer.js?v=5.0.0"></script>
-  <script src="js/stage.js?v=5.0.0"></script>
+  <script src="js/odometer.js?v=6.0.0"></script>
+  <script src="js/stage.js?v=6.0.0"></script>
 </body>
 </html>

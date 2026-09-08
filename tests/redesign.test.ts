@@ -146,18 +146,20 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
   });
 
   test("state endpoint sanitizes PINs across all public roles", async () => {
+    updateEventState(db, { control_pin: "4242", entry_pin: "1357" });
+
     const stageRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db);
-    const stageData = await stageRes.json();
-    expect((stageData as any).control_pin).toBeUndefined();
-    expect((stageData as any).entry_pin).toBeUndefined();
+    const stageData = await stageRes.json() as Record<string, unknown>;
+    expect(stageData.control_pin).toBeUndefined();
+    expect(stageData.entry_pin).toBeUndefined();
 
     const entryRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=entry"), db);
-    const entryData = await entryRes.json();
-    expect((entryData as any).control_pin).toBeUndefined();
-    expect((entryData as any).entry_pin).toBeUndefined();
+    const entryData = await entryRes.json() as Record<string, unknown>;
+    expect(entryData.control_pin).toBeUndefined();
+    expect(entryData.entry_pin).toBeUndefined();
     expect(entryData.has_entry_pin).toBe(true);
 
-    const ctrlRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db);
+    const ctrlRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=control&pin=4242"), db);
     const ctrlData = await ctrlRes.json();
     expect(ctrlData.event_state.control_pin).toBeUndefined();
     expect(ctrlData.event_state.entry_pin).toBeUndefined();
@@ -285,9 +287,9 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     expect(foundInRecent).toBeUndefined();
   });
 
-  test("Phase 2: Database migration reaches user_version 5 and stage_delay_ms defaults to 0", () => {
+  test("Phase 2: Database migration reaches user_version 6 and stage_delay_ms defaults to 0", () => {
     const versionRow = db.query<{ user_version: number }, []>("PRAGMA user_version;").get();
-    expect(versionRow?.user_version).toBe(5);
+    expect(versionRow?.user_version).toBe(6);
 
     const state = getEventState(db);
     expect(state.stage_delay_ms).toBe(0);
@@ -325,7 +327,7 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
 
     // 2. Check state route response for all roles
     for (const role of ["stage", "control", "emcee", "entry", "default"]) {
-      const req = new Request(`http://localhost:3000/api/state?role=${role}&pin=9999`);
+      const req = new Request(`http://localhost:3000/api/state?role=${role}`);
       const res = handleStateRequest(req, db);
       const text = await res.text();
       expect(text.includes("blm_secret_key")).toBe(false);
@@ -492,46 +494,40 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
   });
 
   test("Production Defect: 401 Unauthorized prevents unauthenticated state leakage and zero-total render", async () => {
-    // Ensure auth is enforced
+    // Auth is only enforced once an operator actually sets a PIN
     updateEventState(db, { control_pin: "9999" });
-    const prevEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
 
-    try {
-      // Record donations so real total is non-zero
-      recordDonation(db, {
-        donation_id: "don_auth_test",
-        amount_cents: 750000,
-        donor_name: "Auth Test Donor"
-      });
+    // Record donations so real total is non-zero
+    recordDonation(db, {
+      donation_id: "don_auth_test",
+      amount_cents: 750000,
+      donor_name: "Auth Test Donor"
+    });
 
-      // 1. Unauthenticated request without PIN
-      const unauthReq = new Request("http://localhost:3000/api/state?role=control");
-      const unauthRes = handleStateRequest(unauthReq, db);
-      expect(unauthRes.status).toBe(401);
-      const unauthData = await unauthRes.json();
-      expect(unauthData.error).toBe("UNAUTHORIZED");
-      expect(unauthData.message).toBe("Control Room PIN required");
-      // Crucial: Must NOT contain any data fields that could paint a $0 total or empty list
-      expect(unauthData.folded).toBeUndefined();
-      expect(unauthData.total_raised_cents).toBeUndefined();
-      expect(unauthData.staged_chyrons).toBeUndefined();
+    // 1. Unauthenticated request without PIN
+    const unauthReq = new Request("http://localhost:3000/api/state?role=control");
+    const unauthRes = handleStateRequest(unauthReq, db);
+    expect(unauthRes.status).toBe(401);
+    const unauthData = await unauthRes.json();
+    expect(unauthData.error).toBe("UNAUTHORIZED");
+    expect(unauthData.message).toBe("Control Room PIN required");
+    // Crucial: Must NOT contain any data fields that could paint a $0 total or empty list
+    expect(unauthData.folded).toBeUndefined();
+    expect(unauthData.total_raised_cents).toBeUndefined();
+    expect(unauthData.staged_chyrons).toBeUndefined();
 
-      // 2. Request with invalid PIN
-      const wrongPinReq = new Request("http://localhost:3000/api/state?role=control&pin=1111");
-      const wrongPinRes = handleStateRequest(wrongPinReq, db);
-      expect(wrongPinRes.status).toBe(401);
+    // 2. Request with invalid PIN
+    const wrongPinReq = new Request("http://localhost:3000/api/state?role=control&pin=1111");
+    const wrongPinRes = handleStateRequest(wrongPinReq, db);
+    expect(wrongPinRes.status).toBe(401);
 
-      // 3. Authenticated request with valid PIN
-      const authReq = new Request("http://localhost:3000/api/state?role=control&pin=9999");
-      const authRes = handleStateRequest(authReq, db);
-      expect(authRes.status).toBe(200);
-      const authData = await authRes.json();
-      expect(authData.folded).toBeDefined();
-      expect(authData.folded.total_raised_cents).toBe(750000);
-      expect(authData.staged_chyrons.length).toBe(1);
-    } finally {
-      process.env.NODE_ENV = prevEnv;
-    }
+    // 3. Authenticated request with valid PIN
+    const authReq = new Request("http://localhost:3000/api/state?role=control&pin=9999");
+    const authRes = handleStateRequest(authReq, db);
+    expect(authRes.status).toBe(200);
+    const authData = await authRes.json();
+    expect(authData.folded).toBeDefined();
+    expect(authData.folded.total_raised_cents).toBe(750000);
+    expect(authData.staged_chyrons.length).toBe(1);
   });
 });

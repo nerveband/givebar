@@ -17,6 +17,14 @@
   const sampleCountBadge = document.getElementById('sample-count-badge');
   const sampleRecordsTbody = document.getElementById('sample-records-tbody');
   const sampleCleanState = document.getElementById('sample-clean-state');
+  const feedbackEl = document.getElementById('test-feedback');
+
+  // Generator Buttons
+  const btnGenSingle = document.getElementById('btn-gen-single');
+  const btnGenBurst = document.getElementById('btn-gen-burst');
+  const btnGenTypo = document.getElementById('btn-gen-typo');
+  const btnGenMilestone = document.getElementById('btn-gen-milestone');
+
   // Auth Elements
   const unlockScreen = document.getElementById('unlock-screen');
   const unlockForm = document.getElementById('unlock-form');
@@ -40,6 +48,8 @@
     localStorage.removeItem('givebar_control_pin');
   }
 
+  // The unlock screen only ever appears after the server answers 401.
+  // When no Control Room PIN is configured, the operator walks straight in.
   function setAuthUIState(state) {
     if (state === 'unauthenticated') {
       if (unlockScreen) unlockScreen.style.display = 'flex';
@@ -60,48 +70,45 @@
   }
 
   function setupUnlockForm() {
-    if (unlockForm) {
-      unlockForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const pin = (unlockPinInput?.value || '').trim();
-        if (!pin) {
-          showUnlockError('Please enter the Control Room PIN.');
+    if (!unlockForm) return;
+    unlockForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pin = (unlockPinInput?.value || '').trim();
+      if (!pin) {
+        showUnlockError('Please enter the Control Room PIN.');
+        return;
+      }
+      clearUnlockError();
+      if (btnSubmitUnlock) {
+        btnSubmitUnlock.disabled = true;
+        btnSubmitUnlock.textContent = 'Verifying...';
+      }
+      try {
+        const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
+          headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
+        });
+        if (res.status === 401) {
+          showUnlockError('Invalid Control Room PIN.');
+          if (unlockPinInput) { unlockPinInput.focus(); unlockPinInput.select(); }
           return;
         }
-        clearUnlockError();
+        if (!res.ok) {
+          showUnlockError('Server error validating PIN.');
+          return;
+        }
+        const data = await res.json();
+        setControlPin(pin);
+        setAuthUIState('authenticated');
+        applyState(data);
+      } catch (err) {
+        showUnlockError('Network error connecting to server.');
+      } finally {
         if (btnSubmitUnlock) {
-          btnSubmitUnlock.disabled = true;
-          btnSubmitUnlock.textContent = 'Verifying...';
+          btnSubmitUnlock.disabled = false;
+          btnSubmitUnlock.textContent = 'Unlock';
         }
-        try {
-          const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
-            headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
-          });
-          if (res.status === 401) {
-            showUnlockError('Invalid Control Room PIN.');
-            if (unlockPinInput) { unlockPinInput.focus(); unlockPinInput.select(); }
-            return;
-          }
-          if (!res.ok) {
-            showUnlockError('Server error validating PIN.');
-            return;
-          }
-          const data = await res.json();
-          setControlPin(pin);
-          setAuthUIState('authenticated');
-          const chyrons = Array.isArray(data.staged_chyrons) ? data.staged_chyrons : [];
-          sampleRecords = chyrons.filter(c => c.source === 'rehearsal');
-          renderSampleView();
-        } catch (err) {
-          showUnlockError('Network error connecting to server.');
-        } finally {
-          if (btnSubmitUnlock) {
-            btnSubmitUnlock.disabled = false;
-            btnSubmitUnlock.textContent = 'Unlock';
-          }
-        }
-      });
-    }
+      }
+    });
   }
 
   function showUnlockError(msg) {
@@ -117,20 +124,41 @@
       unlockError.style.display = 'none';
     }
   }
+
+  // --- Operator Feedback ---
+  function showFeedback(msg, tone) {
+    if (!feedbackEl) return;
+    feedbackEl.textContent = msg;
+    feedbackEl.className = `test-feedback ${tone === 'error' ? 'error' : 'ok'}`;
+    feedbackEl.style.display = 'block';
+  }
+
   // --- Generator Action Handlers ---
   function setupGenerators() {
-    if (btnGenSingle) {
-      btnGenSingle.addEventListener('click', () => postRehearsal({ mode: 'single' }));
-    }
-    if (btnGenBurst) {
-      btnGenBurst.addEventListener('click', () => postRehearsal({ mode: 'burst', count: 7 }));
-    }
-    if (btnGenTypo) {
-      btnGenTypo.addEventListener('click', () => postRehearsal({ mode: 'typo' }));
-    }
-    if (btnGenMilestone) {
-      btnGenMilestone.addEventListener('click', () => postRehearsal({ mode: 'milestone' }));
-    }
+    wireGenerator(btnGenSingle, { mode: 'single' }, 'Injected 1 sample gift.');
+    wireGenerator(btnGenBurst, { mode: 'burst', count: 7 }, 'Injected a burst of 7 sample gifts.');
+    wireGenerator(btnGenTypo, { mode: 'typo' }, 'Injected the typo gift for hold and undo drills.');
+    wireGenerator(btnGenMilestone, { mode: 'milestone' }, 'Injected the gift that crosses the next milestone.');
+  }
+
+  function wireGenerator(button, body, successMsg) {
+    if (!button) return;
+    const originalLabel = button.textContent;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      button.textContent = 'Generating...';
+      try {
+        const result = await postRehearsal(body);
+        if (result.ok) {
+          showFeedback(successMsg, 'ok');
+        } else {
+          showFeedback(result.message, 'error');
+        }
+      } finally {
+        button.disabled = false;
+        button.textContent = originalLabel;
+      }
+    });
   }
 
   async function postRehearsal(body) {
@@ -144,42 +172,59 @@
         },
         body: JSON.stringify({ ...body, pin })
       });
-      if (res.ok) {
-        syncState();
+      if (res.status === 401) {
+        clearControlPin();
+        setAuthUIState('unauthenticated');
+        return { ok: false, message: 'Control Room PIN required.' };
       }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return { ok: false, message: errData.message || `Sample data generation failed (HTTP ${res.status}).` };
+      }
+      await syncState();
+      return { ok: true };
     } catch (err) {
       console.warn('[Givebar Testing] Rehearsal generation error:', err);
+      return { ok: false, message: 'Network error generating sample data.' };
     }
   }
 
   function setupPurge() {
-    if (btnPurgeSampleData) {
-      btnPurgeSampleData.addEventListener('click', async () => {
-        const pin = getControlPin();
-        try {
-          btnPurgeSampleData.disabled = true;
-          btnPurgeSampleData.textContent = 'Purging...';
+    if (!btnPurgeSampleData) return;
+    btnPurgeSampleData.addEventListener('click', async () => {
+      const pin = getControlPin();
+      btnPurgeSampleData.disabled = true;
+      btnPurgeSampleData.textContent = 'Purging...';
+      try {
+        const res = await fetch('/api/control', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Control-Pin': pin
+          },
+          body: JSON.stringify({ action: 'purge_rehearsal', pin })
+        });
 
-          const res = await fetch('/api/control', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Control-Pin': pin
-            },
-            body: JSON.stringify({ action: 'purge_rehearsal', pin })
-          });
-
-          if (res.ok) {
-            syncState();
-          }
-        } catch (err) {
-          console.warn('[Givebar Testing] Purge failed:', err);
-        } finally {
-          btnPurgeSampleData.disabled = false;
-          btnPurgeSampleData.textContent = 'Purge Sample Data';
+        if (res.status === 401) {
+          clearControlPin();
+          setAuthUIState('unauthenticated');
+          return;
         }
-      });
-    }
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          showFeedback(errData.message || `Purge failed (HTTP ${res.status}).`, 'error');
+          return;
+        }
+        await syncState();
+        showFeedback('Sample data purged. Real donations were left untouched.', 'ok');
+      } catch (err) {
+        console.warn('[Givebar Testing] Purge failed:', err);
+        showFeedback('Network error purging sample data.', 'error');
+      } finally {
+        btnPurgeSampleData.disabled = false;
+        btnPurgeSampleData.textContent = 'Purge Sample Data';
+      }
+    });
   }
 
   // --- Sync & Render Sample Records ---
@@ -197,13 +242,18 @@
       if (!res.ok) return;
       const data = await res.json();
       setAuthUIState('authenticated');
-      const chyrons = Array.isArray(data.staged_chyrons) ? data.staged_chyrons : [];
-      sampleRecords = chyrons.filter(c => c.source === 'rehearsal');
-      renderSampleView();
+      applyState(data);
     } catch (err) {
       console.warn('[Givebar Testing] Sync state error:', err);
     }
   }
+
+  function applyState(data) {
+    const chyrons = Array.isArray(data.staged_chyrons) ? data.staged_chyrons : [];
+    sampleRecords = chyrons.filter(c => c.source === 'rehearsal');
+    renderSampleView();
+  }
+
   function renderSampleView() {
     const count = sampleRecords.length;
 

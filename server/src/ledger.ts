@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 
 export interface LedgerEvent {
   seq: number;
-  event_type: "create" | "amend" | "void" | "match_apply" | "match_release";
+  event_type: "create" | "amend" | "void" | "restore" | "match_apply" | "match_release";
   donation_id: string;
   supersedes_seq: number | null;
   amount_cents: number;
@@ -52,14 +52,13 @@ export interface EventStateRecord {
   match_sponsor_title: string;
   is_frozen: number;
   manual_override_cents: number | null;
-  qr_donate_url: string;
+  qr_url: string;
   qr_style: string;
   qr_center_icon: string;
   qr_fg_color: string;
   qr_bg_color: string;
   entry_pin: string;
   control_pin: string;
-  milestones_json: string;
   odometer_floor_cents: number;
   theme_preset: string;
   brand_hue: number;
@@ -67,6 +66,7 @@ export interface EventStateRecord {
   brand_accent_hex: string;
   brand_radius_px: number;
   major_gift_threshold_cents: number;
+  stage_delay_ms: number;
   countdown_seconds: number;
   timer_status: string;
   timer_ends_at: number | null;
@@ -89,6 +89,11 @@ export interface EventStateRecord {
   bloomerang_api_key: string;
   bloomerang_last_sync_at: number | null;
   bloomerang_last_error: string;
+  event_title: string;
+  text_color: string;
+  font_family: string;
+  chart_orientation: string;
+  display_url: string;
   settings_seq: number;
   updated_at: number;
 }
@@ -878,14 +883,13 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
         match_sponsor_title = ?,
         is_frozen = ?,
         manual_override_cents = ?,
-        qr_donate_url = ?,
+        qr_url = ?,
         qr_style = ?,
         qr_center_icon = ?,
         qr_fg_color = ?,
         qr_bg_color = ?,
         entry_pin = ?,
         control_pin = ?,
-        milestones_json = ?,
         odometer_floor_cents = ?,
         theme_preset = ?,
         brand_hue = ?,
@@ -916,6 +920,11 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
         bloomerang_api_key = ?,
         bloomerang_last_sync_at = ?,
         bloomerang_last_error = ?,
+        event_title = ?,
+        text_color = ?,
+        font_family = ?,
+        chart_orientation = ?,
+        display_url = ?,
         settings_seq = ?,
         updated_at = ?
     WHERE id = 1
@@ -930,14 +939,13 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
     updated.match_sponsor_title,
     updated.is_frozen,
     updated.manual_override_cents,
-    updated.qr_donate_url,
+    updated.qr_url || "",
     updated.qr_style || "dots",
     updated.qr_center_icon || "star",
     updated.qr_fg_color || "",
     updated.qr_bg_color || "#FFFFFF",
     updated.entry_pin,
     updated.control_pin,
-    updated.milestones_json,
     updated.odometer_floor_cents,
     updated.theme_preset,
     updated.brand_hue,
@@ -968,6 +976,11 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
     updated.bloomerang_api_key || "",
     updated.bloomerang_last_sync_at ?? null,
     updated.bloomerang_last_error || "",
+    updated.event_title || "",
+    updated.text_color || "",
+    updated.font_family || "system",
+    updated.chart_orientation || "horizontal",
+    updated.display_url || "",
     updated.settings_seq,
     now
   );

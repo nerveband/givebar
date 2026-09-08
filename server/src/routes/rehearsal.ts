@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { recordDonation, foldLedger, getEventState } from "../ledger";
+import { getMilestones } from "../projection";
 
 const SAMPLE_DONORS = [
   "Dr. Tariq & Mona Al-Mansoor",
@@ -92,13 +93,9 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
         const folded = foldLedger(db);
         const currentTotal = folded.total_raised_cents;
         
-        let milestones: Array<{ cents: number; label: string }> = [];
-        try {
-          milestones = JSON.parse(eventState.milestones_json);
-        } catch {
-          milestones = [{ cents: 50000000, label: "Goal" }];
-        }
-        milestones.sort((a, b) => a.cents - b.cents);
+        const milestones = getMilestones(db, eventState.goal_cents)
+          .slice()
+          .sort((a, b) => a.cents - b.cents);
 
         let targetCents = eventState.goal_cents;
         for (const m of milestones) {

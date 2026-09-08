@@ -11,6 +11,7 @@ import {
   getEmceeState
 } from "../server/src/ledger";
 import { handleDonationRequest } from "../server/src/routes/donation";
+import { handleControlRequest } from "../server/src/routes/control";
 import type { Database } from "bun:sqlite";
 
 describe("Givebar Live Safety Rails & Invariants", () => {
@@ -111,15 +112,21 @@ describe("Givebar Live Safety Rails & Invariants", () => {
     expect(foldLedger(db).active_donation_count).toBe(0);
   });
 
-  test("calculates milestone gaps accurately across multi-tier goals", () => {
-    updateEventState(db, {
-      goal_cents: 100000000, // $1,000,000
-      milestones_json: JSON.stringify([
-        { cents: 25000000, label: "Staffing" },
-        { cents: 50000000, label: "Legal Clinic" },
-        { cents: 100000000, label: "Expansion" }
-      ])
+  test("calculates milestone gaps accurately across multi-tier goals", async () => {
+    const seedReq = new Request("http://localhost:3000/api/control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update_settings",
+        goal_cents: 100000000, // $1,000,000
+        milestones: [
+          { cents: 25000000, label: "Staffing" },
+          { cents: 50000000, label: "Legal Clinic" },
+          { cents: 100000000, label: "Expansion" }
+        ]
+      })
     });
+    expect((await handleControlRequest(seedReq, db)).status).toBe(200);
 
     // Record $150,000
     recordDonation(db, {

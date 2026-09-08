@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { foldLedger, getEventState, type DonationRecord, type LedgerEvent, type EventStateRecord } from "./ledger";
+import { deriveDisplayUrl, FONT_FAMILY_KEYS, CHART_ORIENTATIONS } from "./settings";
 
 export interface PublicChyron {
   donation_id: string;
@@ -54,6 +55,27 @@ interface AskTierRow {
   label: string;
 }
 
+/**
+ * Strict Privacy Shield for configuration payloads: PINs and vendor API keys
+ * never leave the server, and the retired `qr_donate_url` / `milestones_json`
+ * columns are dropped so no client can bind to them again.
+ */
+export function sanitizeEventState(state: EventStateRecord): Record<string, unknown> {
+  const {
+    control_pin: _controlPin,
+    entry_pin: _entryPin,
+    bloomerang_api_key: _apiKey,
+    qr_donate_url: _retiredQrUrl,
+    milestones_json: _retiredMilestones,
+    ...rest
+  } = state as EventStateRecord & { qr_donate_url?: string; milestones_json?: string };
+
+  return {
+    ...rest,
+    display_url_effective: deriveDisplayUrl(state.qr_url, state.display_url)
+  };
+}
+
 export function getThemeTokens(state: EventStateRecord): ThemeTokens {
   return {
     preset: state.theme_preset || "champagne",
@@ -68,28 +90,12 @@ export function getThemeTokens(state: EventStateRecord): ThemeTokens {
   };
 }
 
+/**
+ * The `milestone` child table is the single source of truth. Rows may store an
+ * absolute target in cents or a percent of the live goal; percent rows are
+ * resolved against the current goal so goal edits move milestone math instantly.
+ */
 export function getMilestones(db: Database, goalCents: number): MilestoneItem[] {
-  const eventState = getEventState(db);
-
-  // If milestones_json is customized, parse it
-  if (eventState.milestones_json) {
-    try {
-      const parsed: Array<{ cents: number; label: string; percent?: number; celebrate?: boolean }> = JSON.parse(eventState.milestones_json);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((m, i) => ({
-          id: i + 1,
-          sort_order: i + 1,
-          percent_of_goal: m.percent !== undefined ? m.percent : (goalCents > 0 ? (m.cents / goalCents) * 100 : null),
-          cents: m.cents,
-          label: m.label,
-          celebrate: m.celebrate !== undefined ? Boolean(m.celebrate) : true
-        }));
-      }
-    } catch {
-      // Fall through to milestone table
-    }
-  }
-
   const rows = db.query<MilestoneRow, []>(`SELECT * FROM milestone ORDER BY sort_order ASC`).all();
   return rows.map((r, i) => {
     let cents = r.cents;
@@ -211,16 +217,23 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
     trust_badge_text: eventState.trust_badge_text || "501(c)(3) Tax-Deductible Contribution",
     pinned_donation_id: eventState.pinned_donation_id ?? null,
     pinned_donation: pinnedDonation,
-    qr_donate_url: eventState.qr_donate_url,
+    qr_url: eventState.qr_url || "",
+    display_url: eventState.display_url || "",
+    display_url_effective: deriveDisplayUrl(eventState.qr_url, eventState.display_url),
     qr_style: eventState.qr_style || "dots",
     qr_center_icon: eventState.qr_center_icon || "star",
     qr_fg_color: eventState.qr_fg_color || "",
     qr_bg_color: eventState.qr_bg_color || "#FFFFFF",
     theme: getThemeTokens(eventState),
     settings_seq: eventState.settings_seq || 1,
+    has_control_pin: Boolean(eventState.control_pin && eventState.control_pin.trim() !== ""),
     logo_url: eventState.logo_url || "",
     background_style: eventState.background_style || "plain",
     bar_color: eventState.bar_color || "",
+    event_title: eventState.event_title || "",
+    text_color: eventState.text_color || "",
+    font_family: eventState.font_family || "system",
+    chart_orientation: eventState.chart_orientation || "horizontal",
     show_qr: Boolean(eventState.show_qr ?? 1),
     show_recent_donations: Boolean(eventState.show_recent_donations ?? 1),
     show_live_indicator: Boolean(eventState.show_live_indicator ?? 1),
@@ -296,6 +309,20 @@ export function getEmceeState(db: Database) {
       seconds_ago: Math.max(0, Math.floor((now - d.created_at) / 1000))
     }));
 
+  // Full presenter history: every active gift, newest first, same privacy shield.
+  const allGifts = Array.from(fullFold.active_donations.values())
+    .filter(d => !heldSet.has(d.donation_id) && !d.is_voided)
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 500)
+    .map(d => ({
+      donation_id: d.donation_id,
+      display_name: d.is_anonymous ? "Anonymous Supporter" : d.donor_name,
+      amount_cents: d.amount_cents,
+      is_anonymous: Boolean(d.is_anonymous),
+      donor_phonetic: d.is_anonymous ? null : (d.donor_phonetic || null),
+      created_at: d.created_at
+    }));
+
   const percent = eventState.goal_cents > 0
     ? Math.min(100, Math.round((totalRaised / eventState.goal_cents) * 1000) / 10)
     : 0;
@@ -304,6 +331,7 @@ export function getEmceeState(db: Database) {
     seq: fullFold.latest_seq,
     event_name: eventState.event_name,
     event_subtitle: eventState.event_subtitle,
+    event_title: eventState.event_title || "",
     total_raised_cents: totalRaised,
     direct_raised_cents: fullFold.direct_raised_cents,
     match_applied_cents: fullFold.match_applied_cents,
@@ -319,6 +347,7 @@ export function getEmceeState(db: Database) {
     settings_seq: eventState.settings_seq || 1,
     top_gifts: topGifts,
     recent_gifts: recentGifts,
+    all_gifts: allGifts,
     is_frozen: Boolean(eventState.is_frozen),
     countdown_seconds: eventState.countdown_seconds ?? 300,
     timer_status: eventState.timer_status || "stopped",
@@ -387,8 +416,7 @@ export function getControlState(db: Database) {
     `SELECT * FROM ledger ORDER BY seq DESC LIMIT 50`
   ).all();
 
-  // Sanitize state payload (omit PINs and API keys from state object)
-  const { control_pin: _c, entry_pin: _e, bloomerang_api_key: _b, ...sanitizedState } = eventState;
+  const sanitizedState = sanitizeEventState(eventState);
   const hasBloomerangKey = Boolean(eventState.bloomerang_api_key && eventState.bloomerang_api_key.trim() !== "");
   const bloomerangKeyMasked = hasBloomerangKey ? "••••••••••••••" : "";
   return {
@@ -398,6 +426,9 @@ export function getControlState(db: Database) {
     has_entry_pin: Boolean(eventState.entry_pin && eventState.entry_pin.trim() !== ""),
     has_bloomerang_api_key: hasBloomerangKey,
     bloomerang_key_masked: bloomerangKeyMasked,
+    display_url_effective: deriveDisplayUrl(eventState.qr_url, eventState.display_url),
+    font_family_options: FONT_FAMILY_KEYS,
+    chart_orientation_options: CHART_ORIENTATIONS,
     theme: getThemeTokens(eventState),
     settings_seq: eventState.settings_seq || 1,
     milestones: getMilestones(db, eventState.goal_cents),
@@ -445,12 +476,16 @@ export function getVolunteerState(db: Database, volunteerId?: string) {
     feature_card_number: Boolean(eventState.feature_card_number ?? 0),
     feature_table_number: Boolean(eventState.feature_table_number ?? 0),
     feature_timer: Boolean(eventState.feature_timer ?? 0),
+    event_title: eventState.event_title || "",
+    event_name: eventState.event_name,
     event_subtitle: eventState.event_subtitle,
     total_raised_cents: fullFold.total_raised_cents,
     goal_cents: eventState.goal_cents,
     major_gift_threshold_cents: eventState.major_gift_threshold_cents || 950000,
     has_entry_pin: Boolean(eventState.entry_pin && eventState.entry_pin.trim() !== ""),
-    theme: getThemeTokens(eventState),
+    has_control_pin: Boolean(eventState.control_pin && eventState.control_pin.trim() !== ""),
+    font_family: eventState.font_family || "system",
+    text_color: eventState.text_color || "",
     settings_seq: eventState.settings_seq || 1,
     ask_tiers: getAskTiers(db),
     personal_log: personalLog,

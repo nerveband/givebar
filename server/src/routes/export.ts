@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { foldLedger, type LedgerEvent } from "../ledger";
+import { isControlAuthorized, readControlPin } from "../auth";
 
 function escapeCSV(val: unknown): string {
   if (val === null || val === undefined) return "";
@@ -16,10 +17,8 @@ function escapeCSV(val: unknown): string {
 
 export function handleExportCSV(req: Request, db: Database): Response {
   const url = new URL(req.url);
-  const eventState = db.query<{ control_pin: string }, []>(`SELECT control_pin FROM event_state WHERE id = 1`).get();
-  const isAuthDisabled = process.env.GIVEBAR_DISABLE_AUTH === "1";
   const pin = req.headers.get("X-Control-Pin") || url.searchParams.get("pin") || "";
-  if (!isAuthDisabled && eventState && eventState.control_pin && eventState.control_pin.trim() !== "" && pin !== eventState.control_pin) {
+  if (!isControlAuthorized(readControlPin(db), pin)) {
     return Response.json({ error: "UNAUTHORIZED", message: "Control Room PIN required to download finance CSV" }, { status: 401 });
   }
 

@@ -172,15 +172,18 @@ svg.icon {
 
 /* =========================================================================
    Rolling Odometer Reels (Tabular Figures, Zero Jitter)
+   Each reel is a vertical strip of digit cells; RollingOdometer translates the
+   strip so digits always travel upward (0 follows 9), never backward.
    ========================================================================= */
 
 .odometer-wrapper {
+  --odo-cell: 1.12em;
   display: inline-flex;
   align-items: baseline;
-  font-family: var(--font-sans);
+  font-family: inherit;
   font-weight: 900;
   letter-spacing: -0.03em;
-  color: var(--brand-accent);
+  color: var(--odo-ink, var(--brand-accent));
   user-select: none;
   font-variant-numeric: tabular-nums;
 }
@@ -188,8 +191,8 @@ svg.icon {
 .odometer-currency {
   font-size: 0.65em;
   font-weight: 800;
-  color: var(--brand-accent);
-  margin-right: 4px;
+  color: var(--odo-ink, var(--brand-accent));
+  margin-right: 0.06em;
   align-self: flex-start;
   padding-top: 0.15em;
 }
@@ -197,20 +200,21 @@ svg.icon {
 .odometer-digit-reel {
   position: relative;
   display: inline-block;
-  height: 1.15em;
+  height: var(--odo-cell);
   overflow: hidden;
-  line-height: 1.15em;
+  line-height: var(--odo-cell);
 }
 
 .odometer-digit-track {
   display: flex;
   flex-direction: column;
-  transition: transform 1200ms var(--ease-spring);
+  transform: translate3d(0, 0, 0);
+  transition: transform var(--dur-roll) var(--ease-out);
   will-change: transform;
 }
 
 .odometer-digit-val {
-  height: 1.15em;
+  height: var(--odo-cell);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -219,9 +223,18 @@ svg.icon {
 }
 
 .odometer-separator {
-  color: var(--ink-muted);
-  margin: 0 1px;
+  color: var(--odo-sep, var(--ink-muted));
+  margin: 0 0.01em;
   font-weight: 700;
+}
+
+/* Reduced motion: the figure is the information, the travel is not.
+   Digits land on the settled value immediately, no vertical reel movement. */
+@media (prefers-reduced-motion: reduce) {
+  .odometer-digit-track {
+    transition: none !important;
+    will-change: auto;
+  }
 }
 
 /* =========================================================================

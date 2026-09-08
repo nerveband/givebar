@@ -1,5 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { getStageState, getEmceeState, getControlState, getVolunteerState, getEventState, foldLedger } from "../ledger";
+import { sanitizeEventState } from "../projection";
+import { isControlAuthorized } from "../auth";
 
 export function getStatePayload(role: string, db: Database, sinceSeq = 0, volunteerId?: string, pin?: string): { status: number; payload: unknown } {
   switch (role) {
@@ -9,8 +11,7 @@ export function getStatePayload(role: string, db: Database, sinceSeq = 0, volunt
       return { status: 200, payload: getEmceeState(db) };
     case "control": {
       const eventState = getEventState(db);
-      const isAuthDisabled = process.env.GIVEBAR_DISABLE_AUTH === "1" || process.env.NODE_ENV === "test";
-      if (!isAuthDisabled && eventState.control_pin && eventState.control_pin.trim() !== "" && pin !== eventState.control_pin) {
+      if (!isControlAuthorized(eventState.control_pin, pin || "")) {
         return { status: 401, payload: { error: "UNAUTHORIZED", message: "Control Room PIN required" } };
       }
       return { status: 200, payload: getControlState(db) };
@@ -19,14 +20,15 @@ export function getStatePayload(role: string, db: Database, sinceSeq = 0, volunt
       return { status: 200, payload: getVolunteerState(db, volunteerId) };
     default: {
       const fullState = getEventState(db);
-      const { control_pin: _c, entry_pin: _e, bloomerang_api_key: _b, ...sanitizedEvent } = fullState;
       const hasBloomerangKey = Boolean(fullState.bloomerang_api_key && fullState.bloomerang_api_key.trim() !== "");
       return {
         status: 200,
         payload: {
           stage: getStageState(db, sinceSeq),
           event: {
-            ...sanitizedEvent,
+            ...sanitizeEventState(fullState),
+            has_control_pin: Boolean(fullState.control_pin && fullState.control_pin.trim() !== ""),
+            has_entry_pin: Boolean(fullState.entry_pin && fullState.entry_pin.trim() !== ""),
             has_bloomerang_api_key: hasBloomerangKey,
             bloomerang_key_masked: hasBloomerangKey ? "••••••••••••••" : ""
           },
@@ -61,6 +63,7 @@ export function handleStateStreamRequest(req: Request, db: Database): Response {
   const url = new URL(req.url);
   const role = url.searchParams.get("role") || "stage";
   const volunteerId = url.searchParams.get("volunteer_id") || undefined;
+  const pin = req.headers.get("X-Control-Pin") || url.searchParams.get("pin") || "";
   let timerId: Timer | number | null = null;
 
   let lastSentHash = "";

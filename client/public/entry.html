@@ -7,44 +7,55 @@
   <link rel="stylesheet" href="css/app.css?v=5.0.0">
   <style>
     /* -------------------------------------------------------------------------
-       VERTICAL BUDGET (Mobile 375px Viewport, 640px–700px height - b4-pad.png):
-       Goal: 3 visible recent rows without scrolling, 4+3 preset grid (all 7 presets
-       visible without scrolling or gestures), controls in lower 60% thumb zone.
-       
-       Pixel allocations:
-       - Recent section (3 rows visible without scrolling):
-         Header (16px) + 3 rows @ 20px (60px) + padding/borders (8px) = 84px
-       - Section header + Hero Amount ($500): ~34px
-       - Donor Name field (34px) + margin (4px): 38px
-       - Name Pronunciation compact disclosure ("+ Add pronunciation"): 22px
-         (when expanded inline: +36px = 58px total)
-       - Anonymous switch row (>=44px touch target): 44px
-       - Presets (4+3 two-row grid, no horizontal scroll, 48px height per row):
-         Row 1 (48px) + Row 2 (48px) + 4px gap = 100px
-       - Numeric Keypad Grid (4 rows @ 54px + 3 gaps @ 4px): 228px
-       - Primary CTA Button ("Add $500"): 56px
-       
-       Total Fixed Vertical Height:
-       - With pronunciation collapsed:
-         84 + 34 + 38 + 22 + 44 + 100 + 228 + 56 = 606px
-       - With pronunciation expanded:
-         606 + 36 = 642px
-       
-       Result:
-       - In a 640px viewport (worst case): 606px fits cleanly with 34px margin!
-       - In a 667px viewport (iPhone SE): 606px fits cleanly with 61px margin!
-       - In a 700px viewport: 606px leaves 94px comfortable breathing room!
-       - Exactly 3 recent rows remain 100% visible without scrolling!
-       
-       Preset Height Tradeoff:
-       All seven presets ($50,000 down to $500) are laid out in a 4+3 two-row grid
-       (matching desktop) with zero horizontal scrolling or gestures.
-       To fit both rows alongside the 3 visible recent rows and the lower thumb zone
-       keypad, preset height is compressed from 56px to 48px (the minimum touch
-       target specified in Defect 1: "at least 48px tall; 56px if budget allows").
-       This guarantees that all 7 presets are immediately visible and clickable,
-       including $500 (the most frequent gala pledge) on the second row.
+       ADD DONATION PAD — page-local styles (Direction B: Presentation Contrast).
+       Near-black surfaces, amber-gold figures, tabular numerals, hairline rules,
+       small radius, no decorative gradients.
+
+       Context: a volunteer holds a phone in a dim ballroom with a donor standing
+       in front of them. The two things scanned at a glance are DONOR NAME and
+       AMOUNT, so those carry the type scale. Time and status are secondary.
+
+       Vertical budget (375px wide, >= 3 recent rows visible without scrolling):
+         Recent header 18 + 3 rows @ 40px = 138
+         Amount label 13 + hero 34            =  47
+         Presets 2 rows @ 46 + gap 4          =  96
+         Donor name label 13 + input 36       =  49
+         Pronunciation disclosure             =  20
+         Anonymous switch                     =  44
+         Keypad 4 rows @ 46 + 3 gaps @ 3      = 193
+         Primary CTA                          =  48
+         CTA delivery note                    =  30
+         gaps / padding                       =  ~40
+         -------------------------------------------- total ~= 705px
+       Fits a 375x812 handset outright; on a 667px handset the Recent panel is
+       ordered first so three rows stay visible above the fold.
+
+       Motion tokens (micro-motion): acknowledgement 140ms, insertion 200ms,
+       confirmation 260ms; ease-out entrances. Every animated affordance has a
+       reduced-motion equivalent that keeps the final content and only removes
+       spatial movement.
        ------------------------------------------------------------------------- */
+
+    .pad-page {
+      --pad-ink: #f4f5f6;
+      --pad-ink-dim: #9a9ba1;
+      --pad-ink-faint: #74757b;
+      --pad-surface: #16171b;
+      --pad-surface-raised: #1e1f24;
+      --pad-hairline: #26272d;
+      --pad-hairline-strong: #33343c;
+      --pad-amber: #d4a359;
+      --pad-amber-bright: #e5b842;
+      --pad-amber-wash: #2a2113;
+      --pad-ok: #55c98a;
+      --pad-ok-wash: #12281d;
+      --pad-danger: #f87171;
+      --pad-radius: var(--brand-radius, 6px);
+      --pad-dur-ack: 140ms;
+      --pad-dur-insert: 200ms;
+      --pad-dur-confirm: 260ms;
+      --pad-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    }
 
     .add-desktop-grid {
       display: grid;
@@ -54,28 +65,31 @@
     }
 
     .pad-card {
-      background: #18191d;
-      border: 1px solid #27282e;
-      border-radius: var(--brand-radius);
+      background: var(--pad-surface);
+      border: 1px solid var(--pad-hairline);
+      border-radius: var(--pad-radius);
       padding: var(--space-5);
     }
 
     .amount-label {
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
       font-size: var(--text-xs);
       font-weight: 700;
-      color: #88888e;
+      color: var(--pad-ink-dim);
       text-transform: uppercase;
       text-align: center;
       letter-spacing: 0.08em;
       margin-bottom: 2px;
     }
 
-    .hero-amount-display,
     .hero-amount-input {
       background: transparent !important;
       border: none !important;
-      color: #d4a359 !important;
+      border-bottom: 2px solid transparent !important;
+      color: var(--pad-amber) !important;
       font-size: clamp(2.25rem, 5vw, 3.25rem) !important;
       font-weight: 800 !important;
       font-family: var(--font-sans) !important;
@@ -83,7 +97,7 @@
       text-align: center !important;
       width: 100% !important;
       outline: none !important;
-      margin: 4px 0 12px 0 !important;
+      margin: 4px 0 10px 0 !important;
       padding: 0 !important;
       display: block !important;
       box-shadow: none !important;
@@ -91,9 +105,63 @@
       appearance: none !important;
       line-height: 1.1 !important;
       letter-spacing: -0.02em !important;
+      transition: border-color var(--pad-dur-ack) ease, color var(--pad-dur-ack) ease;
     }
 
-    /* 4+3 Preset Grid (Both Desktop and Mobile) */
+    /* Direct-entry (Custom) mode: unmistakable editing state */
+    .pad-page.is-custom-mode .hero-amount-input {
+      border-bottom-color: var(--pad-amber) !important;
+      caret-color: var(--pad-amber);
+    }
+
+    .pad-page.is-custom-mode .amount-label {
+      color: var(--pad-amber);
+    }
+
+    .custom-entry-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      background: var(--pad-amber-wash);
+      border: 1px solid var(--pad-amber);
+      border-radius: var(--pad-radius);
+      padding: 8px 10px;
+      margin-bottom: var(--space-3);
+    }
+
+    .pad-page.is-custom-mode .custom-entry-bar {
+      display: flex;
+    }
+
+    .custom-entry-hint {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--pad-amber);
+      line-height: 1.35;
+    }
+
+    .btn-custom-done {
+      flex-shrink: 0;
+      min-height: 40px;
+      padding: 0 16px;
+      background: var(--pad-amber);
+      color: #121316;
+      border: none;
+      border-radius: var(--pad-radius);
+      font-size: var(--text-sm);
+      font-weight: 800;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      touch-action: manipulation;
+    }
+
+    .btn-custom-done:hover { background: var(--pad-amber-bright); }
+
+    /* Preset ladder + explicit Custom control (4-up grid, no horizontal scroll) */
     .preset-chips-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -103,11 +171,11 @@
     }
 
     .preset-chip {
-      min-height: 48px;
-      background: #202126;
-      border: 1px solid #2d2e35;
-      border-radius: var(--brand-radius);
-      color: #f4f5f6;
+      min-height: 46px;
+      background: var(--pad-surface-raised);
+      border: 1px solid var(--pad-hairline-strong);
+      border-radius: var(--pad-radius);
+      color: var(--pad-ink);
       font-size: var(--text-xs);
       font-weight: 700;
       padding: 6px 4px;
@@ -116,15 +184,81 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background-color 0.12s ease, border-color 0.12s ease;
+      gap: 4px;
+      transition: background-color var(--pad-dur-ack) ease, border-color var(--pad-dur-ack) ease;
       font-family: var(--font-sans);
       white-space: nowrap;
+      touch-action: manipulation;
+    }
+
+    .preset-chip:hover {
+      background: #272930;
+      border-color: var(--pad-amber);
+    }
+
+    .preset-chip.active {
+      background: var(--pad-amber);
+      color: #121316;
+      border-color: var(--pad-amber);
+    }
+
+    .preset-chip:focus-visible,
+    .btn-custom-done:focus-visible,
+    .keypad-key:focus-visible,
+    .btn-add-primary:focus-visible,
+    .recent-action-btn:focus-visible,
+    .anon-switch-control:focus-visible {
+      outline: 2px solid var(--pad-amber);
+      outline-offset: 2px;
+    }
+
+    /* The Custom control sits in the ladder so a non-preset amount is obviously
+       available, but reads as a mode switch rather than another dollar figure. */
+    .preset-chip-custom {
+      background: transparent;
+      border-style: dashed;
+      border-color: var(--pad-amber);
+      color: var(--pad-amber);
+    }
+
+    .preset-chip-custom:hover {
+      background: var(--pad-amber-wash);
+      border-color: var(--pad-amber);
+    }
+
+    .preset-chip-custom[aria-pressed="true"] {
+      background: var(--pad-amber);
+      border-style: solid;
+      color: #121316;
+    }
+
+    .field-label-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-2);
+      margin-bottom: 4px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: var(--text-xs);
+      font-weight: 700;
+      color: var(--pad-ink-dim);
+      letter-spacing: 0.03em;
+    }
+
+    .field-required-flag {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--pad-amber);
+      letter-spacing: 0.04em;
     }
 
     .btn-pronunciation-toggle {
       background: transparent;
       border: none;
-      color: #88888e;
+      color: var(--pad-ink-dim);
       font-size: var(--text-xs);
       font-weight: 600;
       cursor: pointer;
@@ -133,43 +267,29 @@
       align-items: center;
       gap: 4px;
       font-family: var(--font-sans);
-      transition: color 0.12s ease;
+      transition: color var(--pad-dur-ack) ease;
     }
 
-    .btn-pronunciation-toggle:hover {
-      color: #d4a359;
-    }
-      text-align: center;
-      transition: background-color 0.12s ease, border-color 0.12s ease;
-      font-family: var(--font-sans);
-      white-space: nowrap;
-    }
+    .btn-pronunciation-toggle:hover { color: var(--pad-amber); }
 
-    .preset-chip:hover {
-      background: #272930;
-      border-color: #d4a359;
-    }
+    /* Anonymous switch (role=switch, >= 44px target, inline explanation - no modal) */
+    .anon-block { margin-bottom: var(--space-4); }
 
-    .preset-chip.active {
-      background: #d4a359;
-      color: #121316;
-      border-color: #d4a359;
-    }
-
-    /* Anonymous Switch Control (Accessible, role=switch, >= 44px target) */
     .anon-switch-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       min-height: 48px;
-      padding: 0 4px;
       cursor: pointer;
       user-select: none;
       background: #15161a;
-      border: 1px solid #27282e;
-      border-radius: var(--brand-radius);
+      border: 1px solid var(--pad-hairline);
+      border-radius: var(--pad-radius);
       padding: 4px 12px;
+      transition: border-color var(--pad-dur-ack) ease;
     }
+
+    .anon-switch-row.is-anon { border-color: var(--pad-amber); }
 
     .anon-switch-label {
       display: inline-flex;
@@ -177,7 +297,7 @@
       gap: 10px;
       cursor: pointer;
       font-size: var(--text-sm);
-      color: #f4f5f6;
+      color: var(--pad-ink);
       font-weight: 600;
       flex: 1;
       min-height: 44px;
@@ -187,12 +307,12 @@
       font-size: 11px;
       font-weight: 800;
       letter-spacing: 0.06em;
-      color: #71747a;
+      color: var(--pad-ink-faint);
       background: #1f2025;
-      border: 1px solid #2e3038;
+      border: 1px solid var(--pad-hairline-strong);
       border-radius: 4px;
       padding: 2px 7px;
-      transition: all 0.15s ease;
+      transition: background-color var(--pad-dur-ack) ease, color var(--pad-dur-ack) ease, border-color var(--pad-dur-ack) ease;
     }
 
     .anon-switch-control {
@@ -219,7 +339,7 @@
       align-items: center;
       justify-content: space-between;
       padding: 0 7px;
-      transition: background-color 0.2s ease, border-color 0.2s ease;
+      transition: background-color var(--pad-dur-insert) ease, border-color var(--pad-dur-insert) ease;
     }
 
     .switch-affordance {
@@ -231,13 +351,8 @@
       pointer-events: none;
     }
 
-    .switch-affordance.off {
-      color: #71747a;
-    }
-
-    .switch-affordance.on {
-      color: transparent;
-    }
+    .switch-affordance.off { color: var(--pad-ink-faint); }
+    .switch-affordance.on { color: transparent; }
 
     .switch-knob {
       width: 20px;
@@ -247,36 +362,72 @@
       position: absolute;
       top: 2.5px;
       left: 3px;
-      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+      transition: transform var(--pad-dur-insert) var(--pad-ease-out), background-color var(--pad-dur-insert) ease;
     }
 
-    /* Active / ON State (Amber-gold) */
     .anon-switch-control[aria-checked="true"] .switch-track {
-      background: #342714;
-      border-color: #d4a359;
+      background: var(--pad-amber-wash);
+      border-color: var(--pad-amber);
     }
 
     .anon-switch-control[aria-checked="true"] .switch-knob {
       transform: translateX(26px);
-      background: #d4a359;
+      background: var(--pad-amber);
     }
 
-    .anon-switch-control[aria-checked="true"] .switch-affordance.off {
-      color: transparent;
-    }
+    .anon-switch-control[aria-checked="true"] .switch-affordance.off { color: transparent; }
+    .anon-switch-control[aria-checked="true"] .switch-affordance.on { color: var(--pad-amber); }
 
-    .anon-switch-control[aria-checked="true"] .switch-affordance.on {
-      color: #d4a359;
-    }
-
-    .anon-switch-control[aria-checked="true"] ~ .anon-switch-label .anon-switch-badge,
     .anon-switch-row.is-anon .anon-switch-badge {
       color: #121316;
-      background: #d4a359;
-      border-color: #d4a359;
+      background: var(--pad-amber);
+      border-color: var(--pad-amber);
     }
 
-    /* Keypad Grid (Visible on mobile, hidden on desktop per spec) */
+    /* Inline explanation, revealed the moment the switch goes ON. */
+    .anon-explainer {
+      display: none;
+      gap: 8px;
+      align-items: flex-start;
+      margin-top: 6px;
+      padding: 8px 10px;
+      background: var(--pad-amber-wash);
+      border: 1px solid var(--pad-hairline-strong);
+      border-left: 2px solid var(--pad-amber);
+      border-radius: var(--pad-radius);
+      font-size: var(--text-xs);
+      line-height: 1.45;
+      color: #d9dade;
+    }
+
+    .anon-explainer.is-visible { display: flex; }
+
+    .anon-explainer .icon { color: var(--pad-amber); margin-top: 1px; }
+    .anon-explainer strong { color: var(--pad-ink); font-weight: 800; }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .anon-explainer.is-visible {
+        animation: pad-explainer-in var(--pad-dur-insert) var(--pad-ease-out) both;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .anon-explainer.is-visible {
+        animation: pad-fade-in var(--pad-dur-ack) linear both;
+      }
+    }
+
+    @keyframes pad-explainer-in {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @keyframes pad-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* Numeric keypad (mobile thumb zone) */
     .keypad-grid {
       display: none;
       grid-template-columns: repeat(3, 1fr);
@@ -285,13 +436,14 @@
     }
 
     .keypad-key {
-      min-height: 56px;
-      background: #202126;
-      border: 1px solid #2d2e35;
-      border-radius: var(--brand-radius);
-      color: #f4f5f6;
+      min-height: 54px;
+      background: var(--pad-surface-raised);
+      border: 1px solid var(--pad-hairline-strong);
+      border-radius: var(--pad-radius);
+      color: var(--pad-ink);
       font-size: 1.5rem;
       font-weight: 700;
+      font-variant-numeric: tabular-nums;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -299,20 +451,18 @@
       touch-action: manipulation;
       user-select: none;
       font-family: var(--font-sans);
-      transition: background-color 0.1s ease;
+      transition: background-color var(--pad-dur-ack) ease;
     }
 
-    .keypad-key:active {
-      background: #2c2e36;
-    }
+    .keypad-key:active { background: #2c2e36; }
 
     .btn-add-primary {
       width: 100%;
       min-height: 52px;
-      background: #d4a359;
+      background: var(--pad-amber);
       color: #121316;
       border: none;
-      border-radius: var(--brand-radius);
+      border-radius: var(--pad-radius);
       font-size: var(--text-base);
       font-weight: 800;
       cursor: pointer;
@@ -320,99 +470,198 @@
       align-items: center;
       justify-content: center;
       font-family: var(--font-sans);
-      transition: background-color 0.15s ease;
+      font-variant-numeric: tabular-nums;
+      transition: background-color var(--pad-dur-ack) ease;
+      touch-action: manipulation;
     }
 
-    .btn-add-primary:hover {
-      background: #e5b842;
+    .btn-add-primary:hover { background: var(--pad-amber-bright); }
+
+    .submit-note {
+      margin: 6px 2px 0 2px;
+      font-size: var(--text-xs);
+      line-height: 1.45;
+      color: var(--pad-ink-dim);
+      text-align: center;
     }
 
-    /* Recent entries row */
+    /* ---------------------------------------------------------------------
+       RECENT LIST
+       Donor name (left) and amount (right, fixed tabular column) are the two
+       scan targets and carry the type scale. Time + status are secondary and
+       sit on a quieter second line.
+       --------------------------------------------------------------------- */
     .recent-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      justify-content: space-between;
-      padding: 10px 0;
-      border-bottom: 1px solid #232428;
-      font-size: var(--text-sm);
-      gap: var(--space-3);
-    }
-
-    .recent-row:last-child {
-      border-bottom: none;
-    }
-
-    .recent-row.highlight {
-      border-left: 3px solid #d4a359;
+      column-gap: var(--space-3);
+      row-gap: 1px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--pad-hairline);
+      border-left: 2px solid transparent;
       padding-left: 8px;
     }
 
+    .recent-row:last-child { border-bottom: none; }
+
+    .recent-row.is-live { border-left-color: var(--pad-amber); }
+
     .recent-donor {
-      font-weight: 600;
-      color: #f4f5f6;
-      flex: 1;
+      grid-column: 1;
+      grid-row: 1;
+      font-size: 1.0625rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--pad-ink);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      min-width: 0;
     }
 
     .recent-amount {
+      grid-column: 2;
+      grid-row: 1;
+      font-size: 1.125rem;
       font-weight: 800;
-      color: #f4f5f6;
+      letter-spacing: -0.01em;
+      color: var(--pad-ink);
       font-variant-numeric: tabular-nums;
+      text-align: right;
+      min-width: 7.5ch;
+      white-space: nowrap;
+    }
+
+    .recent-meta {
+      grid-column: 1;
+      grid-row: 2;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      font-size: var(--text-xs);
+      color: var(--pad-ink-faint);
     }
 
     .recent-time {
-      color: #88888e;
-      font-size: var(--text-xs);
       font-variant-numeric: tabular-nums;
-      min-width: 28px;
-      text-align: right;
+      color: var(--pad-ink-faint);
+      flex-shrink: 0;
     }
 
+    .recent-meta-sep { color: #3a3b42; }
+
     .recent-status {
-      font-size: var(--text-xs);
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      min-width: 70px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .recent-status.confirmed { color: var(--pad-ok); }
+    .recent-status.pending { color: var(--pad-amber); }
+    .recent-status.failed { color: var(--pad-danger); }
+    .recent-status.voided { color: var(--pad-ink-faint); }
+
+    .recent-actions {
+      grid-column: 2;
+      grid-row: 2;
+      display: flex;
+      align-items: center;
       justify-content: flex-end;
+      gap: 6px;
+      min-height: 20px;
     }
 
-    .recent-status.confirmed {
-      color: #88888e;
+    .undo-countdown {
+      font-size: var(--text-xs);
+      font-weight: 700;
+      color: var(--pad-amber);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
 
-    .recent-status.pending {
-      color: #d4a359;
+    .recent-action-btn {
+      background: transparent;
+      border: 1px solid var(--pad-hairline-strong);
+      color: var(--pad-amber);
+      font-size: var(--text-xs);
+      font-weight: 800;
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 3px 9px;
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-sans);
+      transition: border-color var(--pad-dur-ack) ease, color var(--pad-dur-ack) ease;
+    }
+
+    .recent-action-btn:hover {
+      border-color: var(--pad-amber);
+      color: var(--pad-amber-bright);
+    }
+
+    /* Undone / voided: struck through across the ENTIRE row, faded, Redo offered */
+    .recent-row.is-voided { opacity: 0.5; }
+
+    .recent-row.is-voided .recent-donor,
+    .recent-row.is-voided .recent-amount,
+    .recent-row.is-voided .recent-time,
+    .recent-row.is-voided .recent-status {
+      text-decoration: line-through;
+      text-decoration-thickness: 1.5px;
+      text-decoration-color: var(--pad-ink-dim);
+    }
+
+    .recent-row.is-voided .recent-donor,
+    .recent-row.is-voided .recent-amount {
+      color: var(--pad-ink-dim);
       font-weight: 600;
     }
 
-    .recent-undo-btn {
-      background: transparent;
-      border: none;
-      color: #d4a359;
-      font-size: var(--text-xs);
-      font-weight: 700;
-      cursor: pointer;
-      text-decoration: underline;
-      padding: 2px 4px;
-      font-family: var(--font-sans);
+    .recent-row.is-voided .recent-action-btn {
+      text-decoration: none;
+      opacity: 1;
     }
 
-    .recent-undo-btn:hover {
-      color: #e5b842;
+    /* Arrival: purposeful ease-out entrance so the volunteer sees the row land. */
+    @media (prefers-reduced-motion: no-preference) {
+      .recent-row.is-entering {
+        animation: pad-row-in var(--pad-dur-confirm) var(--pad-ease-out) both;
+      }
     }
 
+    @media (prefers-reduced-motion: reduce) {
+      .recent-row.is-entering {
+        animation: pad-fade-in var(--pad-dur-insert) linear both;
+      }
+    }
+
+    @keyframes pad-row-in {
+      from { opacity: 0; transform: translateY(-10px) scale(0.99); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .recent-empty {
+      color: var(--pad-ink-faint);
+      font-size: var(--text-sm);
+      padding: var(--space-4) 0;
+      text-align: center;
+    }
+
+    /* ------------------------------- Mobile ------------------------------- */
     @media (max-width: 860px) {
       .ops-sidebar { display: none !important; }
       .desktop-header { display: none !important; }
       .mobile-top-bar { display: none !important; }
 
       .amount-label {
-        display: block !important;
         font-size: 11px !important;
-        margin-bottom: 2px !important;
+        margin-bottom: 1px !important;
       }
 
       .ops-main {
@@ -425,7 +674,7 @@
       .add-desktop-grid {
         display: flex !important;
         flex-direction: column !important;
-        gap: 2px !important;
+        gap: 4px !important;
         min-width: 0 !important;
         max-width: 100% !important;
         width: 100% !important;
@@ -440,45 +689,48 @@
         width: 100% !important;
       }
 
-      /* Compact Recent section: 3 visible rows */
+      /* Recent panel first: three rows stay above the fold. */
       .recent-panel-wrap {
         order: -1 !important;
-        padding: 4px 8px !important;
-        background: #141519 !important;
-        border: 1px solid #232429 !important;
-        border-radius: var(--brand-radius) !important;
-        margin-bottom: 2px !important;
+        padding: 5px 8px !important;
+        background: #131418 !important;
+        border: 1px solid var(--pad-hairline) !important;
+        border-radius: var(--pad-radius) !important;
+        margin-bottom: 3px !important;
         min-width: 0 !important;
         max-width: 100% !important;
         width: 100% !important;
       }
 
-      .recent-panel-wrap h2 {
-        font-size: 11px !important;
-        margin-bottom: 2px !important;
+      .recent-panel-head { margin-bottom: 2px !important; padding-bottom: 3px !important; }
+      .recent-panel-wrap h2 { font-size: 12px !important; }
+
+      /* Keep the pad itself in the thumb zone: the list shows three rows and
+         scrolls internally instead of pushing the form off screen. */
+      #recent-entries-list {
+        max-height: 176px !important; /* 3 rows @ 58px, remainder scrolls */
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
       }
 
-      .recent-row {
-        padding: 2px 0 !important;
-        min-width: 0 !important;
-        font-size: 11px !important;
-      }
+      .recent-row { padding: 5px 0 5px 7px !important; }
+      .recent-donor { font-size: 1rem !important; }
+      .recent-amount { font-size: 1.0625rem !important; min-width: 6.5ch !important; }
+      .recent-meta { font-size: 11px !important; }
+      .undo-countdown { font-size: 11px !important; }
+      .recent-action-btn { font-size: 11px !important; padding: 2px 7px !important; min-height: 24px !important; }
 
-      .recent-donor { font-size: 11px !important; }
-      .recent-amount { font-size: 11px !important; }
-      .recent-time { font-size: 10px !important; }
-      .recent-status { font-size: 10px !important; min-width: 50px !important; }
-      .recent-undo-btn { font-size: 10px !important; padding: 0 2px !important; }
-
-      .hero-amount-display,
       .hero-amount-input {
-        font-size: 1.85rem !important;
-        margin: 0 !important;
-        height: 32px !important;
+        font-size: 1.9rem !important;
+        margin: 0 0 4px 0 !important;
+        height: 34px !important;
         line-height: 1 !important;
       }
 
-      /* 4+3 two-row grid on mobile: no horizontal scrolling, every target >=48px */
+      .custom-entry-bar { padding: 6px 8px !important; margin-bottom: 4px !important; }
+      .custom-entry-hint { font-size: 11px !important; }
+      .btn-custom-done { min-height: 38px !important; }
+
       .preset-chips-grid {
         display: grid !important;
         grid-template-columns: repeat(4, 1fr) !important;
@@ -489,53 +741,52 @@
       }
 
       .preset-chip {
-        min-height: 48px !important;
+        min-height: 46px !important;
         padding: 4px 2px !important;
         font-size: 11px !important;
       }
 
-      #add-donation-form > div {
-        margin-bottom: 3px !important;
-      }
+      #add-donation-form > div { margin-bottom: 4px !important; }
+
+      .anon-block { margin-bottom: 4px !important; }
 
       .anon-switch-row {
         min-height: 44px !important;
-        padding: 0 8px !important;
-        margin-bottom: 3px !important;
+        padding: 2px 8px !important;
       }
 
-      /* Keypad: 48px touch targets */
+      .anon-explainer { font-size: 11px !important; padding: 6px 8px !important; }
+
       .keypad-grid {
         display: grid !important;
         grid-template-columns: repeat(3, 1fr) !important;
         gap: 3px !important;
-        margin-bottom: 3px !important;
+        margin-bottom: 4px !important;
         min-width: 0 !important;
         max-width: 100% !important;
         width: 100% !important;
       }
 
       .keypad-key {
-        min-height: 48px !important;
-        font-size: 1.35rem !important;
+        min-height: 46px !important;
+        font-size: 1.3rem !important;
       }
 
-      /* Bottom Primary CTA */
       .btn-add-primary {
         min-height: 48px !important;
         width: 100% !important;
       }
 
-      /* Explicit focus indicator on dialog default action */
-      #btn-cancel-anon:focus,
+      .submit-note { font-size: 11px !important; }
+
       #btn-cancel-guardrail:focus {
-        outline: 2px solid #d4a359 !important;
+        outline: 2px solid var(--pad-amber) !important;
         outline-offset: 2px !important;
       }
     }
   </style>
 </head>
-<body>
+<body class="pad-page">
 
   <div class="ops-shell">
     <!-- Left Navigation Sidebar -->
@@ -577,30 +828,51 @@
         <!-- Left / Primary Form Card -->
         <section class="pad-card" aria-label="Add Donation Form">
           <form id="add-donation-form" onsubmit="return false;">
-            
-            <!-- Hero Amount Display / Input -->
-            <label for="amount-numeric-input" class="amount-label">
-              Amount
-            </label>
-            <input type="text" id="amount-numeric-input" class="hero-amount-input" value="$500" inputmode="numeric" autocomplete="off" aria-label="Donation amount in dollars">
 
-            <!-- Preset Ask Tiers (Default 7-tier ladder) -->
-            <div class="preset-chips-grid" id="preset-grid">
-              <button type="button" class="preset-chip" data-amount="50000">$50,000</button>
-              <button type="button" class="preset-chip" data-amount="25000">$25,000</button>
-              <button type="button" class="preset-chip" data-amount="10000">$10,000</button>
-              <button type="button" class="preset-chip" data-amount="5000">$5,000</button>
-              <button type="button" class="preset-chip" data-amount="2000">$2,000</button>
-              <button type="button" class="preset-chip" data-amount="1000">$1,000</button>
-              <button type="button" class="preset-chip active" data-amount="500">$500</button>
+            <!-- Hero Amount Display / Input -->
+            <label for="amount-numeric-input" class="amount-label" id="amount-label">
+              <span id="amount-label-text">Amount</span>
+            </label>
+            <input type="text" id="amount-numeric-input" class="hero-amount-input" value="$500" inputmode="numeric" autocomplete="off" aria-label="Donation amount in dollars" aria-describedby="custom-entry-hint">
+
+            <!-- Direct-entry commit bar, shown only in Custom mode -->
+            <div class="custom-entry-bar" id="custom-entry-bar">
+              <span class="custom-entry-hint" id="custom-entry-hint">
+                Type any amount, then press Enter or tap Done.
+              </span>
+              <button type="button" class="btn-custom-done" id="btn-custom-done">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                Done
+              </button>
+            </div>
+
+            <!-- Preset ask ladder plus an explicit Custom control in the same
+                 grid. #preset-grid uses display:contents so the server-driven
+                 tier list can be replaced wholesale without ever removing the
+                 Custom control, while the chips still flow 4-up. -->
+            <div class="preset-chips-grid" id="preset-area" role="group" aria-label="Donation amount presets">
+              <div id="preset-grid" style="display: contents;">
+                <button type="button" class="preset-chip" data-amount="50000">$50,000</button>
+                <button type="button" class="preset-chip" data-amount="25000">$25,000</button>
+                <button type="button" class="preset-chip" data-amount="10000">$10,000</button>
+                <button type="button" class="preset-chip" data-amount="5000">$5,000</button>
+                <button type="button" class="preset-chip" data-amount="2000">$2,000</button>
+                <button type="button" class="preset-chip" data-amount="1000">$1,000</button>
+                <button type="button" class="preset-chip active" data-amount="500">$500</button>
+              </div>
+              <button type="button" class="preset-chip preset-chip-custom" id="btn-custom-amount" aria-pressed="false" aria-label="Custom amount: type any amount">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM51.31,160,136,75.31,152.69,92,68,176.68ZM48,179.31,76.69,208H48Zm48,25.38L79.31,188,164,103.31,180.69,120Zm96-96L147.31,64l24-24L216,84.68Z"></path></svg>
+                Custom
+              </button>
             </div>
 
             <!-- Donor Name Field with Compact Inline Pronunciation Disclosure -->
             <div style="margin-bottom: 6px;">
-              <label for="donor-name-input" style="display: block; font-size: var(--text-xs); font-weight: 700; color: #88888e; margin-bottom: 4px;">
-                Donor Name
-              </label>
-              <input type="text" id="donor-name-input" class="search-input" style="width: 100%; padding-left: 12px; min-height: 36px;" placeholder="Donor Name" autocomplete="name" required>
+              <div class="field-label-row">
+                <label for="donor-name-input" class="field-label">Donor Name</label>
+                <span class="field-required-flag" id="donor-name-required-flag">Required</span>
+              </div>
+              <input type="text" id="donor-name-input" class="search-input" style="width: 100%; padding-left: 12px; min-height: 36px;" placeholder="Donor Name" autocomplete="name" required aria-required="true">
 
               <!-- Compact Disclosure for Name Pronunciation -->
               <div id="pronunciation-disclosure-wrap" style="margin-top: 3px;">
@@ -612,7 +884,7 @@
                   <span id="pronunciation-toggle-label">+ Add pronunciation</span>
                 </button>
                 <div id="field-donor-phonetic-wrap" style="display: none; margin-top: 4px;">
-                  <label for="donor-phonetic-input" style="display: block; font-size: 11px; font-weight: 700; color: #88888e; margin-bottom: 2px;">
+                  <label for="donor-phonetic-input" style="display: block; font-size: 11px; font-weight: 700; color: #9a9ba1; margin-bottom: 2px;">
                     Name Pronunciation
                   </label>
                   <input type="text"
@@ -625,44 +897,50 @@
               </div>
             </div>
 
-            <!-- Anonymous Accessible Switch (>= 44px hit target, keyboard operable, full label clickable) -->
-            <div class="anon-switch-row" id="anon-switch-container" style="margin-bottom: var(--space-4);">
-              <label for="anon-switch-btn" class="anon-switch-label" id="anon-switch-label">
-                <span class="anon-switch-text">Anonymous</span>
-                <span class="anon-switch-badge" id="anon-status-pill">OFF</span>
-              </label>
-              <button type="button"
-                      role="switch"
-                      id="anon-switch-btn"
-                      class="anon-switch-control"
-                      aria-checked="false"
-                      aria-labelledby="anon-switch-label"
-                      aria-describedby="anon-status-pill">
-                <span class="switch-track">
-                  <span class="switch-affordance off">OFF</span>
-                  <span class="switch-knob"></span>
-                  <span class="switch-affordance on">ON</span>
+            <!-- Anonymous switch: applies instantly, explains itself inline. -->
+            <div class="anon-block">
+              <div class="anon-switch-row" id="anon-switch-container">
+                <label for="anon-switch-btn" class="anon-switch-label" id="anon-switch-label">
+                  <span class="anon-switch-text">Anonymous</span>
+                  <span class="anon-switch-badge" id="anon-status-pill">OFF</span>
+                </label>
+                <button type="button"
+                        role="switch"
+                        id="anon-switch-btn"
+                        class="anon-switch-control"
+                        aria-checked="false"
+                        aria-labelledby="anon-switch-label"
+                        aria-describedby="anon-explainer">
+                  <span class="switch-track">
+                    <span class="switch-affordance off">OFF</span>
+                    <span class="switch-knob"></span>
+                    <span class="switch-affordance on">ON</span>
+                  </span>
+                </button>
+              </div>
+
+              <p class="anon-explainer" id="anon-explainer" role="status">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z"></path></svg>
+                <span>
+                  The donor's name will not appear on the Fullscreen Bar Chart or Presenter View &mdash; they show
+                  <strong>Anonymous Supporter</strong>. <strong>Still enter the donor name:</strong> it is required and
+                  stays recorded for the organization.
                 </span>
-              </button>
+              </p>
             </div>
 
             <!-- Feature-Flagged Fields (Hidden unless turned on in Settings) -->
             <div id="field-card-number-wrap" style="display: none; margin-bottom: var(--space-3);">
-              <label for="card-number-input" style="display: block; font-size: var(--text-xs); font-weight: 700; color: #88888e; margin-bottom: 6px;">
-                Card Number
-              </label>
+              <label for="card-number-input" class="field-label" style="margin-bottom: 6px;">Card Number</label>
               <input type="text" id="card-number-input" class="search-input mono" style="width: 100%; padding-left: 12px;" placeholder="0412" inputmode="numeric">
             </div>
 
             <div id="field-table-number-wrap" style="display: none; margin-bottom: var(--space-3);">
-              <label for="table-number-input" style="display: block; font-size: var(--text-xs); font-weight: 700; color: #88888e; margin-bottom: 6px;">
-                Table Number
-              </label>
+              <label for="table-number-input" class="field-label" style="margin-bottom: 6px;">Table Number</label>
               <input type="text" id="table-number-input" class="search-input" style="width: 100%; padding-left: 12px;" placeholder="Table 12">
             </div>
 
-
-            <!-- Mobile Numeric Keypad (4x3 Grid, 56px Targets) -->
+            <!-- Mobile Numeric Keypad (4x3 Grid) -->
             <div class="keypad-grid" id="mobile-keypad">
               <button type="button" class="keypad-key" data-key="1">1</button>
               <button type="button" class="keypad-key" data-key="2">2</button>
@@ -673,25 +951,28 @@
               <button type="button" class="keypad-key" data-key="7">7</button>
               <button type="button" class="keypad-key" data-key="8">8</button>
               <button type="button" class="keypad-key" data-key="9">9</button>
-              <button type="button" class="keypad-key" data-key=".">.</button>
+              <button type="button" class="keypad-key" data-key="00">00</button>
               <button type="button" class="keypad-key" data-key="0">0</button>
-              <button type="button" class="keypad-key" data-key="backspace" aria-label="Backspace">&#x232B;</button>
+              <button type="button" class="keypad-key" data-key="backspace" aria-label="Backspace"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M216,48H85.34a15.86,15.86,0,0,0-11.31,4.69L18.69,108a16,16,0,0,0,0,22.63l55.34,55.31A15.86,15.86,0,0,0,85.34,190.63H216a16,16,0,0,0,16-16V64A16,16,0,0,0,216,48ZM216,174.63H85.34L30,119.31,85.34,64H216ZM165.66,90.34a8,8,0,0,0-11.32,0L136,108.69l-18.34-18.35a8,8,0,0,0-11.32,11.32L124.69,120l-18.35,18.34a8,8,0,0,0,11.32,11.32L136,131.31l18.34,18.35a8,8,0,0,0,11.32-11.32L147.31,120l18.35-18.34A8,8,0,0,0,165.66,90.34Z"></path></svg></button>
             </div>
 
             <!-- Error Banner -->
-            <div id="add-error-banner" style="display: none; color: #f87171; font-size: var(--text-xs); margin-bottom: var(--space-3); padding: 8px 12px; background: rgba(248, 113, 113, 0.1); border-radius: var(--brand-radius);">
+            <div id="add-error-banner" role="alert" style="display: none; color: #f87171; font-size: var(--text-xs); margin-bottom: var(--space-3); padding: 8px 12px; background: rgba(248, 113, 113, 0.1); border-radius: var(--brand-radius);">
             </div>
 
-            <!-- Primary Action Button: "Add $500" style -->
+            <!-- Primary Action Button: live-bound to the current amount -->
             <button type="button" id="btn-submit-add" class="btn-add-primary">
               Add $500
             </button>
+            <p class="submit-note" id="submit-note">
+              Goes live on the ballroom screen within a few seconds. You can undo it from Recent for 8 seconds after adding.
+            </p>
           </form>
         </section>
 
         <!-- Right / Recent Entries Panel -->
         <section class="pad-card recent-panel-wrap" aria-label="Recent Donations">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid #232428;">
+          <div class="recent-panel-head" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid #232428;">
             <h2 style="font-size: var(--text-base); font-weight: 700; margin: 0; color: #f4f5f6;">
               Recent
             </h2>
@@ -699,30 +980,13 @@
           </div>
 
           <div id="recent-entries-list">
-            <!-- Keyed recent rows render here -->
-            <div style="color: #88888e; font-size: var(--text-sm); padding: var(--space-4) 0; text-align: center;">
-              No recent entries in this session.
-            </div>
+            <div class="recent-empty">No recent entries in this session.</div>
           </div>
         </section>
 
       </div>
 
     </main>
-  </div>
-
-  <!-- Anonymous Confirmation Dialog (Accessible, Role Dialog, Aria-Modal) -->
-  <div id="anon-confirm-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="anon-dialog-title" aria-describedby="anon-dialog-body">
-    <div class="modal-dialog">
-      <h2 id="anon-dialog-title" class="modal-title">Make this donation anonymous?</h2>
-      <p id="anon-dialog-body" class="modal-body">
-        The donor's name will not appear on the Fullscreen Bar Chart or Presenter View and will show as Anonymous instead.
-      </p>
-      <div class="modal-actions">
-        <button type="button" id="btn-cancel-anon" class="btn-secondary">Cancel</button>
-        <button type="button" id="btn-confirm-anon" class="btn-primary">Make Anonymous</button>
-      </div>
-    </div>
   </div>
 
   <!-- Major Gift Guardrail Modal -->

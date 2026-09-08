@@ -7,278 +7,649 @@
   <link rel="stylesheet" href="css/app.css?v=5.0.0">
   <style>
     /* =========================================================================
-       Presenter View (Direction B — b-presenter.png)
-       Mobile-first design for 375px through desktop.
+       Presenter View — Direction B "Presentation Contrast"
+       Read by an emcee holding a microphone: phone (375px), tablet, laptop,
+       and large podium display. Every figure scales with clamp() + viewport
+       units so nothing must be squinted at. Page-local styles only.
        ========================================================================= */
+
+    :root {
+      --pv-ink: #f4f5f6;
+      --pv-ink-dim: #8b8d94;
+      --pv-gold: #d4a359;
+      --pv-gold-bright: #f2c67e;
+      --pv-surface: #101114;
+      --pv-surface-raised: #16171b;
+      --pv-canvas: #08080a;
+      --pv-hairline: #26272e;
+      --pv-hairline-soft: #1c1d22;
+      --pv-radius: 6px;
+      --pv-gap: clamp(12px, 2.2vh, 22px);
+    }
 
     * {
       box-sizing: border-box;
     }
 
     body {
-      background: #08080a; /* Deep near-black OLED surface */
-      color: #f4f5f6;
-      font-family: var(--font-sans);
+      background: var(--pv-canvas); /* Deep near-black OLED surface */
+      color: var(--pv-ink);
+      font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
       margin: 0;
       padding: 0;
       min-height: 100dvh;
-      display: flex;
-      flex-direction: column;
+      -webkit-text-size-adjust: 100%;
     }
 
     .presenter-shell {
-      max-width: 840px;
+      max-width: 1100px;
       width: 100%;
       margin: 0 auto;
-      padding: var(--space-4) var(--space-4) var(--space-6) var(--space-4);
+      padding: clamp(10px, 1.6vh, 20px) clamp(12px, 2.6vw, 28px) clamp(20px, 3vh, 34px);
       display: flex;
       flex-direction: column;
+      gap: var(--pv-gap);
       min-height: 100dvh;
-      justify-content: space-between;
     }
 
-    /* Minimal Top Bar */
+    .presenter-shell[hidden] {
+      display: none;
+    }
+
+    /* ---------- Minimal Top Bar (deliberately the smallest thing here) ---------- */
     .presenter-top-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding-bottom: var(--space-3);
-      border-bottom: 1px solid #1f2026;
-      margin-bottom: var(--space-4);
+      gap: 10px;
+      flex-wrap: wrap;
+      padding-bottom: clamp(8px, 1.2vh, 14px);
+      border-bottom: 1px solid var(--pv-hairline-soft);
     }
 
     .presenter-title {
-      font-size: var(--text-sm);
+      font-size: clamp(0.75rem, 1.5vw, 0.9375rem);
       font-weight: 700;
-      color: #88888e;
+      color: var(--pv-ink-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
+    .presenter-event-title {
+      font-weight: 600;
+      color: #6d6f76;
+      text-transform: none;
+      letter-spacing: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 40vw;
+    }
+
+    .presenter-event-title::before {
+      content: "";
+      display: inline-block;
+      width: 1px;
+      height: 0.9em;
+      margin-right: 8px;
+      vertical-align: -0.08em;
+      background: #33343c;
+    }
+
+    .presenter-top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon {
+      width: 1em;
+      height: 1em;
+      flex: none;
+      display: block;
+    }
+
+    .presenter-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 0 clamp(12px, 1.8vw, 20px);
+      font-family: inherit;
+      font-size: clamp(0.9375rem, 1.7vw, 1.125rem);
+      font-weight: 700;
+      color: var(--pv-gold-bright);
+      background: #17181d;
+      border: 1px solid #3a3122;
+      border-radius: var(--pv-radius);
+      cursor: pointer;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }
+
+    .presenter-btn:hover,
+    .presenter-btn:focus-visible {
+      background: #1e1f25;
+      border-color: var(--pv-gold);
+      outline: none;
+    }
+
+    .presenter-btn:focus-visible {
+      box-shadow: 0 0 0 2px rgba(212, 163, 89, 0.45);
+    }
+
     .presenter-nav-link {
-      font-size: var(--text-xs);
-      color: #88888e;
+      display: inline-flex;
+      align-items: center;
+      min-height: 48px;
+      padding: 0 clamp(10px, 1.4vw, 16px);
+      font-size: clamp(0.8125rem, 1.4vw, 1rem);
+      font-weight: 600;
+      color: var(--pv-ink-dim);
       text-decoration: none;
-      padding: 4px 8px;
-      border-radius: var(--brand-radius);
+      border-radius: var(--pv-radius);
       border: 1px solid #282932;
       background: #141519;
-      transition: color 0.12s ease;
+      transition: color 0.12s ease, border-color 0.12s ease;
     }
 
-    .presenter-nav-link:hover {
-      color: #d4a359;
-      border-color: #d4a359;
+    .presenter-nav-link:hover,
+    .presenter-nav-link:focus-visible {
+      color: var(--pv-gold);
+      border-color: var(--pv-gold);
+      outline: none;
     }
 
-    /* Primary Hero: Current Donor Name + Pronunciation + Amount */
+    /* ---------- Primary Centerpiece: the name the emcee must say ---------- */
     .presenter-hero-card {
-      background: #101114;
-      border: 1px solid #26272e;
-      border-radius: var(--brand-radius);
-      padding: var(--space-6) var(--space-4);
+      background: var(--pv-surface);
+      border: 1px solid var(--pv-hairline);
+      border-radius: var(--pv-radius);
+      padding: clamp(18px, 3.4vh, 40px) clamp(14px, 3vw, 36px);
       text-align: center;
-      margin: auto 0;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 280px;
+      gap: clamp(8px, 1.4vh, 16px);
+    }
+
+    .presenter-hero-label {
+      font-size: clamp(0.6875rem, 1.3vw, 0.875rem);
+      font-weight: 700;
+      color: var(--pv-ink-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
     }
 
     .presenter-donor-name {
-      font-size: clamp(2rem, 6vw, 3.5rem);
+      font-size: clamp(2.25rem, 8.6vw, 5.5rem);
       font-weight: 800;
-      color: #f4f5f6;
+      color: var(--pv-ink);
       letter-spacing: -0.02em;
-      line-height: 1.15;
-      margin: 0 0 10px 0;
+      line-height: 1.08;
+      margin: 0;
       word-break: break-word;
       max-width: 100%;
     }
 
-    /* Name Pronunciation directly beneath at >= 20px, not italicized */
+    /* Pronunciation guide: the single string that must be said correctly.
+       Large, high contrast, NEVER italicized. */
+    .presenter-pronunciation-block {
+      width: 100%;
+      max-width: 100%;
+      background: rgba(212, 163, 89, 0.09);
+      border: 1px solid rgba(212, 163, 89, 0.32);
+      border-radius: var(--pv-radius);
+      padding: clamp(10px, 1.6vh, 18px) clamp(12px, 2.4vw, 24px);
+      text-align: center;
+    }
+
+    .presenter-pronunciation-label {
+      font-size: clamp(0.6875rem, 1.3vw, 0.875rem);
+      font-weight: 700;
+      color: var(--pv-gold);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 6px;
+    }
+
     .presenter-pronunciation {
-      font-size: clamp(20px, 3.2vw, 26px);
-      font-weight: 500;
+      font-size: clamp(1.5rem, 5.6vw, 3.25rem);
+      font-weight: 700;
       font-style: normal; /* Explicitly NOT italicized per contract */
-      color: #d4a359;
-      letter-spacing: 0.01em;
-      line-height: 1.3;
-      margin: 0 0 18px 0;
+      color: var(--pv-gold-bright);
+      letter-spacing: 0.005em;
+      line-height: 1.2;
       word-break: break-word;
-      max-width: 100%;
     }
 
-    /* Amount as secondary */
     .presenter-amount {
-      font-size: clamp(2rem, 5vw, 3rem);
+      font-size: clamp(1.875rem, 7vw, 4rem);
       font-weight: 800;
-      color: #d4a359;
+      color: var(--pv-gold);
       font-variant-numeric: tabular-nums;
       letter-spacing: -0.02em;
-      line-height: 1.1;
-      margin: 0 0 10px 0;
+      line-height: 1.05;
     }
 
     .presenter-meta {
-      font-size: var(--text-xs);
-      color: #88888e;
-      margin-top: 4px;
+      font-size: clamp(0.9375rem, 2vw, 1.25rem);
+      line-height: 1.35;
+      color: #a8aab1;
+      max-width: 46ch;
+      word-break: break-word;
     }
 
-    /* Compact Recent Donations List */
-    .presenter-recent-section {
-      background: #101114;
-      border: 1px solid #26272e;
-      border-radius: var(--brand-radius);
-      padding: var(--space-4);
-      margin-top: var(--space-4);
-      margin-bottom: var(--space-4);
+    /* ---------- Total Raised: prominent, stateable on demand ---------- */
+    .presenter-total-panel {
+      background: var(--pv-surface);
+      border: 1px solid var(--pv-hairline);
+      border-radius: var(--pv-radius);
+      padding: clamp(14px, 2.4vh, 26px) clamp(14px, 3vw, 32px);
+      text-align: center;
     }
 
-    .presenter-recent-header {
-      font-size: var(--text-xs);
+    .presenter-total-label {
+      font-size: clamp(0.75rem, 1.4vw, 1rem);
       font-weight: 700;
-      color: #88888e;
+      color: var(--pv-ink-dim);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: var(--space-2);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      letter-spacing: 0.16em;
     }
 
-    .presenter-recent-list {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .presenter-recent-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 6px 0;
-      border-bottom: 1px solid #1a1b20;
-      font-size: var(--text-sm);
-      gap: var(--space-3);
-    }
-
-    .presenter-recent-row:last-child {
-      border-bottom: none;
-    }
-
-    .presenter-recent-name {
-      color: #f4f5f6;
-      font-weight: 500;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      flex: 1;
-    }
-
-    .presenter-recent-amt {
-      color: #d4a359;
-      font-weight: 700;
+    .presenter-total-value {
+      font-size: clamp(3rem, 12vw, 7rem);
+      font-weight: 800;
+      color: var(--pv-gold-bright);
       font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+      line-height: 1.02;
+      margin: clamp(2px, 0.6vh, 8px) 0;
     }
 
-    /* Secondary Footer: Milestone distance & Total Raised (Never dominant) */
-    .presenter-footer-metrics {
+    .presenter-total-sub {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       flex-wrap: wrap;
-      gap: var(--space-3);
-      padding: var(--space-3) var(--space-4);
-      background: #141519;
-      border: 1px solid #232429;
-      border-radius: var(--brand-radius);
-      font-size: var(--text-xs);
-      color: #88888e;
+      gap: clamp(8px, 1.6vw, 18px);
+      font-size: clamp(0.9375rem, 2vw, 1.25rem);
+      color: var(--pv-ink-dim);
+      font-weight: 600;
+    }
+
+    .presenter-total-divider {
+      width: 1px;
+      height: 1em;
+      background: #33343c;
     }
 
     .metric-sub-val {
-      color: #f4f5f6;
+      color: var(--pv-ink);
       font-weight: 700;
       font-variant-numeric: tabular-nums;
     }
 
     .metric-sub-val.gold {
-      color: #d4a359;
+      color: var(--pv-gold);
     }
 
-    @media (max-width: 480px) {
-      .presenter-footer-metrics {
+    /* ---------- Recent Gifts ---------- */
+    .presenter-recent-section {
+      background: var(--pv-surface);
+      border: 1px solid var(--pv-hairline);
+      border-radius: var(--pv-radius);
+      padding: clamp(12px, 2vh, 22px) clamp(14px, 2.6vw, 26px);
+    }
+
+    .presenter-recent-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: clamp(0.75rem, 1.4vw, 1rem);
+      font-weight: 700;
+      color: var(--pv-ink-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding-bottom: clamp(6px, 1vh, 12px);
+      border-bottom: 1px solid var(--pv-hairline-soft);
+    }
+
+    .presenter-recent-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .presenter-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: clamp(12px, 2.4vw, 28px);
+      min-height: 56px;
+      padding: clamp(8px, 1.2vh, 14px) 0;
+      border-bottom: 1px solid var(--pv-hairline-soft);
+    }
+
+    .presenter-row:last-child {
+      border-bottom: none;
+    }
+
+    .presenter-row-name {
+      font-size: clamp(1.125rem, 4vw, 1.75rem);
+      font-weight: 600;
+      line-height: 1.2;
+      color: var(--pv-ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .presenter-row-name.anon {
+      color: #b9bbc2;
+    }
+
+    .presenter-row-amt {
+      font-size: clamp(1.125rem, 4vw, 1.75rem);
+      font-weight: 800;
+      line-height: 1.2;
+      color: var(--pv-gold);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .presenter-empty {
+      font-size: clamp(0.9375rem, 2vw, 1.125rem);
+      color: var(--pv-ink-dim);
+      text-align: center;
+      padding: clamp(14px, 2.4vh, 26px) 0;
+    }
+
+    .presenter-history-cta {
+      width: 100%;
+      margin-top: clamp(10px, 1.6vh, 18px);
+      min-height: 56px;
+    }
+
+    /* ---------- Full History View ---------- */
+    .presenter-history-view {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: var(--pv-canvas);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .presenter-history-view[hidden] {
+      display: none;
+    }
+
+    .history-top-bar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: clamp(10px, 2vw, 20px);
+      padding: clamp(10px, 1.8vh, 18px) clamp(12px, 2.6vw, 28px);
+      background: var(--pv-surface-raised);
+      border-bottom: 1px solid var(--pv-hairline);
+    }
+
+    .history-heading {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      text-align: right;
+      gap: 2px;
+    }
+
+    .history-heading-title {
+      font-size: clamp(1rem, 2.4vw, 1.5rem);
+      font-weight: 800;
+      color: var(--pv-ink);
+      letter-spacing: -0.01em;
+    }
+
+    .history-count {
+      font-size: clamp(0.75rem, 1.5vw, 1rem);
+      font-weight: 600;
+      color: var(--pv-ink-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .history-scroll {
+      flex: 1;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      padding: clamp(8px, 1.6vh, 18px) clamp(12px, 2.6vw, 28px) clamp(28px, 5vh, 56px);
+    }
+
+    .history-scroll:focus-visible {
+      outline: 2px solid rgba(212, 163, 89, 0.45);
+      outline-offset: -2px;
+    }
+
+    .history-list {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .history-list .presenter-row {
+      min-height: 64px;
+    }
+
+    .history-list .presenter-row-name,
+    .history-list .presenter-row-amt {
+      font-size: clamp(1.1875rem, 4.4vw, 1.875rem);
+    }
+
+    /* ---------- PIN Unlock (only when a PIN is configured and server 401s) ---------- */
+    .presenter-unlock {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      background: var(--pv-canvas);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(16px, 4vw, 40px);
+    }
+
+    .presenter-unlock[hidden] {
+      display: none;
+    }
+
+    .unlock-card {
+      width: 100%;
+      max-width: 440px;
+      background: var(--pv-surface);
+      border: 1px solid var(--pv-hairline);
+      border-radius: var(--pv-radius);
+      padding: clamp(20px, 4vw, 32px);
+      text-align: center;
+    }
+
+    .unlock-title {
+      font-size: clamp(1.25rem, 3vw, 1.75rem);
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .unlock-hint {
+      font-size: clamp(0.875rem, 1.8vw, 1rem);
+      color: var(--pv-ink-dim);
+      margin-bottom: 18px;
+    }
+
+    .unlock-input {
+      width: 100%;
+      min-height: 56px;
+      padding: 0 16px;
+      font-family: inherit;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      text-align: center;
+      color: var(--pv-ink);
+      background: #0c0d10;
+      border: 1px solid #303138;
+      border-radius: var(--pv-radius);
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 12px;
+    }
+
+    .unlock-input:focus {
+      outline: none;
+      border-color: var(--pv-gold);
+    }
+
+    .unlock-submit {
+      width: 100%;
+      min-height: 56px;
+    }
+
+    .unlock-error {
+      display: none;
+      margin-top: 12px;
+      font-size: clamp(0.875rem, 1.8vw, 1rem);
+      font-weight: 600;
+      color: #f08a7a;
+    }
+
+    /* Wide podium screens: hero and total sit side by side so both read at
+       arm's length without scrolling. */
+    @media (min-width: 900px) and (min-height: 620px) {
+      .presenter-primary-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+        gap: var(--pv-gap);
+        align-items: stretch;
+      }
+
+      .presenter-total-panel {
+        display: flex;
         flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
+        align-items: center;
+        justify-content: center;
       }
     }
   </style>
 </head>
 <body>
 
-  <div class="presenter-shell">
+  <div class="presenter-shell" id="presenter-main">
 
     <!-- Minimal Header -->
     <header class="presenter-top-bar">
       <div class="presenter-title">
         <span class="pulse-dot"></span>
         <span>Presenter View</span>
+        <span id="presenter-event-title" class="presenter-event-title" hidden></span>
       </div>
       <div id="presenter-degraded-banner" class="degraded-banner" style="display: none;">
         <span>Reconnecting...</span>
       </div>
-      <a href="/" class="presenter-nav-link">Home</a>
+      <div class="presenter-top-actions">
+        <button type="button" id="btn-full-history" class="presenter-btn">
+          <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg>
+          <span>Full History</span>
+        </button>
+        <a href="/" class="presenter-nav-link">Home</a>
+      </div>
     </header>
 
-    <!-- Primary Centerpiece: Current / Latest Donor -->
-    <main class="presenter-hero-card" id="presenter-hero">
-      <div id="presenter-donor-name" class="presenter-donor-name">
-        Awaiting First Gift...
-      </div>
+    <div class="presenter-primary-grid">
+      <!-- Primary Centerpiece: Current / Latest Donor -->
+      <main class="presenter-hero-card" id="presenter-hero">
+        <div class="presenter-hero-label">Now Reading</div>
 
-      <!-- Name Pronunciation directly beneath at >= 20px, not italicized -->
-      <div id="presenter-pronunciation" class="presenter-pronunciation" style="display: none;">
-      </div>
+        <div id="presenter-donor-name" class="presenter-donor-name">
+          Awaiting First Gift...
+        </div>
 
-      <!-- Amount as secondary -->
-      <div id="presenter-amount" class="presenter-amount" style="display: none;">
-        $0
-      </div>
+        <!-- Pronunciation guide: large, high contrast, never italicized -->
+        <div id="presenter-pronunciation-block" class="presenter-pronunciation-block" style="display: none;">
+          <div class="presenter-pronunciation-label">Say it like</div>
+          <div id="presenter-pronunciation" class="presenter-pronunciation"></div>
+        </div>
 
-      <!-- Optional Table or Dedication Note -->
-      <div id="presenter-meta" class="presenter-meta" style="display: none;">
-      </div>
-    </main>
+        <div id="presenter-amount" class="presenter-amount" style="display: none;">
+          $0
+        </div>
 
-    <!-- Compact Recent Donations List -->
-    <section class="presenter-recent-section" aria-label="Recent Donations">
+        <!-- Optional dedication note (never shown for anonymous gifts) -->
+        <div id="presenter-meta" class="presenter-meta" style="display: none;">
+        </div>
+      </main>
+
+      <!-- Total Raised: prominent, stateable on demand -->
+      <section class="presenter-total-panel" aria-label="Total Raised">
+        <div class="presenter-total-label">Total Raised</div>
+        <div id="presenter-total-raised" class="presenter-total-value">$0</div>
+        <div class="presenter-total-sub">
+          <span><span id="presenter-percent" class="metric-sub-val gold">0%</span> of <span id="presenter-goal" class="metric-sub-val">$500k</span></span>
+          <span class="presenter-total-divider" aria-hidden="true"></span>
+          <span>Next: <span id="presenter-milestone-text" class="metric-sub-val gold">Awaiting goal</span></span>
+        </div>
+      </section>
+    </div>
+
+    <!-- Recent Gifts -->
+    <section class="presenter-recent-section" aria-label="Recent Gifts">
       <div class="presenter-recent-header">
-        <span>Recent Donations</span>
+        <span>Recent Gifts</span>
         <span id="presenter-recent-count">0 gifts</span>
       </div>
       <div id="presenter-recent-list" class="presenter-recent-list">
-        <div style="color: #88888e; font-size: var(--text-xs); padding: 8px 0; text-align: center;">
-          Recent gifts will appear here live
-        </div>
+        <div class="presenter-empty">Recent gifts will appear here live</div>
       </div>
+      <button type="button" id="btn-full-history-inline" class="presenter-btn presenter-history-cta">
+        <span>View Full History</span>
+        <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg>
+      </button>
     </section>
 
-    <!-- Secondary Information at Bottom (Never dominant) -->
-    <footer class="presenter-footer-metrics">
-      <div>
-        Next Milestone: <span id="presenter-milestone-text" class="metric-sub-val gold">Awaiting goal</span>
-      </div>
-      <div>
-        Total Raised: <span id="presenter-total-raised" class="metric-sub-val">$0</span>
-        (<span id="presenter-percent" class="metric-sub-val">0%</span> of <span id="presenter-goal" class="metric-sub-val">$500k</span>)
-      </div>
-    </footer>
+  </div>
 
+  <!-- Full History: scrollable, most recent first, one action to return -->
+  <section id="presenter-history-view" class="presenter-history-view" aria-label="Full Donation History" hidden>
+    <header class="history-top-bar">
+      <button type="button" id="btn-close-history" class="presenter-btn">
+        <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>
+        <span>Back to Presenter</span>
+      </button>
+      <div class="history-heading">
+        <span class="history-heading-title">Full History</span>
+        <span id="presenter-history-count" class="history-count">0 gifts</span>
+      </div>
+    </header>
+    <div id="presenter-history-scroll" class="history-scroll" tabindex="0">
+      <div id="presenter-history-list" class="history-list">
+        <div class="presenter-empty">No gifts recorded yet</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Unlock: rendered ONLY when a PIN is configured and the server returns 401 -->
+  <div id="presenter-unlock" class="presenter-unlock" hidden>
+    <form class="unlock-card" id="presenter-unlock-form">
+      <div class="unlock-title">Presenter Locked</div>
+      <div class="unlock-hint">Enter the event PIN to load the presenter view.</div>
+      <input type="password" id="presenter-unlock-pin" class="unlock-input" inputmode="numeric"
+             autocomplete="off" placeholder="PIN" aria-label="Event PIN">
+      <button type="submit" id="presenter-unlock-submit" class="presenter-btn unlock-submit">Unlock</button>
+      <div id="presenter-unlock-error" class="unlock-error"></div>
+    </form>
   </div>
 
   <script src="js/emcee.js?v=5.0.0"></script>

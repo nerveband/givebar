@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import type { Database } from "bun:sqlite";
 
 export interface QRStyleOptions {
   darkColor?: string;
@@ -38,12 +39,21 @@ export function generateQRCodeSVG(text: string, options: QRStyleOptions | number
   return result;
 }
 
-export function handleQRRequest(req: Request): Response {
+export function handleQRRequest(req: Request, db?: Database): Response {
   const url = new URL(req.url);
-  const text = url.searchParams.get("url") || url.searchParams.get("text") || "https://give.hope.org/donate";
+  const explicit = url.searchParams.get("url") || url.searchParams.get("text") || "";
+  const stored = db ? (db.query<{ qr_url: string }, []>(`SELECT qr_url FROM event_state WHERE id = 1`).get()?.qr_url || "") : "";
+  const text = (explicit || stored).trim();
   const darkColor = url.searchParams.get("dark") || "#0E131E";
   const lightColor = url.searchParams.get("light") || "#FFFFFF";
   const margin = parseInt(url.searchParams.get("margin") || "2", 10);
+
+  if (text === "") {
+    return Response.json({
+      error: "QR_URL_MISSING",
+      message: "No donation URL configured. Set qr_url in Event Setup or pass ?url="
+    }, { status: 400 });
+  }
 
   try {
     const svg = generateQRCodeSVG(text, {

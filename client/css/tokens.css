@@ -60,9 +60,27 @@
   --text-3xl:      2rem;      /* 32px */
   --text-4xl:      2.75rem;   /* 44px */
   --text-odometer: clamp(5rem, 9.5vw, 8.125rem); /* 130px */
+
+  /* ---- Font Family Allowlist (local system stacks only, zero webfont requests) ---- */
+  --font-humanist: "Segoe UI", Candara, "Trebuchet MS", "DejaVu Sans", Verdana, sans-serif;
+  --font-grotesk: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", "Nimbus Sans", sans-serif;
+  --font-serif: Georgia, "Palatino Linotype", Palatino, "Book Antiqua", "Liberation Serif", "Times New Roman", serif;
+
   /* ---- Physics & Springs ---- */
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---- Motion Tokens (micro-motion bands) ----
+     ack = acknowledgement, ins = insertion, conf = confirmation/route.
+     --dur-roll is the one deliberately long band: a ballroom odometer roll
+     is a continuous readout, not a UI acknowledgement. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.64, 0, 0.78, 0);
+  --dur-ack: 140ms;
+  --dur-ins: 200ms;
+  --dur-conf: 280ms;
+  --dur-roll: 900ms;
+  --dur-pulse: 640ms;
 }
 
 /* Preset Theme Palettes */

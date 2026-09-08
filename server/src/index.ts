@@ -109,7 +109,7 @@ export const server = Bun.serve({
       }
 
       if (parts[1] === "qr") {
-        return handleQRRequest(req);
+        return handleQRRequest(req, db);
       }
 
       return Response.json({ error: "NOT_FOUND", message: `API route ${pathname} not found` }, { status: 404 });

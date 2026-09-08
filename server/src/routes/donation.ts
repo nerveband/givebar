@@ -24,15 +24,6 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
         return Response.json({ error: "VALIDATION_ERROR", message: "donor_name is required" }, { status: 400 });
       }
 
-      const eventState = getEventState(db);
-      const isAuthDisabled = process.env.GIVEBAR_DISABLE_AUTH === "1" || process.env.NODE_ENV === "test";
-      const source = body.source || "manual";
-      if (!isAuthDisabled && eventState.entry_pin && eventState.entry_pin.trim() !== "" && source === "manual") {
-        const providedEntryPin = req.headers.get("X-Entry-Pin") || req.headers.get("X-Control-Pin") || "";
-        if (providedEntryPin !== eventState.entry_pin && providedEntryPin !== eventState.control_pin) {
-          // Volunteer pad auth check if configured
-        }
-      }
       const input: CreateDonationInput = {
         donation_id: donationId,
         amount_cents: amountCents,

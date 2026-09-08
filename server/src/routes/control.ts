@@ -14,6 +14,14 @@ import {
   toggleDonationAnonymity,
   type EventStateRecord
 } from "../ledger";
+import { isControlAuthorized, isControlPinConfigured } from "../auth";
+import {
+  FONT_FAMILY_KEYS,
+  isChartOrientation,
+  isFontFamilyKey,
+  isValidColor,
+  isValidQrUrl
+} from "../settings";
 
 export async function handleControlRequest(req: Request, db: Database): Promise<Response> {
   if (req.method.toUpperCase() !== "POST" && req.method.toUpperCase() !== "PUT") {
@@ -25,19 +33,33 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
     const action = String(body.action || (req.method.toUpperCase() === "PUT" ? "update_settings" : ""));
     const currentState = getEventState(db);
 
-    const isAuthDisabled = process.env.GIVEBAR_DISABLE_AUTH === "1";
     const providedPin = String(body.pin || req.headers.get("X-Control-Pin") || "");
-    const isControlPinValid = isAuthDisabled || (currentState.control_pin && currentState.control_pin.trim() !== "" && providedPin === currentState.control_pin);
+    const isControlPinValid = isControlAuthorized(currentState.control_pin, providedPin);
     if (!isControlPinValid && action !== "auth_check") {
       return Response.json({ error: "UNAUTHORIZED", message: "Invalid or missing Control Room PIN" }, { status: 401 });
     }
 
     if (action === "auth_check") {
-      return Response.json({ ok: isControlPinValid, authenticated: isControlPinValid });
+      return Response.json({
+        ok: isControlPinValid,
+        authenticated: isControlPinValid,
+        pin_required: isControlPinConfigured(currentState.control_pin)
+      });
     }
 
     switch (action) {
       case "update_settings": {
+        // Removed keys fail loudly: a stale client binding must not look like a successful save.
+        for (const removed of ["qr_donate_url", "milestones_json"]) {
+          if (removed in body) {
+            return Response.json({
+              error: "INVALID_SETTING",
+              message: removed === "qr_donate_url"
+                ? "qr_donate_url was removed. Send qr_url (the URL encoded into the QR) and display_url (the short text printed under it)."
+                : "milestones_json was removed. Send the milestones array; the milestone table is authoritative."
+            }, { status: 400 });
+          }
+        }
         const patch: Partial<EventStateRecord> = {};
         if (typeof body.settings_seq === "number") {
           if (body.settings_seq !== currentState.settings_seq) {
@@ -49,17 +71,18 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
             }, { status: 409 });
           }
         }
+        // Empty string clears the PIN and reopens the surface; 4-12 chars sets one.
         if (typeof body.control_pin === "string") {
           const cp = body.control_pin.trim();
-          if (cp.length < 4 || cp.length > 12) {
-            return Response.json({ error: "INVALID_PIN", message: "Control PIN must be between 4 and 12 characters" }, { status: 400 });
+          if (cp !== "" && (cp.length < 4 || cp.length > 12)) {
+            return Response.json({ error: "INVALID_PIN", message: "Control PIN must be between 4 and 12 characters, or empty to disable it" }, { status: 400 });
           }
           patch.control_pin = cp;
         }
         if (typeof body.entry_pin === "string") {
           const ep = body.entry_pin.trim();
-          if (ep.length < 4 || ep.length > 12) {
-            return Response.json({ error: "INVALID_PIN", message: "Entry PIN must be between 4 and 12 characters" }, { status: 400 });
+          if (ep !== "" && (ep.length < 4 || ep.length > 12)) {
+            return Response.json({ error: "INVALID_PIN", message: "Entry PIN must be between 4 and 12 characters, or empty to disable it" }, { status: 400 });
           }
           patch.entry_pin = ep;
         }
@@ -70,11 +93,52 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         if (typeof body.event_subtitle === "string") {
           patch.event_subtitle = body.event_subtitle.trim();
         }
-        if (typeof body.goal_cents === "number" && body.goal_cents > 0) {
-          patch.goal_cents = Math.round(body.goal_cents);
+        if (typeof body.event_title === "string") {
+          patch.event_title = body.event_title.trim();
         }
-        if (typeof body.qr_donate_url === "string") {
-          patch.qr_donate_url = body.qr_donate_url.trim();
+        if (body.goal_cents !== undefined) {
+          const goal = typeof body.goal_cents === "number" ? body.goal_cents : NaN;
+          if (!Number.isFinite(goal) || goal <= 0 || Math.round(goal) !== goal) {
+            return Response.json({ error: "INVALID_SETTING", message: "goal_cents must be a positive integer number of cents" }, { status: 400 });
+          }
+          patch.goal_cents = goal;
+        }
+        if (typeof body.qr_url === "string") {
+          const qrUrl = body.qr_url.trim();
+          if (!isValidQrUrl(qrUrl)) {
+            return Response.json({ error: "INVALID_SETTING", message: "qr_url must be an absolute http(s) URL or empty" }, { status: 400 });
+          }
+          patch.qr_url = qrUrl;
+        }
+        if (typeof body.display_url === "string") {
+          patch.display_url = body.display_url.trim().slice(0, 200);
+        }
+        if (typeof body.font_family === "string") {
+          const font = body.font_family.trim();
+          if (!isFontFamilyKey(font)) {
+            return Response.json({
+              error: "INVALID_SETTING",
+              message: `font_family must be one of: ${FONT_FAMILY_KEYS.join(", ")}`
+            }, { status: 400 });
+          }
+          patch.font_family = font;
+        }
+        if (typeof body.chart_orientation === "string") {
+          const orientation = body.chart_orientation.trim().toLowerCase();
+          if (!isChartOrientation(orientation)) {
+            return Response.json({
+              error: "INVALID_SETTING",
+              message: "chart_orientation must be 'horizontal' or 'vertical'"
+            }, { status: 400 });
+          }
+          patch.chart_orientation = orientation;
+        }
+        if (typeof body.text_color === "string") {
+          const textColor = body.text_color.trim();
+          if (!isValidColor(textColor)) {
+            return Response.json({ error: "INVALID_SETTING", message: "text_color must be a hex or oklch() color, or empty" }, { status: 400 });
+          }
+          patch.text_color = textColor;
         }
         if (typeof body.theme_preset === "string") {
           patch.theme_preset = body.theme_preset.trim();
@@ -130,7 +194,11 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
           patch.background_style = (bs === "subtle-gradient" || bs === "vignette") ? bs : "plain";
         }
         if (typeof body.bar_color === "string") {
-          patch.bar_color = body.bar_color.trim();
+          const barColor = body.bar_color.trim();
+          if (!isValidColor(barColor)) {
+            return Response.json({ error: "INVALID_SETTING", message: "bar_color must be a hex or oklch() color, or empty" }, { status: 400 });
+          }
+          patch.bar_color = barColor;
         }
         if (typeof body.show_qr === "boolean" || typeof body.show_qr === "number") {
           patch.show_qr = body.show_qr ? 1 : 0;
@@ -191,7 +259,6 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
                 insertMilestone.run(idx + 1, percent, cents, m.label, celebrate);
               }
             });
-            patch.milestones_json = JSON.stringify(body.milestones);
           }
 
           updateEventState(db, patch);
@@ -253,15 +320,15 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         const updates: Partial<EventStateRecord> = {};
         if (typeof body.entry_pin === "string") {
           const ep = body.entry_pin.trim();
-          if (ep.length < 4 || ep.length > 12) {
-            return Response.json({ error: "INVALID_PIN", message: "Entry PIN must be between 4 and 12 characters" }, { status: 400 });
+          if (ep !== "" && (ep.length < 4 || ep.length > 12)) {
+            return Response.json({ error: "INVALID_PIN", message: "Entry PIN must be between 4 and 12 characters, or empty to disable it" }, { status: 400 });
           }
           updates.entry_pin = ep;
         }
         if (typeof body.control_pin === "string") {
           const cp = body.control_pin.trim();
-          if (cp.length < 4 || cp.length > 12) {
-            return Response.json({ error: "INVALID_PIN", message: "Control PIN must be between 4 and 12 characters" }, { status: 400 });
+          if (cp !== "" && (cp.length < 4 || cp.length > 12)) {
+            return Response.json({ error: "INVALID_PIN", message: "Control PIN must be between 4 and 12 characters, or empty to disable it" }, { status: 400 });
           }
           updates.control_pin = cp;
         }

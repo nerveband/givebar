@@ -198,14 +198,14 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--space-3) var(--space-3);
+  padding: var(--space-3) 0;
 }
 
 .ops-nav-item {
   display: flex;
   align-items: center;
   padding: 10px 14px;
-  border-radius: var(--brand-radius);
+  border-radius: 0;
   font-size: var(--text-sm);
   font-weight: 500;
   color: #88888e;
