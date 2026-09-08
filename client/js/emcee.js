@@ -191,7 +191,7 @@
         }
       }
     } else {
-      if (donorNameEl) donorNameEl.textContent = 'Awaiting First Gift...';
+      if (donorNameEl) donorNameEl.textContent = 'No gifts yet';
       if (pronunciationBlockEl) pronunciationBlockEl.style.display = 'none';
       if (amountEl) amountEl.style.display = 'none';
       if (metaEl) metaEl.style.display = 'none';
@@ -205,7 +205,7 @@
       }
 
       if (displayRecent.length === 0) {
-        recentListEl.innerHTML = '<div class="presenter-empty">Recent gifts will appear here live</div>';
+        recentListEl.innerHTML = '<div class="presenter-empty">No gifts yet</div>';
       } else {
         recentListEl.innerHTML = displayRecent.map(renderGiftRow).join('');
       }
@@ -234,7 +234,7 @@
       } else if (data.goal_cents && data.total_raised_cents >= data.goal_cents) {
         milestoneTextEl.textContent = 'Goal Reached';
       } else {
-        milestoneTextEl.textContent = 'In progress';
+        milestoneTextEl.textContent = '\u2014';
       }
     }
 
@@ -305,7 +305,7 @@
     historySignature = signature;
 
     if (allGifts.length === 0) {
-      historyListEl.innerHTML = '<div class="presenter-empty">No gifts recorded yet</div>';
+      historyListEl.innerHTML = '<div class="presenter-empty">No gifts yet</div>';
       return;
     }
     historyListEl.innerHTML = allGifts.map(renderGiftRow).join('');
@@ -333,7 +333,7 @@
       e.preventDefault();
       const pin = (unlockPinEl && unlockPinEl.value || '').trim();
       if (!pin) {
-        showUnlockError('Enter the event PIN.');
+        showUnlockError('Enter the PIN.');
         return;
       }
       showUnlockError('');
@@ -358,7 +358,7 @@
         handleStateUpdate(data);
         initSSE();
       } catch (err) {
-        showUnlockError('Network error connecting to server.');
+        showUnlockError('No connection.');
       } finally {
         if (unlockSubmitEl) unlockSubmitEl.disabled = false;
       }

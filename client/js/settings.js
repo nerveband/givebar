@@ -1,9 +1,8 @@
 /**
  * Givebar — Settings View Controller
- * Collapsible grouped sections with persisted open/closed state, inline help on every
- * field, the full branding set (title, logo, colors, typeface, orientation), separated
- * QR destination vs. printed URL, editable goal, milestone and ask-tier editors, and
- * Control Room / Volunteer Pad PINs that can be set, changed, and cleared.
+ * Collapsible grouped sections with persisted open/closed state, the full branding set
+ * (title, logo, colors, typeface, orientation), separated QR destination vs. printed URL,
+ * editable goal, milestone and ask-tier editors, and Control Room / Volunteer Pad PINs.
  */
 
 (function () {
@@ -15,13 +14,14 @@
   // Typeface keys accepted by the server. The preview binds the same custom
   // properties the chart uses, so what you see here is what the room gets.
   const FONT_STACK_VARS = {
-    system: 'var(--font-sans)',
+    brandon: 'var(--font-brandon, var(--font-sans))',
     humanist: 'var(--font-humanist, var(--font-sans))',
     grotesk: 'var(--font-grotesk, var(--font-sans))',
     mono: 'var(--font-mono)',
     serif: 'var(--font-serif, Georgia, serif)'
   };
   const FONT_KEYS = Object.keys(FONT_STACK_VARS);
+  const DEFAULT_FONT_KEY = 'brandon';
   const ORIENTATIONS = ['horizontal', 'vertical'];
 
   const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -287,7 +287,7 @@
 
   // --- Live previews ---
   function applyFontPreview() {
-    const key = FONT_KEYS.includes(fontFamilySelect?.value) ? fontFamilySelect.value : 'system';
+    const key = FONT_KEYS.includes(fontFamilySelect?.value) ? fontFamilySelect.value : DEFAULT_FONT_KEY;
     if (fontPreview) fontPreview.style.fontFamily = FONT_STACK_VARS[key];
     if (fontPreviewTitle) {
       const title = (eventTitleInput?.value || '').trim()
@@ -312,8 +312,8 @@
     if (!displayUrlEffectiveEl) return;
     const printed = derivePrintedUrl(qrUrlInput?.value, displayUrlInput?.value);
     displayUrlEffectiveEl.innerHTML = printed
-      ? `Currently printed on the chart: <strong>${escapeHTML(printed)}</strong>`
-      : 'Nothing will be printed under the QR code until one of these two fields has a value.';
+      ? `Printed on the chart: <strong>${escapeHTML(printed)}</strong>`
+      : 'Nothing prints under the QR code until one of these two fields has a value.';
   }
 
   function setupLivePreviews() {
@@ -416,7 +416,7 @@
       orientationSelect.value = ORIENTATIONS.includes(es.chart_orientation) ? es.chart_orientation : 'horizontal';
     }
     if (fontFamilySelect) {
-      fontFamilySelect.value = FONT_KEYS.includes(es.font_family) ? es.font_family : 'system';
+      fontFamilySelect.value = FONT_KEYS.includes(es.font_family) ? es.font_family : DEFAULT_FONT_KEY;
     }
     setFieldValidity(barColorInput, errBarColor, true);
     setFieldValidity(textColorInput, errTextColor, true);
@@ -428,8 +428,8 @@
     setFieldValidity(qrUrlInput, errQrUrl, true);
     if (displayUrlEffectiveEl && typeof data.display_url_effective === 'string') {
       displayUrlEffectiveEl.innerHTML = data.display_url_effective
-        ? `Currently printed on the chart: <strong>${escapeHTML(data.display_url_effective)}</strong>`
-        : 'Nothing will be printed under the QR code until one of these two fields has a value.';
+        ? `Printed on the chart: <strong>${escapeHTML(data.display_url_effective)}</strong>`
+        : 'Nothing prints under the QR code until one of these two fields has a value.';
     } else {
       applyPrintedUrlPreview();
     }
@@ -731,9 +731,9 @@
     if (kind === 'control') {
       // Keep this browser authenticated with the PIN it just installed.
       setStoredControlPin(value);
-      pinFeedback('control', 'Control Room PIN saved. Other browsers will be asked for it on their next request.', 'ok');
+      pinFeedback('control', 'Control Room PIN saved.', 'ok');
     } else {
-      pinFeedback('entry', 'Volunteer Pad PIN saved. Add Donation will ask for it.', 'ok');
+      pinFeedback('entry', 'Volunteer Pad PIN saved.', 'ok');
     }
     if (input) input.value = '';
     await loadSettings();
@@ -745,7 +745,7 @@
 
     if (kind === 'control') {
       clearStoredControlPin();
-      pinFeedback('control', 'Control Room PIN removed. Every operator screen now opens with no authentication.', 'ok');
+      pinFeedback('control', 'Control Room PIN removed. Operator screens now open with no authentication.', 'ok');
     } else {
       pinFeedback('entry', 'Volunteer Pad PIN removed. Add Donation now opens with no authentication.', 'ok');
     }
@@ -818,7 +818,7 @@
         setPanelExpanded(panel, true);
         persistCurrentOpenSections();
       }
-      showError('Some fields need attention before saving. The problems are marked in red below.');
+      showError('Fix the fields marked in red.');
       if (target) target.focus();
       return;
     }
@@ -826,7 +826,7 @@
     const guardrailDollars = parseInt(guardrailThresholdInput?.value || '9500', 10) || 9500;
     const stagingSec = Math.max(0, parseInt(stagingDelayInput?.value || '0', 10) || 0);
     const matchPoolDollars = Math.max(0, parseInt(matchPoolInput?.value || '0', 10) || 0);
-    const fontKey = FONT_KEYS.includes(fontFamilySelect?.value) ? fontFamilySelect.value : 'system';
+    const fontKey = FONT_KEYS.includes(fontFamilySelect?.value) ? fontFamilySelect.value : DEFAULT_FONT_KEY;
     const orientation = ORIENTATIONS.includes(orientationSelect?.value) ? orientationSelect.value : 'horizontal';
 
     const payload = {
@@ -913,7 +913,7 @@
       }
 
       const resData = await res.json();
-      showSuccess('Settings saved. Live surfaces pick the change up within a second.');
+      showSuccess('Settings saved.');
       if (resData.state) {
         populateForm(resData.state);
       } else {

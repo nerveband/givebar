@@ -102,7 +102,7 @@
       margin-bottom: 4px;
     }
 
-    /* Inline help sits on EVERY setting: what it does, and where it shows up. */
+    /* One short hint, only where the label is not enough. */
     .form-hint {
       font-size: var(--text-xs);
       color: #83858c;
@@ -119,21 +119,6 @@
     .form-hint.after {
       margin-bottom: 0;
       margin-top: 6px;
-    }
-
-    .help-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      border: 1px solid #4a4d56;
-      color: #9a9da4;
-      font-size: 10px;
-      font-weight: 700;
-      cursor: help;
-      flex-shrink: 0;
     }
 
     .form-input-text {
@@ -421,7 +406,7 @@
       </div>
       <nav class="ops-nav" aria-label="Main Navigation">
         <a href="/" class="ops-nav-item">Home</a>
-        <a href="/chart" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
         <a href="/add" class="ops-nav-item">Add Donation</a>
         <a href="/presenter" class="ops-nav-item">Presenter View</a>
@@ -441,9 +426,7 @@
             <path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/>
           </svg>
           <h2 class="unlock-title">Settings Unlock</h2>
-          <p class="unlock-desc">
-            This event has a Control Room PIN configured. Enter it to view and change event settings.
-          </p>
+          <p class="unlock-desc">Enter the Control Room PIN.</p>
           <div id="unlock-error" class="unlock-error" style="display: none;">Invalid Control Room PIN</div>
           <form id="unlock-form" class="unlock-form" onsubmit="return false;">
             <input type="password" id="unlock-pin-input" class="unlock-input" placeholder="Enter PIN" inputmode="numeric" autocomplete="current-password" required autofocus>
@@ -458,10 +441,6 @@
             <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0 0 6px 0; color: #f4f5f6; letter-spacing: -0.02em;">
               Settings
             </h1>
-            <p style="font-size: var(--text-sm); color: #88888e; margin: 0; max-width: 640px; line-height: 1.5;">
-              Every group collapses, and Givebar remembers which ones you left open. Each field
-              says what it controls and which screen it appears on.
-            </p>
           </div>
           <button type="button" id="btn-save-top" class="btn-save-settings">
             Save Settings
@@ -478,14 +457,14 @@
           <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);">
             <span id="settings-error-text">Failed to save settings.</span>
             <button type="button" id="btn-reload-conflict" class="btn-secondary" style="display: none; min-height: 32px; font-size: var(--text-xs);">
-              Reload Latest Settings
+              Reload Latest
             </button>
           </div>
         </div>
 
         <!-- Success Surface -->
         <div id="settings-success-banner" class="status-surface success" role="status">
-          Settings saved successfully.
+          Settings saved.
         </div>
 
         <form id="settings-form" onsubmit="return false;" class="settings-accordion">
@@ -501,79 +480,36 @@
             </button>
             <div class="accordion-body" id="sec-event-body">
               <div class="form-group">
-                <label class="form-label" for="setting-event-title">
-                  Fundraiser Title
-                  <span class="help-badge" title="The headline printed above the total on the audience projection.">?</span>
-                </label>
-                <div class="form-hint">
-                  The big headline on the <strong>Fullscreen Bar Chart</strong>. This is what the
-                  room reads. Leave it empty and the chart falls back to the internal event name below.
-                </div>
+                <label class="form-label" for="setting-event-title">Fundraiser Title</label>
+                <div class="form-hint">Headline on the chart. Empty falls back to Internal Event Name.</div>
                 <input type="text" id="setting-event-title" class="form-input-text" placeholder="Raise the Roof 2026">
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="setting-event-name">
-                  Internal Event Name
-                  <span class="help-badge" title="Operator-facing name; also the chart fallback title.">?</span>
-                </label>
-                <div class="form-hint">
-                  How this event is labelled for staff: shown on <strong>Home</strong> and in the
-                  CSV export. Also used on the chart if Fundraiser Title is empty.
-                </div>
+                <label class="form-label" for="setting-event-name">Internal Event Name</label>
                 <input type="text" id="setting-event-name" class="form-input-text" placeholder="Annual Gala">
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="setting-event-subtitle">
-                  Subtitle
-                  <span class="help-badge" title="Second line under the title on stage surfaces.">?</span>
-                </label>
-                <div class="form-hint">
-                  Small second line under the title on the <strong>Fullscreen Bar Chart</strong>
-                  and <strong>Presenter View</strong>. Good for the cause or the appeal name.
-                </div>
+                <label class="form-label" for="setting-event-subtitle">Subtitle</label>
                 <input type="text" id="setting-event-subtitle" class="form-input-text" placeholder="Supporting Community Programs">
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="setting-goal-dollars">
-                  Fundraising Goal (dollars)
-                  <span class="help-badge" title="Drives the bar fill, the Goal figure, and milestone percentages.">?</span>
-                </label>
-                <div class="form-hint">
-                  Entered in whole dollars, stored in cents. Drives how far the bar fills, the
-                  <strong>Goal</strong> figure on the chart, the progress percentage on
-                  <strong>Home</strong>, and the percent-of-goal milestones below. Editable at any
-                  point during the event.
-                </div>
+                <label class="form-label" for="setting-goal-dollars">Fundraising Goal (dollars)</label>
                 <input type="number" id="setting-goal-dollars" class="form-input-text" placeholder="500000" min="1" step="1">
                 <div class="field-error" id="err-goal">Enter a goal of at least $1.</div>
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="setting-trust-badge">
-                  Trust Badge Text
-                  <span class="help-badge" title="Reassurance line under the QR block on the chart.">?</span>
-                </label>
-                <div class="form-hint">
-                  One short reassurance line printed under the QR block on the
-                  <strong>Fullscreen Bar Chart</strong>. Empty hides it.
-                </div>
+                <label class="form-label" for="setting-trust-badge">Trust Badge Text</label>
+                <div class="form-hint">Printed under the QR code. Empty hides it.</div>
                 <input type="text" id="setting-trust-badge" class="form-input-text" placeholder="501(c)(3) Tax-Deductible Contribution">
               </div>
 
               <div class="form-group group-divider">
-                <label class="form-label">
-                  Milestones
-                  <span class="help-badge" title="Celebration marks along the bar; also Presenter View's Next Milestone.">?</span>
-                </label>
-                <div class="form-hint">
-                  Marks along the bar on the <strong>Fullscreen Bar Chart</strong>, and the source
-                  of <strong>Next Milestone</strong> on <strong>Presenter View</strong>. Givebar
-                  seeds four from your goal — edit any row, delete what you do not want, and add
-                  your own. Saving replaces the whole list.
-                </div>
+                <label class="form-label">Milestones</label>
+                <div class="form-hint">Marks on the chart bar. Saving replaces the whole list.</div>
                 <table class="editor-table">
                   <thead>
                     <tr>
@@ -586,9 +522,7 @@
                     <!-- Dynamic rows -->
                   </tbody>
                 </table>
-                <div id="milestones-empty" class="form-hint" style="display: none;">
-                  No milestones. The bar will show goal only.
-                </div>
+                <div id="milestones-empty" class="form-hint" style="display: none;">No milestones.</div>
                 <button type="button" id="btn-add-milestone" class="btn-secondary" style="min-height: 34px; font-size: var(--text-xs);">
                   + Add Milestone
                 </button>
@@ -607,58 +541,30 @@
             </button>
             <div class="accordion-body" id="sec-branding-body">
               <div class="form-group">
-                <label class="form-label" for="setting-logo-url">
-                  Logo URL
-                  <span class="help-badge" title="Hosted image shown in the chart's top corner.">?</span>
-                </label>
-                <div class="form-hint">
-                  Paste a direct link to a hosted image (png or svg). Appears in the top corner of
-                  the <strong>Fullscreen Bar Chart</strong>, sized so it never competes with the
-                  total. Empty collapses the space entirely.
-                </div>
+                <label class="form-label" for="setting-logo-url">Logo URL</label>
+                <div class="form-hint">Direct link to a hosted png or svg.</div>
                 <input type="url" id="setting-logo-url" class="form-input-text" placeholder="https://example.org/logo.png">
               </div>
 
               <div class="inline-fields">
                 <div class="form-group">
-                  <label class="form-label" for="setting-bar-color">
-                    Bar Color
-                    <span class="help-badge" title="Fill color of the progress bar on the chart.">?</span>
-                  </label>
-                  <div class="form-hint">
-                    Fill of the progress bar on the <strong>Fullscreen Bar Chart</strong>.
-                    Accepts <strong>#hex</strong> or <strong>oklch(...)</strong>. Empty keeps
-                    Givebar amber.
-                  </div>
+                  <label class="form-label" for="setting-bar-color">Bar Color</label>
+                  <div class="form-hint">#hex or oklch(). Empty keeps amber.</div>
                   <input type="text" id="setting-bar-color" class="form-input-text" placeholder="#d4a359" spellcheck="false">
-                  <div class="field-error" id="err-bar-color">Use a #hex value (3, 4, 6, or 8 digits), an oklch(...) value, or leave it empty.</div>
+                  <div class="field-error" id="err-bar-color">Use a #hex or oklch() value, or leave it empty.</div>
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="setting-text-color">
-                    Figure Text Color
-                    <span class="help-badge" title="Color of the large total and goal figures on the chart.">?</span>
-                  </label>
-                  <div class="form-hint">
-                    Color of the large total and goal numerals on the
-                    <strong>Fullscreen Bar Chart</strong>. Accepts <strong>#hex</strong> or
-                    <strong>oklch(...)</strong>. Empty keeps the luminous amber.
-                  </div>
+                  <label class="form-label" for="setting-text-color">Figure Text Color</label>
+                  <div class="form-hint">#hex or oklch(). Empty keeps amber.</div>
                   <input type="text" id="setting-text-color" class="form-input-text" placeholder="#f4d19b" spellcheck="false">
-                  <div class="field-error" id="err-text-color">Use a #hex value (3, 4, 6, or 8 digits), an oklch(...) value, or leave it empty.</div>
+                  <div class="field-error" id="err-text-color">Use a #hex or oklch() value, or leave it empty.</div>
                 </div>
               </div>
 
               <div class="inline-fields">
                 <div class="form-group">
-                  <label class="form-label" for="setting-bg-style">
-                    Chart Background
-                    <span class="help-badge" title="Backdrop treatment behind the chart.">?</span>
-                  </label>
-                  <div class="form-hint">
-                    Backdrop of the <strong>Fullscreen Bar Chart</strong>. Plain near-black is the
-                    projector-safe default; the others add a faint falloff behind the figures.
-                  </div>
+                  <label class="form-label" for="setting-bg-style">Chart Background</label>
                   <select id="setting-bg-style" class="form-input-text">
                     <option value="plain">Plain Near-Black</option>
                     <option value="subtle-gradient">Subtle Gradient</option>
@@ -667,16 +573,7 @@
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="setting-chart-orientation">
-                    Chart Orientation
-                    <span class="help-badge" title="Horizontal bar for 16:9 screens, vertical thermometer for portrait screens.">?</span>
-                  </label>
-                  <div class="form-hint">
-                    How the <strong>Fullscreen Bar Chart</strong> draws progress.
-                    <strong>Horizontal</strong> fills left to right on a 16:9 projector;
-                    <strong>Vertical</strong> fills bottom to top as a thermometer for tall or
-                    portrait displays.
-                  </div>
+                  <label class="form-label" for="setting-chart-orientation">Chart Orientation</label>
                   <select id="setting-chart-orientation" class="form-input-text">
                     <option value="horizontal">Horizontal bar</option>
                     <option value="vertical">Vertical thermometer</option>
@@ -685,22 +582,13 @@
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="setting-font-family">
-                  Typeface
-                  <span class="help-badge" title="Local system font stack used on audience surfaces.">?</span>
-                </label>
-                <div class="form-hint">
-                  Applied to the <strong>Fullscreen Bar Chart</strong> and
-                  <strong>Presenter View</strong>. All five are local system stacks — Givebar never
-                  downloads a webfont, so the projector machine cannot stall on a font request.
-                  The preview below renders in the selected stack on this machine.
-                </div>
+                <label class="form-label" for="setting-font-family">Typeface</label>
                 <select id="setting-font-family" class="form-input-text">
-                  <option value="system">System — matches the operating system UI</option>
-                  <option value="humanist">Humanist — soft, warm sans</option>
-                  <option value="grotesk">Grotesk — neutral, tight sans</option>
-                  <option value="mono">Mono — fixed-width, engineering feel</option>
-                  <option value="serif">Serif — traditional, formal</option>
+                  <option value="brandon">Brandon Grotesque (default)</option>
+                  <option value="humanist">Humanist</option>
+                  <option value="grotesk">Grotesk</option>
+                  <option value="mono">Mono</option>
+                  <option value="serif">Serif</option>
                 </select>
                 <div class="font-preview" id="font-preview">
                   <div class="font-preview-label">Live preview</div>
@@ -722,37 +610,17 @@
             </button>
             <div class="accordion-body" id="sec-qr-body">
               <div class="form-group">
-                <label class="form-label" for="setting-qr-url">
-                  QR Destination URL (encoded, never printed)
-                  <span class="help-badge" title="The link encoded inside the QR image. Put UTM parameters here.">?</span>
-                </label>
-                <div class="form-hint">
-                  This exact string is <strong>encoded into the QR code</strong> on the
-                  Fullscreen Bar Chart. Only a phone camera ever reads it, so this is where UTM or
-                  campaign parameters belong — they will never be projected. Must be a full
-                  <strong>http:// or https://</strong> address.
-                  <strong>Leave it empty and no QR block appears on the chart at all</strong> — the
-                  layout closes up and gives the total more room.
-                </div>
+                <label class="form-label" for="setting-qr-url">QR Destination URL</label>
+                <div class="form-hint">Encoded in the QR code, never printed — put UTM parameters here. Empty removes the QR block from the chart.</div>
                 <input type="url" id="setting-qr-url" class="form-input-text" placeholder="https://give.example.org/gala?utm_source=ballroom&amp;utm_medium=qr" spellcheck="false">
-                <div class="field-error" id="err-qr-url">Enter a full http:// or https:// address, or leave this empty to drop the QR block from the chart.</div>
+                <div class="field-error" id="err-qr-url">Enter a full http:// or https:// address, or leave it empty.</div>
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="setting-display-url">
-                  Printed Short URL (human-readable)
-                  <span class="help-badge" title="The short URL printed under the QR code for people to type.">?</span>
-                </label>
-                <div class="form-hint">
-                  The short line <strong>printed under the QR code</strong> for anyone typing it by
-                  hand. Keep it clean and speakable. Leave it empty and Givebar prints the QR
-                  destination with its query string stripped off, so tracking parameters still
-                  never reach the projector.
-                </div>
+                <label class="form-label" for="setting-display-url">Printed Short URL</label>
+                <div class="form-hint">Printed under the QR code for people typing it. Empty prints the QR destination without its query string.</div>
                 <input type="url" id="setting-display-url" class="form-input-text" placeholder="give.example.org/gala" spellcheck="false">
-                <div class="form-hint after" id="display-url-effective">
-                  Currently printed on the chart: <strong>—</strong>
-                </div>
+                <div class="form-hint after" id="display-url-effective">Printed on the chart: <strong>—</strong></div>
               </div>
 
               <div class="form-group group-divider">
@@ -760,10 +628,7 @@
                   <input type="checkbox" id="toggle-show-qr" class="anon-checkbox">
                   <span class="toggle-check-copy">
                     <span>Show the QR block on the chart</span>
-                    <span class="form-hint">
-                      Off removes the QR image, the printed URL, and the trust badge from the
-                      <strong>Fullscreen Bar Chart</strong>, giving the total more room.
-                    </span>
+                    <span class="form-hint">Off also hides the printed URL and the trust badge.</span>
                   </span>
                 </label>
               </div>
@@ -781,61 +646,37 @@
             </button>
             <div class="accordion-body" id="sec-display-body">
               <div class="form-group">
-                <label class="form-label">
-                  Chart Elements
-                  <span class="help-badge" title="Each toggle adds or removes one block on the audience projection.">?</span>
-                </label>
-                <div class="form-hint">
-                  Each toggle adds or removes one block on the <strong>Fullscreen Bar
-                  Chart</strong>. Nothing here affects what is recorded in the ledger.
-                </div>
+                <label class="form-label">Chart Elements</label>
                 <div style="display: flex; flex-direction: column;">
                   <label for="toggle-show-recent" class="toggle-check-label">
                     <input type="checkbox" id="toggle-show-recent" class="anon-checkbox">
                     <span class="toggle-check-copy">
                       <span>Recent donations feed</span>
-                      <span class="form-hint">
-                        The running list of latest gifts on the chart. Anonymous donors always
-                        appear as "Anonymous Supporter".
-                      </span>
+                      <span class="form-hint">Anonymous donors appear as "Anonymous Supporter".</span>
                     </span>
                   </label>
                   <label for="toggle-show-live" class="toggle-check-label">
                     <input type="checkbox" id="toggle-show-live" class="anon-checkbox">
                     <span class="toggle-check-copy">
                       <span>Live indicator</span>
-                      <span class="form-hint">The small amber "Live" dot in the chart's corner.</span>
                     </span>
                   </label>
                   <label for="toggle-show-goal" class="toggle-check-label">
                     <input type="checkbox" id="toggle-show-goal" class="anon-checkbox">
                     <span class="toggle-check-copy">
                       <span>Goal figure on the bar</span>
-                      <span class="form-hint">
-                        Prints the goal amount at the end of the bar. Off keeps the bar filling
-                        without naming the target.
-                      </span>
                     </span>
                   </label>
                 </div>
               </div>
 
               <div class="form-group group-divider">
-                <label class="form-label" for="setting-stage-message">
-                  Stage Message
-                  <span class="help-badge" title="One line of copy shown on the audience chart.">?</span>
-                </label>
-                <div class="form-hint">
-                  One line of copy on the <strong>Fullscreen Bar Chart</strong> — a thank-you, a
-                  matching-hour callout, a table instruction. Type it here, then flip the switch
-                  below when you want the room to see it.
-                </div>
+                <label class="form-label" for="setting-stage-message">Stage Message</label>
                 <input type="text" id="setting-stage-message" class="form-input-text" placeholder="Every gift in the next ten minutes is matched">
                 <label for="toggle-stage-message-visible" class="toggle-check-label" style="margin-top: 8px;">
                   <input type="checkbox" id="toggle-stage-message-visible" class="anon-checkbox">
                   <span class="toggle-check-copy">
                     <span>Show the stage message right now</span>
-                    <span class="form-hint">Takes effect on the chart within a second of saving.</span>
                   </span>
                 </label>
               </div>
@@ -853,14 +694,8 @@
             </button>
             <div class="accordion-body" id="sec-donations-body">
               <div class="form-group">
-                <label class="form-label">
-                  Ask Tiers
-                  <span class="help-badge" title="Quick-amount buttons on the volunteer pledge pad.">?</span>
-                </label>
-                <div class="form-hint">
-                  The quick-amount buttons volunteers tap on <strong>Add Donation</strong>. Order
-                  here is the order on the pad. Saving replaces the whole list.
-                </div>
+                <label class="form-label">Ask Tiers</label>
+                <div class="form-hint">Buttons on Add Donation, in this order. Saving replaces the whole list.</div>
                 <table class="editor-table">
                   <thead>
                     <tr>
@@ -879,31 +714,14 @@
               </div>
 
               <div class="form-group group-divider">
-                <label class="form-label" for="setting-guardrail-threshold">
-                  Large Gift Confirmation Threshold (dollars)
-                  <span class="help-badge" title="Gifts at or above this amount require an extra confirmation on the pad.">?</span>
-                </label>
-                <div class="form-hint">
-                  Any gift at or above this amount makes <strong>Add Donation</strong> ask the
-                  volunteer to confirm before it is recorded. This is the guard against an extra
-                  zero turning $50,000 into $500,000 on the projector.
-                </div>
+                <label class="form-label" for="setting-guardrail-threshold">Large Gift Confirmation Threshold (dollars)</label>
+                <div class="form-hint">Gifts at or above this make Add Donation ask for confirmation.</div>
                 <input type="number" id="setting-guardrail-threshold" class="form-input-text" placeholder="9500" min="1" step="1">
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="setting-staging-delay">
-                  Stage Staging Delay (seconds)
-                  <span class="help-badge" title="How long a gift waits before appearing on audience surfaces.">?</span>
-                </label>
-                <div class="form-hint">
-                  How long a recorded gift waits before it reaches the
-                  <strong>Fullscreen Bar Chart</strong> and the <strong>Presenter View</strong>
-                  chyron. <strong>0</strong> shows gifts immediately. Set <strong>8</strong> to keep
-                  a review window where a mistyped gift can be held or deleted before the room ever
-                  sees it. This is separate from the short undo the volunteer pad offers on its own
-                  device.
-                </div>
+                <label class="form-label" for="setting-staging-delay">Stage Staging Delay (seconds)</label>
+                <div class="form-hint">Gifts wait this long before the chart and Presenter View show them. 0 is immediate.</div>
                 <input type="number" id="setting-staging-delay" class="form-input-text" placeholder="0" min="0" max="60" step="1">
               </div>
 
@@ -912,37 +730,20 @@
                   <input type="checkbox" id="toggle-match-active" class="anon-checkbox">
                   <span class="toggle-check-copy">
                     <span>Matching sponsor active</span>
-                    <span class="form-hint">
-                      While on, every qualifying gift draws from the match pool and the chart shows
-                      the matched total. Turning it off releases nothing already banked — the
-                      ledger keeps compensating entries.
-                    </span>
+                    <span class="form-hint">Turning it off does not reverse matches already banked.</span>
                   </span>
                 </label>
               </div>
 
               <div class="inline-fields">
                 <div class="form-group">
-                  <label class="form-label" for="setting-match-title">
-                    Match Sponsor Title
-                    <span class="help-badge" title="Sponsor credit line shown with the match on stage.">?</span>
-                  </label>
-                  <div class="form-hint">
-                    Credit line shown next to the match figure on the
-                    <strong>Fullscreen Bar Chart</strong>.
-                  </div>
+                  <label class="form-label" for="setting-match-title">Match Sponsor Title</label>
                   <input type="text" id="setting-match-title" class="form-input-text" placeholder="Board of Directors Matching Grant">
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="setting-match-pool">
-                    Match Pool Total (dollars)
-                    <span class="help-badge" title="Ceiling of sponsor money available to match gifts.">?</span>
-                  </label>
-                  <div class="form-hint">
-                    The ceiling of sponsor money available. Givebar stops matching once the pool is
-                    exhausted and shows the remainder on the chart.
-                  </div>
+                  <label class="form-label" for="setting-match-pool">Match Pool Total (dollars)</label>
+                  <div class="form-hint">Matching stops once the pool is exhausted.</div>
                   <input type="number" id="setting-match-pool" class="form-input-text" placeholder="100000" min="0" step="1">
                 </div>
               </div>
@@ -960,15 +761,8 @@
             </button>
             <div class="accordion-body" id="sec-connections-body">
               <div class="form-group">
-                <label class="form-label" for="setting-bloomerang-key">
-                  Bloomerang API Key
-                  <span class="help-badge" title="Server-side credential for pushing gifts to Bloomerang.">?</span>
-                </label>
-                <div class="form-hint">
-                  Lets Givebar push recorded gifts to Bloomerang. Stored server-side only and never
-                  included in any state payload, so it can never reach the projector or a
-                  volunteer's phone. Leave the masked value untouched to keep the existing key.
-                </div>
+                <label class="form-label" for="setting-bloomerang-key">Bloomerang API Key</label>
+                <div class="form-hint">Stored server-side only, never sent to any screen. Leave the masked value to keep the current key.</div>
                 <div style="position: relative; display: flex; align-items: center;">
                   <input type="password" id="setting-bloomerang-key" class="form-input-text" placeholder="Paste key" autocomplete="new-password" spellcheck="false">
                   <button type="button" id="btn-toggle-key-view" class="btn-ghost" style="position: absolute; right: 8px; padding: 4px 8px; font-size: var(--text-xs);" aria-label="Toggle key visibility">
@@ -1007,31 +801,21 @@
                     <input type="checkbox" id="toggle-feature-timer" class="anon-checkbox">
                     <span class="toggle-check-copy">
                       <span>Appeal countdown timer</span>
-                      <span class="form-hint">
-                        Adds a countdown to the <strong>Fullscreen Bar Chart</strong> and timer
-                        controls to <strong>Manage Donations</strong>, for timed matching pushes.
-                      </span>
+                      <span class="form-hint">Adds a countdown to the chart and timer controls to Manage Donations.</span>
                     </span>
                   </label>
                   <label for="toggle-feature-card" class="toggle-check-label">
                     <input type="checkbox" id="toggle-feature-card" class="anon-checkbox">
                     <span class="toggle-check-copy">
                       <span>Pledge card number field</span>
-                      <span class="form-hint">
-                        Adds the physical card number field on <strong>Add Donation</strong>.
-                        Duplicate card numbers are rejected so the same paper card cannot be
-                        entered twice.
-                      </span>
+                      <span class="form-hint">Adds the field to Add Donation. Duplicate card numbers are rejected.</span>
                     </span>
                   </label>
                   <label for="toggle-feature-table" class="toggle-check-label">
                     <input type="checkbox" id="toggle-feature-table" class="anon-checkbox">
                     <span class="toggle-check-copy">
                       <span>Table number field</span>
-                      <span class="form-hint">
-                        Adds a table number field on <strong>Add Donation</strong> and shows it to
-                        the emcee on <strong>Presenter View</strong>.
-                      </span>
+                      <span class="form-hint">Adds the field to Add Donation and shows it on Presenter View.</span>
                     </span>
                   </label>
                 </div>
@@ -1050,18 +834,9 @@
             </button>
             <div class="accordion-body" id="sec-access-body">
               <div class="form-group">
-                <label class="form-label" for="setting-control-pin">
-                  Control Room PIN
-                  <span class="help-badge" title="Guards Settings, Manage Donations, Testing, and History.">?</span>
-                </label>
+                <label class="form-label" for="setting-control-pin">Control Room PIN</label>
                 <div id="control-pin-status" class="pin-status open">Checking...</div>
-                <div class="form-hint">
-                  Guards <strong>Settings</strong>, <strong>Manage Donations</strong>,
-                  <strong>Testing</strong>, and <strong>History</strong>.
-                  <strong>An empty PIN means no authentication anywhere</strong> — anyone who can
-                  reach this server opens every operator screen without being asked for anything.
-                  Set 4 to 12 characters to require it, or clear it to reopen everything.
-                </div>
+                <div class="form-hint">Guards Settings, Manage Donations, Testing, and History. Empty means no authentication on any of them.</div>
                 <input type="password" id="setting-control-pin" class="form-input-text" placeholder="Enter a new PIN" minlength="4" maxlength="12" autocomplete="new-password">
                 <div class="field-error" id="err-control-pin">A PIN must be 4 to 12 characters. Use Remove PIN to turn authentication off.</div>
                 <div class="pin-action-row">
@@ -1072,17 +847,9 @@
               </div>
 
               <div class="form-group group-divider">
-                <label class="form-label" for="setting-entry-pin">
-                  Volunteer Pad PIN
-                  <span class="help-badge" title="Guards the Add Donation pledge pad handed to volunteers.">?</span>
-                </label>
+                <label class="form-label" for="setting-entry-pin">Volunteer Pad PIN</label>
                 <div id="entry-pin-status" class="pin-status open">Checking...</div>
-                <div class="form-hint">
-                  Guards <strong>Add Donation</strong>, the pad volunteers open on their own
-                  phones. Empty means the pad opens for anyone with the link — usually what you
-                  want mid-event. Set 4 to 12 characters if the link may travel further than the
-                  room.
-                </div>
+                <div class="form-hint">Guards Add Donation. Empty means anyone with the link can record gifts.</div>
                 <input type="password" id="setting-entry-pin" class="form-input-text" placeholder="Enter a new PIN" minlength="4" maxlength="12" autocomplete="new-password">
                 <div class="field-error" id="err-entry-pin">A PIN must be 4 to 12 characters. Use Remove PIN to turn authentication off.</div>
                 <div class="pin-action-row">

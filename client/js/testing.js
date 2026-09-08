@@ -137,7 +137,7 @@
   function setupGenerators() {
     wireGenerator(btnGenSingle, { mode: 'single' }, 'Injected 1 sample gift.');
     wireGenerator(btnGenBurst, { mode: 'burst', count: 7 }, 'Injected a burst of 7 sample gifts.');
-    wireGenerator(btnGenTypo, { mode: 'typo' }, 'Injected the typo gift for hold and undo drills.');
+    wireGenerator(btnGenTypo, { mode: 'typo' }, 'Injected the typo gift.');
     wireGenerator(btnGenMilestone, { mode: 'milestone' }, 'Injected the gift that crosses the next milestone.');
   }
 
@@ -262,7 +262,7 @@
       if (count > 0) {
         testModeBanner.style.display = 'flex';
         if (testBannerDesc) {
-          testBannerDesc.textContent = `${count} sample record${count === 1 ? '' : 's'} active in database. Purging removes only sample data and leaves real donations untouched.`;
+          testBannerDesc.textContent = `${count} sample record${count === 1 ? '' : 's'} active. Purging removes only sample data.`;
         }
       } else {
         testModeBanner.style.display = 'none';

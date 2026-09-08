@@ -63,7 +63,6 @@
   const fieldDonorPhoneticWrap = document.getElementById('field-donor-phonetic-wrap');
   const mobileKeypad = document.getElementById('mobile-keypad');
   const btnSubmit = document.getElementById('btn-submit-add');
-  const submitNote = document.getElementById('submit-note');
   const errorBanner = document.getElementById('add-error-banner');
   const outboxStatus = document.getElementById('outbox-status');
   const outboxCount = document.getElementById('outbox-count');
@@ -101,7 +100,6 @@
     setupPronunciationDisclosure();
     setupSubmission();
     setupGuardrailModal();
-    setupSubmitNote();
     updateUI();
     renderRecentEntries();
     updateOutboxIndicator();
@@ -110,13 +108,6 @@
     fetchState();
     setInterval(fetchState, 3000);
     setInterval(flushOutbox, 3000);
-  }
-
-  function setupSubmitNote() {
-    if (!submitNote) return;
-    const seconds = Math.round(UNDO_WINDOW_MS / 1000);
-    submitNote.textContent =
-      `Goes live on the ballroom screen within a few seconds. You can undo it from Recent for ${seconds} seconds after adding.`;
   }
 
   // --- State Sync (Features & ask tiers) ---
@@ -231,11 +222,6 @@
     if (anonExplainer) {
       anonExplainer.classList.toggle('is-visible', isAnonymousState);
     }
-    // Donor name stays required either way; say so out loud while anonymous.
-    const flag = document.getElementById('donor-name-required-flag');
-    if (flag) {
-      flag.textContent = isAnonymousState ? 'Required (still recorded)' : 'Required';
-    }
   }
 
   // --- Compact Name Pronunciation Disclosure ---
@@ -346,7 +332,7 @@
 
   function resetCustomHint() {
     if (customEntryHint) {
-      customEntryHint.textContent = 'Type any amount, then press Enter or tap Done.';
+      customEntryHint.textContent = 'Press Enter to confirm.';
       customEntryHint.style.color = '';
     }
   }
@@ -354,7 +340,7 @@
   function commitCustomAmount() {
     if (currentAmountCents <= 0) {
       if (customEntryHint) {
-        customEntryHint.textContent = 'Enter an amount greater than $0, then press Enter or tap Done.';
+        customEntryHint.textContent = 'Enter an amount over $0.';
       }
       if (amountInput) amountInput.focus();
       return;
@@ -452,14 +438,14 @@
     const donorName = (donorNameInput?.value || '').trim();
 
     if (currentAmountCents <= 0) {
-      showError('Please enter a valid donation amount.');
+      showError('Enter an amount.');
       if (amountInput) amountInput.focus();
       return;
     }
 
     // Anonymity is a public-display rule. The record always keeps the real name.
     if (!donorName) {
-      showError('Donor name is required, including for anonymous gifts. The ballroom screen will still show "Anonymous Supporter".');
+      showError('Donor name is required, including for anonymous gifts.');
       if (donorNameInput) donorNameInput.focus();
       return;
     }
@@ -582,7 +568,7 @@
     const formatted = formatCurrency(payload.amount_cents);
 
     if (guardrailBody) {
-      guardrailBody.textContent = `A pledge of ${formatted} from "${payload.donor_name}" exceeds the verification threshold of ${formatCurrency(majorGiftThresholdCents)}. Please confirm this is not an extra-zero typo.`;
+      guardrailBody.textContent = `${formatted} from "${payload.donor_name}". Check for an extra zero.`;
     }
 
     if (guardrailModal) {
@@ -736,7 +722,7 @@
     }
 
     if (sessionRecentEntries.length === 0) {
-      recentEntriesList.innerHTML = '<div class="recent-empty">No recent entries in this session.</div>';
+      recentEntriesList.innerHTML = '<div class="recent-empty">No entries yet</div>';
       stopTicker();
       return;
     }
@@ -838,7 +824,7 @@
     if (!donationId) return;
     const entry = sessionRecentEntries.find(e => e.id === donationId);
     if (!entry || undoRemainingMs(entry) <= 0) {
-      showError('That undo window has closed. Use Manage Donations to correct this gift.');
+      showError('Undo window closed. Correct it in Manage Donations.');
       renderRecentEntries();
       return;
     }
@@ -871,7 +857,7 @@
       }
     } catch (err) {
       console.error('[Givebar] Undo error:', err);
-      showError('Undo failed: no connection to the server.');
+      showError('Undo failed: no connection.');
     }
   }
 
@@ -912,7 +898,7 @@
       }
     } catch (err) {
       console.error('[Givebar] Redo error:', err);
-      showError('Redo failed: no connection to the server.');
+      showError('Redo failed: no connection.');
     }
   }
 

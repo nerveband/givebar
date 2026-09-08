@@ -31,9 +31,14 @@
 (function () {
   'use strict';
 
-  // ---- Font allowlist. Local system stacks only. No network font requests. --
+  // ---- Font allowlist. Brandon Grotesque is self-hosted from /assets/fonts;
+  // every other key is a local system stack. 'system' and an unset value both
+  // resolve to Brandon: this is the audience-facing screen and Brandon is the
+  // licensed face for it. --font-brandon ends in the system stack, so a font
+  // that fails to load still renders text. ------------------------------------
   var FONT_STACKS = {
-    system: 'var(--font-sans)',
+    system: 'var(--font-brandon)',
+    brandon: 'var(--font-brandon)',
     humanist: 'var(--font-humanist)',
     grotesk: 'var(--font-grotesk)',
     mono: 'var(--font-mono)',
@@ -142,15 +147,9 @@
     if (el.liveDot) el.liveDot.classList.toggle('degraded', isStale);
     if (el.liveIndicator) el.liveIndicator.setAttribute('data-state', isStale ? 'stale' : 'live');
     if (el.liveLabel) el.liveLabel.textContent = isStale ? 'Reconnecting' : 'Live';
-    if (el.degraded) {
-      if (lockedOut) {
-        el.degraded.textContent = 'Display locked';
-        el.degraded.hidden = false;
-      } else {
-        el.degraded.textContent = 'Reconnecting';
-        el.degraded.hidden = !isStale;
-      }
-    }
+    // The live indicator already reads "Reconnecting" when the feed is stale;
+    // this banner carries only the state the indicator cannot show.
+    if (el.degraded) el.degraded.hidden = !lockedOut;
   }
 
   function initSSE() {
@@ -267,7 +266,8 @@
     if (el.matchBanner) {
       el.matchBanner.hidden = !data.is_match_active;
       if (data.is_match_active && el.matchText) {
-        el.matchText.textContent = (data.match_sponsor_title || 'Matching Sponsor') + ' \u2022 Double Your Impact';
+        var sponsor = (data.match_sponsor_title || '').trim();
+        el.matchText.textContent = sponsor ? sponsor + ' \u00b7 Gifts Matched' : 'Gifts Matched';
       }
     }
     if (el.freezeBanner) el.freezeBanner.hidden = !data.is_frozen;
@@ -283,7 +283,9 @@
   function applyBranding(data) {
     // Event title
     if (el.title && !EditMode.isDirty('title')) {
-      var title = (data.event_title || '').trim();
+      // event_title is the chart-specific override; event_name is the event's
+      // own name. Without the fallback a default install projects no title.
+      var title = (data.event_title || data.event_name || '').trim();
       el.title.textContent = title;
       el.title.hidden = !title && !EDIT_MODE;
       if (EDIT_MODE) el.title.setAttribute('data-empty', title ? '0' : '1');
@@ -544,7 +546,7 @@
 
     if (items.length === 0) {
       el.feed.style.transform = '';
-      el.feed.innerHTML = '<div class="recent-empty">Recent donations will appear here live</div>';
+      el.feed.innerHTML = '';
       recentKeys = [];
       return;
     }
@@ -564,7 +566,7 @@
     el.feed.innerHTML = items.map(function (c, i) {
       var isNew = previous.indexOf(keys[i]) === -1;
       return '<div class="recent-feed-item"' + (isNew ? ' data-new="1"' : '') + '>' +
-        '<span class="recent-feed-donor">' + escapeHTML(c.display_name || 'Anonymous Supporter') + '</span>' +
+        '<span class="recent-feed-donor">' + escapeHTML(c.display_name || 'Anonymous') + '</span>' +
         '<span class="recent-feed-amount">' + formatCurrency(c.amount_cents) + '</span>' +
         '</div>';
     }).join('');
@@ -764,7 +766,7 @@
       statusEl.className = 'edit-bar-status';
       statusEl.setAttribute('role', 'status');
       statusEl.setAttribute('aria-live', 'polite');
-      statusEl.textContent = 'Click the title, goal, or message';
+      statusEl.textContent = '';
 
       saveBtn = document.createElement('button');
       saveBtn.type = 'button';
@@ -971,7 +973,7 @@
     var hint = document.createElement('div');
     hint.className = 'fullscreen-hint';
     hint.setAttribute('role', 'status');
-    hint.textContent = 'Click anywhere or press F for fullscreen';
+    hint.textContent = 'Click for fullscreen';
     document.body.appendChild(hint);
 
     var done = false;

@@ -6,7 +6,7 @@
  * allowlist that maps to a system-safe stack in the client stylesheets.
  */
 
-export const FONT_FAMILY_KEYS = ["system", "humanist", "grotesk", "mono", "serif"] as const;
+export const FONT_FAMILY_KEYS = ["system", "brandon", "humanist", "grotesk", "mono", "serif"] as const;
 export type FontFamilyKey = (typeof FONT_FAMILY_KEYS)[number];
 
 export const CHART_ORIENTATIONS = ["horizontal", "vertical"] as const;

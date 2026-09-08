@@ -17,7 +17,7 @@
       </div>
       <nav class="ops-nav" aria-label="Main Navigation">
         <a href="/" class="ops-nav-item">Home</a>
-        <a href="/chart" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item active">Manage Donations</a>
         <a href="/add" class="ops-nav-item">Add Donation</a>
         <a href="/presenter" class="ops-nav-item">Presenter View</a>
@@ -32,7 +32,7 @@
 
       <!-- Degraded / Stale Notice Bar -->
       <div id="stale-banner" class="stale-notice-bar" role="status">
-        <span id="stale-banner-text">Connection degraded. Displaying cached data. Retrying...</span>
+        <span id="stale-banner-text">Connection lost. Showing cached data, retrying.</span>
         <button type="button" id="btn-reconnect-poll" class="btn-ghost" style="padding: 2px 8px; font-size: 11px; color: #d4a359;">Refresh</button>
       </div>
 
@@ -43,9 +43,7 @@
             <path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/>
           </svg>
           <h2 class="unlock-title">Control Room Unlock</h2>
-          <p class="unlock-desc">
-            A Control Room PIN is required to access live donation management, audit logs, and operational controls.
-          </p>
+          <p class="unlock-desc">Enter the Control Room PIN.</p>
           <div id="unlock-error" class="unlock-error" style="display: none;">Invalid Control Room PIN</div>
           <form id="unlock-form" class="unlock-form" onsubmit="return false;">
             <input type="password" id="unlock-pin-input" class="unlock-input" placeholder="Enter PIN" inputmode="numeric" autocomplete="current-password" required autofocus>
@@ -139,9 +137,7 @@
         <!-- Empty State (Authenticated with 0 donations) -->
         <div id="empty-state" class="empty-state-box" style="display: none;">
           <div class="empty-state-title" id="empty-state-title">No donations yet</div>
-          <p class="empty-state-text" id="empty-state-text">
-            The event has not started yet. Pledges and donations entered from Add Donation or online links will appear here live.
-          </p>
+          <p class="empty-state-text" id="empty-state-text">Gifts appear here as they are recorded.</p>
           <a href="/add" id="empty-state-btn" class="btn-primary" style="display: inline-flex;">
             + Add First Donation
           </a>
@@ -155,9 +151,7 @@
   <div id="delete-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-body">
     <div class="modal-dialog">
       <h2 id="delete-dialog-title" class="modal-title">Delete this donation?</h2>
-      <p id="delete-dialog-body" class="modal-body">
-        This donation will be removed from the display and subtracted from the total raised. It can be restored from History.
-      </p>
+      <p id="delete-dialog-body" class="modal-body">Subtracted from the total and removed from the chart. Restorable from History.</p>
       <div class="modal-actions">
         <button type="button" id="btn-cancel-delete" class="btn-secondary">Cancel</button>
         <button type="button" id="btn-confirm-delete" class="btn-danger">Delete Donation</button>

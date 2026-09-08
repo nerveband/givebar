@@ -203,7 +203,7 @@
           ? new Date(lastSuccessfulUpdateAt).toLocaleTimeString()
           : 'an earlier session';
         if (staleBannerText) {
-          staleBannerText.textContent = `Connection degraded. Displaying cached data from ${timeStr}. Retrying...`;
+          staleBannerText.textContent = `Connection lost. Showing cached data from ${timeStr}, retrying.`;
         }
         if (summaryTotalRaisedEl && totalRaisedCents > 0) {
           summaryTotalRaisedEl.textContent = `${formatCurrency(totalRaisedCents)} (Stale)`;
@@ -364,7 +364,7 @@
       if (emptyStateEl) {
         emptyStateEl.style.display = 'block';
         if (emptyStateTitleEl) emptyStateTitleEl.textContent = 'No donations yet';
-        if (emptyStateTextEl) emptyStateTextEl.textContent = 'The event has not started yet. Pledges and donations entered from Add Donation or online links will appear here live.';
+        if (emptyStateTextEl) emptyStateTextEl.textContent = 'Gifts appear here as they are recorded.';
         if (emptyStateBtn) {
           emptyStateBtn.style.display = 'inline-flex';
           emptyStateBtn.textContent = '+ Add First Donation';
@@ -673,7 +673,7 @@
       deleteTitle.textContent = 'Delete this donation?';
     }
     if (deleteBody) {
-      deleteBody.textContent = `Delete donation of ${formattedAmount} from ${donation.donor}? This donation will be removed from the display and subtracted from the total raised. It can be restored from History.`;
+      deleteBody.textContent = `Delete ${formattedAmount} from ${donation.donor}? Subtracted from the total and removed from the chart. Restorable from History.`;
     }
 
     if (deleteModal) {
@@ -735,7 +735,7 @@
 
     const formattedAmount = formatCurrency(donation.amountCents);
     undoExpiresAt = Date.now() + 30000;
-    undoMessage.textContent = `Donation of ${formattedAmount} from ${donation.donor} deleted. It can also be restored from History.`;
+    undoMessage.textContent = `${formattedAmount} from ${donation.donor} deleted.`;
     undoBanner.style.display = 'flex';
 
     undoTimer = setTimeout(() => {

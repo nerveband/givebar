@@ -111,7 +111,7 @@
       </div>
       <nav class="ops-nav" aria-label="Main Navigation">
         <a href="/" class="ops-nav-item">Home</a>
-        <a href="/chart" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
         <a href="/add" class="ops-nav-item">Add Donation</a>
         <a href="/presenter" class="ops-nav-item">Presenter View</a>
@@ -130,9 +130,7 @@
             <path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/>
           </svg>
           <h2 class="unlock-title">Testing Unlock</h2>
-          <p class="unlock-desc">
-            A Control Room PIN is required to access the rehearsal simulator and generate sample records.
-          </p>
+          <p class="unlock-desc">Enter the Control Room PIN.</p>
           <div id="unlock-error" class="unlock-error" style="display: none;">Invalid Control Room PIN</div>
           <form id="unlock-form" class="unlock-form" onsubmit="return false;">
             <input type="password" id="unlock-pin-input" class="unlock-input" placeholder="Enter PIN" inputmode="numeric" autocomplete="current-password" required autofocus>
@@ -146,9 +144,6 @@
         <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0 0 6px 0; color: #f4f5f6; letter-spacing: -0.02em;">
           Testing
         </h1>
-        <p style="font-size: var(--text-sm); color: #88888e; margin: 0; max-width: 680px; line-height: 1.5;">
-          Technical rehearsal simulator. Generates isolated sample records to test stage projection, volunteer pads, and pacing without polluting real gala financial records.
-        </p>
       </header>
 
       <!-- Persistent Test Mode Banner (Shows whenever sample records exist) -->
@@ -159,7 +154,7 @@
             Test Mode Active
           </div>
           <div style="font-size: var(--text-xs); color: #c4c6cc; margin-top: 2px;" id="test-banner-desc">
-            3 sample records active in database. Purging removes only sample data and leaves real donations untouched.
+            3 sample records active. Purging removes only sample data.
           </div>
         </div>
         <button type="button" id="btn-purge-sample-data" class="btn-primary" style="min-height: 38px; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
@@ -177,7 +172,6 @@
           <div class="test-action-card">
             <div>
               <h3 class="test-action-title">Single Gift</h3>
-              <p class="test-action-desc">Injects one random sample donation with simulated donor and amount.</p>
             </div>
             <button type="button" id="btn-gen-single" class="btn-secondary" style="width: 100%; min-height: 38px; font-size: var(--text-xs);">
               + Add Single Gift
@@ -187,7 +181,6 @@
           <div class="test-action-card">
             <div>
               <h3 class="test-action-title">Rapid Burst</h3>
-              <p class="test-action-desc">Injects 7 rapid-fire sample gifts to test stream pacing and odometer rolls.</p>
             </div>
             <button type="button" id="btn-gen-burst" class="btn-secondary" style="width: 100%; min-height: 38px; font-size: var(--text-xs);">
               + Rapid Burst (7)
@@ -197,7 +190,7 @@
           <div class="test-action-card">
             <div>
               <h3 class="test-action-title">Typo Gift</h3>
-              <p class="test-action-desc">Injects a large test gift with clear hold cue to test delete and undo.</p>
+              <p class="test-action-desc">A deliberately wrong gift, for practising delete and undo.</p>
             </div>
             <button type="button" id="btn-gen-typo" class="btn-secondary" style="width: 100%; min-height: 38px; font-size: var(--text-xs);">
               + Inject Typo Gift
@@ -207,7 +200,7 @@
           <div class="test-action-card">
             <div>
               <h3 class="test-action-title">Cross Milestone</h3>
-              <p class="test-action-desc">Injects exact amount needed to cross the next configured milestone on stage.</p>
+              <p class="test-action-desc">The exact amount needed to cross the next milestone.</p>
             </div>
             <button type="button" id="btn-gen-milestone" class="btn-secondary" style="width: 100%; min-height: 38px; font-size: var(--text-xs);">
               + Cross Next Milestone
@@ -243,7 +236,7 @@
 
         <!-- Empty state when no test data exists -->
         <div id="sample-clean-state" style="padding: var(--space-8) 0; text-align: center; color: #88888e; font-size: var(--text-sm);">
-          No sample records active. The ledger is completely clean.
+          No sample records.
         </div>
       </section>
 

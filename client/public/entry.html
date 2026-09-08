@@ -477,14 +477,6 @@
 
     .btn-add-primary:hover { background: var(--pad-amber-bright); }
 
-    .submit-note {
-      margin: 6px 2px 0 2px;
-      font-size: var(--text-xs);
-      line-height: 1.45;
-      color: var(--pad-ink-dim);
-      text-align: center;
-    }
-
     /* ---------------------------------------------------------------------
        RECENT LIST
        Donor name (left) and amount (right, fixed tabular column) are the two
@@ -777,8 +769,6 @@
         width: 100% !important;
       }
 
-      .submit-note { font-size: 11px !important; }
-
       #btn-cancel-guardrail:focus {
         outline: 2px solid var(--pad-amber) !important;
         outline-offset: 2px !important;
@@ -797,7 +787,7 @@
       </div>
       <nav class="ops-nav" aria-label="Main Navigation">
         <a href="/" class="ops-nav-item">Home</a>
-        <a href="/chart" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
         <a href="/add" class="ops-nav-item active">Add Donation</a>
         <a href="/presenter" class="ops-nav-item">Presenter View</a>
@@ -838,7 +828,7 @@
             <!-- Direct-entry commit bar, shown only in Custom mode -->
             <div class="custom-entry-bar" id="custom-entry-bar">
               <span class="custom-entry-hint" id="custom-entry-hint">
-                Type any amount, then press Enter or tap Done.
+                Press Enter to confirm.
               </span>
               <button type="button" class="btn-custom-done" id="btn-custom-done">
                 <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"></path></svg>
@@ -860,7 +850,7 @@
                 <button type="button" class="preset-chip" data-amount="1000">$1,000</button>
                 <button type="button" class="preset-chip active" data-amount="500">$500</button>
               </div>
-              <button type="button" class="preset-chip preset-chip-custom" id="btn-custom-amount" aria-pressed="false" aria-label="Custom amount: type any amount">
+              <button type="button" class="preset-chip preset-chip-custom" id="btn-custom-amount" aria-pressed="false" aria-label="Custom amount">
                 <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM51.31,160,136,75.31,152.69,92,68,176.68ZM48,179.31,76.69,208H48Zm48,25.38L79.31,188,164,103.31,180.69,120Zm96-96L147.31,64l24-24L216,84.68Z"></path></svg>
                 Custom
               </button>
@@ -870,9 +860,9 @@
             <div style="margin-bottom: 6px;">
               <div class="field-label-row">
                 <label for="donor-name-input" class="field-label">Donor Name</label>
-                <span class="field-required-flag" id="donor-name-required-flag">Required</span>
+                <span class="field-required-flag">Required</span>
               </div>
-              <input type="text" id="donor-name-input" class="search-input" style="width: 100%; padding-left: 12px; min-height: 36px;" placeholder="Donor Name" autocomplete="name" required aria-required="true">
+              <input type="text" id="donor-name-input" class="search-input" style="width: 100%; padding-left: 12px; min-height: 36px;" autocomplete="name" required aria-required="true">
 
               <!-- Compact Disclosure for Name Pronunciation -->
               <div id="pronunciation-disclosure-wrap" style="margin-top: 3px;">
@@ -884,15 +874,13 @@
                   <span id="pronunciation-toggle-label">+ Add pronunciation</span>
                 </button>
                 <div id="field-donor-phonetic-wrap" style="display: none; margin-top: 4px;">
-                  <label for="donor-phonetic-input" style="display: block; font-size: 11px; font-weight: 700; color: #9a9ba1; margin-bottom: 2px;">
-                    Name Pronunciation
-                  </label>
                   <input type="text"
                          id="donor-phonetic-input"
                          class="search-input"
                          style="width: 100%; padding-left: 12px; min-height: 34px; font-size: var(--text-xs);"
                          placeholder="e.g. ah-MEE-nah rah-MAHN"
-                         autocomplete="off">
+                         autocomplete="off"
+                         aria-label="Name pronunciation">
                 </div>
               </div>
             </div>
@@ -922,9 +910,7 @@
               <p class="anon-explainer" id="anon-explainer" role="status">
                 <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z"></path></svg>
                 <span>
-                  The donor's name will not appear on the Fullscreen Bar Chart or Presenter View &mdash; they show
-                  <strong>Anonymous Supporter</strong>. <strong>Still enter the donor name:</strong> it is required and
-                  stays recorded for the organization.
+                  Public screens show <strong>Anonymous Supporter</strong>. The donor name is still required and still recorded.
                 </span>
               </p>
             </div>
@@ -937,7 +923,7 @@
 
             <div id="field-table-number-wrap" style="display: none; margin-bottom: var(--space-3);">
               <label for="table-number-input" class="field-label" style="margin-bottom: 6px;">Table Number</label>
-              <input type="text" id="table-number-input" class="search-input" style="width: 100%; padding-left: 12px;" placeholder="Table 12">
+              <input type="text" id="table-number-input" class="search-input" style="width: 100%; padding-left: 12px;" placeholder="12">
             </div>
 
             <!-- Mobile Numeric Keypad (4x3 Grid) -->
@@ -964,9 +950,6 @@
             <button type="button" id="btn-submit-add" class="btn-add-primary">
               Add $500
             </button>
-            <p class="submit-note" id="submit-note">
-              Goes live on the ballroom screen within a few seconds. You can undo it from Recent for 8 seconds after adding.
-            </p>
           </form>
         </section>
 
@@ -980,7 +963,7 @@
           </div>
 
           <div id="recent-entries-list">
-            <div class="recent-empty">No recent entries in this session.</div>
+            <div class="recent-empty">No entries yet</div>
           </div>
         </section>
 
@@ -994,11 +977,11 @@
     <div class="modal-dialog">
       <h2 id="guardrail-title" class="modal-title">Confirm Large Donation</h2>
       <p id="guardrail-body" class="modal-body">
-        This donation requires explicit confirmation to prevent extra-zero errors.
+        Check for an extra zero.
       </p>
       <div class="modal-actions">
         <button type="button" id="btn-cancel-guardrail" class="btn-secondary">Cancel</button>
-        <button type="button" id="btn-confirm-guardrail" class="btn-primary">Confirm Large Donation</button>
+        <button type="button" id="btn-confirm-guardrail" class="btn-primary">Confirm</button>
       </div>
     </div>
   </div>

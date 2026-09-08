@@ -482,12 +482,6 @@
     .unlock-title {
       font-size: clamp(1.25rem, 3vw, 1.75rem);
       font-weight: 800;
-      margin-bottom: 6px;
-    }
-
-    .unlock-hint {
-      font-size: clamp(0.875rem, 1.8vw, 1rem);
-      color: var(--pv-ink-dim);
       margin-bottom: 18px;
     }
 
@@ -574,7 +568,7 @@
         <div class="presenter-hero-label">Now Reading</div>
 
         <div id="presenter-donor-name" class="presenter-donor-name">
-          Awaiting First Gift...
+          No gifts yet
         </div>
 
         <!-- Pronunciation guide: large, high contrast, never italicized -->
@@ -599,7 +593,7 @@
         <div class="presenter-total-sub">
           <span><span id="presenter-percent" class="metric-sub-val gold">0%</span> of <span id="presenter-goal" class="metric-sub-val">$500k</span></span>
           <span class="presenter-total-divider" aria-hidden="true"></span>
-          <span>Next: <span id="presenter-milestone-text" class="metric-sub-val gold">Awaiting goal</span></span>
+          <span>Next: <span id="presenter-milestone-text" class="metric-sub-val gold">&mdash;</span></span>
         </div>
       </section>
     </div>
@@ -611,10 +605,10 @@
         <span id="presenter-recent-count">0 gifts</span>
       </div>
       <div id="presenter-recent-list" class="presenter-recent-list">
-        <div class="presenter-empty">Recent gifts will appear here live</div>
+        <div class="presenter-empty">No gifts yet</div>
       </div>
       <button type="button" id="btn-full-history-inline" class="presenter-btn presenter-history-cta">
-        <span>View Full History</span>
+        <span>Full History</span>
         <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg>
       </button>
     </section>
@@ -626,7 +620,7 @@
     <header class="history-top-bar">
       <button type="button" id="btn-close-history" class="presenter-btn">
         <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>
-        <span>Back to Presenter</span>
+        <span>Back</span>
       </button>
       <div class="history-heading">
         <span class="history-heading-title">Full History</span>
@@ -635,7 +629,7 @@
     </header>
     <div id="presenter-history-scroll" class="history-scroll" tabindex="0">
       <div id="presenter-history-list" class="history-list">
-        <div class="presenter-empty">No gifts recorded yet</div>
+        <div class="presenter-empty">No gifts yet</div>
       </div>
     </div>
   </section>
@@ -644,7 +638,6 @@
   <div id="presenter-unlock" class="presenter-unlock" hidden>
     <form class="unlock-card" id="presenter-unlock-form">
       <div class="unlock-title">Presenter Locked</div>
-      <div class="unlock-hint">Enter the event PIN to load the presenter view.</div>
       <input type="password" id="presenter-unlock-pin" class="unlock-input" inputmode="numeric"
              autocomplete="off" placeholder="PIN" aria-label="Event PIN">
       <button type="submit" id="presenter-unlock-submit" class="presenter-btn unlock-submit">Unlock</button>

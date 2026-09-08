@@ -39,9 +39,10 @@ h2 { font-size: var(--text-2xl); }
 h3 { font-size: var(--text-xl); }
 h4 { font-size: var(--text-lg); }
 
-p, span, label, td, th {
-  font-family: var(--font-sans);
-}
+/* No blanket font-family on inline elements. font-family inherits, and a
+   re-declaration here silently outranked every container that sets its own
+   face — the chart's --stage-font reached its <div>s and lost every <span>
+   (odometer digits, milestone labels, donor names, goal figure). */
 
 .mono, code, pre, .tabular {
   font-family: var(--font-mono);

@@ -47,13 +47,21 @@ function serveStaticFile(relativePath: string): Response {
 
   if (existsSync(fullPath)) {
     const fileBytes = readFileSync(fullPath);
+    // Fingerprint-stable font binaries may be cached hard; everything else stays fresh
+    // so an operator never sees a stale surface mid-event.
+    const isImmutableAsset = /\.(woff2?|ttf|otf)$/i.test(fullPath);
     return new Response(fileBytes, {
-      headers: {
-        "Content-Type": getMimeType(fullPath),
-        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-        "Pragma": "no-cache",
-        "Expires": "0"
-      }
+      headers: isImmutableAsset
+        ? {
+            "Content-Type": getMimeType(fullPath),
+            "Cache-Control": "public, max-age=31536000, immutable"
+          }
+        : {
+            "Content-Type": getMimeType(fullPath),
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0"
+          }
     });
   }
   return new Response("Not Found", { status: 404 });
@@ -146,6 +154,10 @@ export const server = Bun.serve({
 
     if (pathname === "/history" || pathname === "/history.html") {
       return serveStaticFile("client/public/history.html");
+    }
+
+    if (pathname === "/preview" || pathname === "/preview.html") {
+      return serveStaticFile("client/public/preview.html");
     }
 
     // --- Static Asset Serving (CSS, JS, Assets) ---

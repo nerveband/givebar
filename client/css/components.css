@@ -171,9 +171,23 @@ svg.icon {
 }
 
 /* =========================================================================
-   Rolling Odometer Reels (Tabular Figures, Zero Jitter)
+   Rolling Odometer Reels (Fixed-Width Digit Columns, Zero Jitter)
    Each reel is a vertical strip of digit cells; RollingOdometer translates the
    strip so digits always travel upward (0 follows 9), never backward.
+
+   TABULAR FIGURES, MEASURED (Chromium, /chart at 1920x1080):
+   the licensed Brandon Grotesque woff2 files carry no tnum feature. At 200px
+   weight 900 the digit advances run 74.81px ("1") to 124.81px ("0"), a 50px
+   spread, and that spread is byte-identical with font-variant-numeric:
+   tabular-nums, with font-feature-settings: "tnum" 1, and with both off.
+   The declarations below are therefore a no-op on Brandon and are kept only
+   for the system stacks in the font allowlist, which do carry tnum.
+
+   The odometer does not depend on them. Column width is structural: every
+   reel holds all ten digits, so its shrink-to-fit width is the widest digit
+   in the active face and cannot change as the value rolls. Verified across a
+   live roll: reel widths, reel offsets and total width were identical on
+   every sample while the figure went from $465,763 to $474,762.
    ========================================================================= */
 
 .odometer-wrapper {
@@ -186,11 +200,12 @@ svg.icon {
   color: var(--odo-ink, var(--brand-accent));
   user-select: none;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .odometer-currency {
   font-size: 0.65em;
-  font-weight: 800;
+  font-weight: 900;
   color: var(--odo-ink, var(--brand-accent));
   margin-right: 0.06em;
   align-self: flex-start;
@@ -201,6 +216,12 @@ svg.icon {
   position: relative;
   display: inline-block;
   height: var(--odo-cell);
+  /* No explicit width. The column is already fixed per digit: the strip holds
+     all ten figures, so shrink-to-fit resolves to the widest one and stays
+     there for the life of the reel. A pinned width would have to be wrong —
+     1ch measures the "0" advance before letter-spacing, which on this screen
+     is -0.03em, so pinning it widened every column by 7.7px at 1920x1080 and
+     stretched the total from 910.6px to 956.8px for no correctness gain. */
   overflow: hidden;
   line-height: var(--odo-cell);
 }

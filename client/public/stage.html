@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fullscreen Bar Chart — Givebar</title>
+  <link rel="preload" href="/assets/fonts/brandon-medium.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/brandon-bold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/brandon-black.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/app.css?v=6.0.0">
   <style>
     /* =========================================================================
@@ -29,7 +32,7 @@
       --stage-glow-soft: rgba(212, 163, 89, 0.12);
       --stage-ink: #f4f5f6;
       --stage-ink-dim: #9ea1a8;
-      --stage-font: var(--font-sans);
+      --stage-font: var(--font-brandon);
 
       --bar-h: clamp(56px, 8.4vh, 104px);
       --thermo-w: clamp(84px, 8.6vw, 148px);
@@ -54,6 +57,11 @@
       color: var(--stage-ink);
       font-family: var(--stage-font);
       -webkit-font-smoothing: antialiased;
+      /* Every figure on this screen is read against another figure: the total
+         against the goal, a milestone against the tick beside it. Tabular
+         figures are set once here so no individual rule can forget them. */
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1;
     }
 
     /* ---- Background styles ------------------------------------------------ */
@@ -213,15 +221,6 @@
       min-width: 0;
     }
 
-    .figure-label {
-      font-size: clamp(1rem, 1.35vw, 1.75rem);
-      font-weight: 700;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--stage-ink-dim);
-      margin-bottom: 0.35em;
-    }
-
     .figure-row {
       display: flex;
       align-items: flex-end;
@@ -238,7 +237,6 @@
       font-weight: 900;
       letter-spacing: -0.035em;
       color: var(--stage-bar);
-      font-variant-numeric: tabular-nums;
       text-shadow: 0 0 clamp(24px, 3vw, 64px) var(--stage-glow-soft);
     }
 
@@ -247,9 +245,8 @@
       align-items: baseline;
       gap: 0.4em;
       font-size: clamp(1.4rem, 2.5vw, 3.1rem);
-      font-weight: 800;
+      font-weight: 700;
       color: var(--stage-ink);
-      font-variant-numeric: tabular-nums;
       letter-spacing: -0.02em;
       padding-bottom: 0.18em;
       white-space: nowrap;
@@ -418,29 +415,19 @@
 
     .mtick-label {
       position: absolute;
-      display: flex;
-      flex-direction: column;
       white-space: nowrap;
+      font-size: clamp(0.95rem, 1.15vw, 1.5rem);
+      font-weight: 500;
+      letter-spacing: 0.05em;
       line-height: 1.15;
       transition: color var(--dur-ins) var(--ease-out);
       color: var(--stage-ink-dim);
     }
 
-    .mtick-name {
-      font-size: clamp(0.95rem, 1.15vw, 1.5rem);
+    .mtick[data-reached="1"] .mtick-label {
+      color: var(--stage-bar);
       font-weight: 700;
-      letter-spacing: 0.05em;
     }
-
-    .mtick-amt {
-      font-size: clamp(0.85rem, 1vw, 1.3rem);
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-      opacity: 0.72;
-    }
-
-    .mtick[data-reached="1"] .mtick-label { color: var(--stage-bar); }
-    .mtick[data-reached="1"] .mtick-name { font-weight: 800; }
 
     .milestones-h .mtick-label {
       top: calc(100% + clamp(8px, 1vh, 14px));
@@ -470,7 +457,7 @@
     /* ---- Stage message ---------------------------------------------------- */
     .stage-message {
       font-size: clamp(1.25rem, 1.95vw, 2.6rem);
-      font-weight: 600;
+      font-weight: 500;
       line-height: 1.25;
       color: var(--stage-ink);
       letter-spacing: -0.005em;
@@ -534,7 +521,7 @@
 
     .recent-feed-donor {
       font-size: clamp(1.05rem, 1.45vw, 1.9rem);
-      font-weight: 600;
+      font-weight: 500;
       color: var(--stage-ink);
       flex: 1;
       min-width: 0;
@@ -545,18 +532,9 @@
 
     .recent-feed-amount {
       font-size: clamp(1.2rem, 1.7vw, 2.25rem);
-      font-weight: 800;
+      font-weight: 700;
       color: var(--stage-bar);
-      font-variant-numeric: tabular-nums;
       letter-spacing: -0.02em;
-    }
-
-    .recent-empty {
-      height: var(--row-h);
-      display: flex;
-      align-items: center;
-      color: var(--stage-ink-dim);
-      font-size: clamp(1.05rem, 1.35vw, 1.7rem);
     }
 
     /* Entering row: fades up into a slot that already exists at final size. */
@@ -670,12 +648,37 @@
       max-width: 100%;
     }
 
-    /* Portrait projector / pillar screen: give the tube more presence. */
+    /* Portrait projector / pillar screen. Side by side, the figure column is
+       only 352px wide at 1080x1920 while the odometer needs 490px, so six
+       digits ran 101px off the left edge with 236px of unused gutter on the
+       right. Portrait has height to spare, so the figure takes the full width
+       above the tube and the milestone gutter keeps the row it needs. */
     @media (max-aspect-ratio: 1/1) {
       body[data-orientation="vertical"] { --thermo-w: clamp(110px, 22vw, 260px); }
-      body[data-orientation="vertical"] .stage-odometer-text {
-        font-size: clamp(3rem, 11vw, 9rem);
+
+      body[data-orientation="vertical"] .stage-body {
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        grid-template-areas:
+          "figure  figure figure"
+          ".       thermo gutter"
+          "message message message";
+        row-gap: clamp(16px, 2.4vh, 40px);
       }
+
+      body[data-orientation="vertical"] .figure-block,
+      body[data-orientation="vertical"] .stage-message {
+        justify-self: center;
+        align-self: center;
+        text-align: center;
+      }
+
+      body[data-orientation="vertical"] .figure-block { align-items: center; }
+      body[data-orientation="vertical"] .figure-row { align-items: center; }
+
+      body[data-orientation="vertical"] .stage-odometer-text {
+        font-size: clamp(3rem, 13vw, 11rem);
+      }
+
       body[data-orientation="vertical"] .stage-bottom-grid {
         grid-template-columns: minmax(0, 1fr);
       }
@@ -785,7 +788,7 @@
       padding: 10px 18px;
       color: var(--stage-ink);
       font-size: 15px;
-      font-weight: 600;
+      font-weight: 500;
       letter-spacing: 0.02em;
       transition: opacity var(--dur-conf) var(--ease-out);
     }
@@ -833,12 +836,12 @@
 
       <div class="status-cluster">
         <div id="stage-match-banner" class="matching-banner" hidden>
-          <span id="stage-match-text">Matching Sponsor &bull; Double Your Impact</span>
+          <span id="stage-match-text">Gifts Matched</span>
         </div>
 
-        <div id="stage-freeze-banner" class="paused-banner" hidden>Display Paused</div>
+        <div id="stage-freeze-banner" class="paused-banner" hidden>Paused</div>
 
-        <div id="stage-degraded-banner" class="stage-degraded" hidden>Reconnecting</div>
+        <div id="stage-degraded-banner" class="stage-degraded" hidden>Locked</div>
 
         <div id="stage-live-indicator" class="live-indicator" data-state="live">
           <span class="pulse-dot"></span>
@@ -849,7 +852,6 @@
 
     <section class="stage-body" aria-label="Fundraising Progress">
       <div class="figure-block">
-        <span class="figure-label">Total Raised</span>
         <div class="figure-row">
           <div id="main-odometer" class="stage-odometer-text" role="img" aria-label="Total raised $0"></div>
           <div id="stage-goal-wrap" class="goal-display">
@@ -886,7 +888,7 @@
 
     <footer id="stage-bottom-section" class="stage-bottom-grid">
       <div id="stage-recent-panel" class="stage-panel">
-        <h2 class="panel-title">Recent Donations</h2>
+        <h2 class="panel-title">Recent</h2>
         <div class="recent-viewport">
           <div id="recent-donations-feed" class="recent-feed-list"></div>
         </div>

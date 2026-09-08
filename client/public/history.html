@@ -185,7 +185,7 @@
       </div>
       <nav class="ops-nav" aria-label="Main Navigation">
         <a href="/" class="ops-nav-item">Home</a>
-        <a href="/chart" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
         <a href="/add" class="ops-nav-item">Add Donation</a>
         <a href="/presenter" class="ops-nav-item">Presenter View</a>
@@ -204,9 +204,7 @@
             <path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/>
           </svg>
           <h2 class="unlock-title">History Unlock</h2>
-          <p class="unlock-desc">
-            A Control Room PIN is required to view the immutable ledger audit timeline.
-          </p>
+          <p class="unlock-desc">Enter the Control Room PIN.</p>
           <div id="unlock-error" class="unlock-error" style="display: none;">Invalid Control Room PIN</div>
           <form id="unlock-form" class="unlock-form" onsubmit="return false;">
             <input type="password" id="unlock-pin-input" class="unlock-input" placeholder="Enter PIN" inputmode="numeric" autocomplete="current-password" required autofocus>
@@ -220,9 +218,6 @@
         <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0 0 6px 0; color: #f4f5f6; letter-spacing: -0.02em;">
           History
         </h1>
-        <p style="font-size: var(--text-sm); color: #88888e; margin: 0; line-height: 1.5;">
-          Immutable ledger timeline of added, edited, deleted, and restored transactions.
-        </p>
       </header>
 
       <!-- Filter Controls Row -->
