@@ -4,10 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fullscreen Bar Chart — Givebar</title>
+  <meta name="color-scheme" content="dark">
+  <style>html{background:#07080a;color-scheme:dark}</style>
   <link rel="preload" href="/assets/fonts/brandon-medium.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-black.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/app.css?v=6.0.0">
+  <link rel="stylesheet" href="css/tokens.css?v=6.1.0">
+  <link rel="stylesheet" href="css/base.css?v=6.1.0">
+  <link rel="stylesheet" href="css/components.css?v=6.1.0">
+  <link rel="stylesheet" href="css/app.css?v=6.1.0">
   <style>
     /* =========================================================================
        Fullscreen Bar Chart (Direction B — Presentation Contrast)
@@ -50,6 +55,9 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
+      /* Projector canvas on the root too: matches the inline critical style in
+         <head> so the first frame and every later frame are the same black. */
+      background-color: #07080a;
     }
 
     body {

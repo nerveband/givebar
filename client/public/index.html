@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Home — Givebar</title>
-  <link rel="stylesheet" href="css/app.css?v=6.0.0">
+  <meta name="color-scheme" content="dark">
+  <style>html{background:#070603;color-scheme:dark}</style>
+  <link rel="stylesheet" href="css/tokens.css?v=6.1.0">
+  <link rel="stylesheet" href="css/base.css?v=6.1.0">
+  <link rel="stylesheet" href="css/components.css?v=6.1.0">
+  <link rel="stylesheet" href="css/app.css?v=6.1.0">
   <style>
     /* Home landing surface — lives inside the same operational shell as every
        other operator page. Presentation Contrast: near-black surfaces, amber
@@ -397,6 +402,14 @@
         </div>
       </section>
 
+      <section class="hub-section" aria-labelledby="presence-title">
+        <div class="hub-section-head">
+          <h2 class="hub-section-title" id="presence-title">Presence</h2>
+        </div>
+        <p>Active browsers by page. Select your name to rename this browser. Chart and Presenter are not tracked.</p>
+        <div id="presence"></div>
+      </section>
+
       <!-- LINK COPY HUB -->
       <section class="hub-section" aria-labelledby="hub-audience-title">
         <div class="hub-section-head">
@@ -578,6 +591,7 @@
     </main>
   </div>
 
+  <script src="js/presence.js?v=6.1.1"></script>
   <script>
     (function () {
       'use strict';
@@ -681,6 +695,7 @@
             headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
           });
           if (res.status === 401) {
+            GiveBarPresence.update(null);
             showGlanceNotice('Figures hidden until you unlock with the Control Room PIN. Links still work.');
             return;
           }
@@ -689,6 +704,7 @@
             return;
           }
           const data = await res.json();
+          GiveBarPresence.update(data.presence);
           const es = data.event_state || {};
           const folded = data.folded || {};
           const total = folded.total_raised_cents || 0;
@@ -723,6 +739,7 @@
       function init() {
         fillLinks();
         setupCopyButtons();
+        GiveBarPresence.render(document.getElementById('presence'));
         loadGlance();
         setInterval(loadGlance, 5000);
       }

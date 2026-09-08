@@ -6,6 +6,7 @@ import { handleExportCSV } from "./routes/export";
 import { handleRehearsalRequest } from "./routes/rehearsal";
 import { handleWebhookRequest } from "./routes/webhook";
 import { handleQRRequest } from "./routes/qr";
+import { handlePresenceRequest } from "./presence";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -47,21 +48,32 @@ function serveStaticFile(relativePath: string): Response {
 
   if (existsSync(fullPath)) {
     const fileBytes = readFileSync(fullPath);
-    // Fingerprint-stable font binaries may be cached hard; everything else stays fresh
-    // so an operator never sees a stale surface mid-event.
-    const isImmutableAsset = /\.(woff2?|ttf|otf)$/i.test(fullPath);
+    const mime = getMimeType(fullPath);
+
+    // Fonts are content-stable under a fixed filename: cache hard.
+    if (/\.(woff2?|ttf|otf)$/i.test(fullPath)) {
+      return new Response(fileBytes, {
+        headers: { "Content-Type": mime, "Cache-Control": "public, max-age=31536000, immutable" }
+      });
+    }
+
+    // CSS and JS carry a ?v= cache-busting query in every page's markup, so a deploy
+    // invalidates them by URL. `no-store` forced a full refetch of all four stylesheets
+    // on every navigation, which is what produced the unstyled flash between pages.
+    if (/\.(css|js)$/i.test(fullPath)) {
+      return new Response(fileBytes, {
+        headers: { "Content-Type": mime, "Cache-Control": "public, max-age=300" }
+      });
+    }
+
+    // HTML and everything else stays uncached so an operator never holds a stale surface.
     return new Response(fileBytes, {
-      headers: isImmutableAsset
-        ? {
-            "Content-Type": getMimeType(fullPath),
-            "Cache-Control": "public, max-age=31536000, immutable"
-          }
-        : {
-            "Content-Type": getMimeType(fullPath),
-            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-            "Expires": "0"
-          }
+      headers: {
+        "Content-Type": mime,
+        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0"
+      }
     });
   }
   return new Response("Not Found", { status: 404 });
@@ -118,6 +130,10 @@ export const server = Bun.serve({
 
       if (parts[1] === "qr") {
         return handleQRRequest(req, db);
+      }
+
+      if (parts[1] === "presence") {
+        return handlePresenceRequest(req, db);
       }
 
       return Response.json({ error: "NOT_FOUND", message: `API route ${pathname} not found` }, { status: 404 });

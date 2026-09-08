@@ -26,6 +26,26 @@
   let historyOpen = false;
   let historySignature = null;
   let allGifts = [];
+  let lastFontKey = null;
+  let lastSettingsSeq = null;
+
+  // Font allowlist, identical resolution to the chart: 'system' and an unset
+  // value both land on Brandon Grotesque, the licensed face for the surfaces
+  // read under pressure. @font-face and --font-brandon live in tokens.css and
+  // --font-brandon ends in the system stack, so a face that never arrives
+  // still renders text.
+  const FONT_STACKS = {
+    system: 'var(--font-brandon)',
+    brandon: 'var(--font-brandon)',
+    humanist: 'var(--font-humanist)',
+    grotesk: 'var(--font-grotesk)',
+    mono: 'var(--font-mono)',
+    serif: 'var(--font-serif)'
+  };
+
+  // Large enough that a fractional advance rounds away, small enough to lay out
+  // instantly. The result is stored in em so it tracks the clamp() font-size.
+  const DIGIT_PROBE_PX = 400;
 
   // DOM Elements
   const mainViewEl = document.getElementById('presenter-main');
@@ -58,6 +78,139 @@
   const unlockSubmitEl = document.getElementById('presenter-unlock-submit');
   const unlockErrorEl = document.getElementById('presenter-unlock-error');
 
+  // --- Typeface + fixed-advance figures -------------------------------------
+
+  /**
+   * Brandon Grotesque has no tabular figures and no "tnum" feature to enable:
+   * measured on this surface, digit advances span 74.81px to 124.81px at 200px.
+   * Publishing the widest digit advance of the ACTIVE face lets every digit
+   * render in an identical cell (.pv-digit), so the centered total stops
+   * sliding sideways as it rolls.
+   */
+  function measureDigitCell() {
+    if (!totalRaisedEl) return;
+    const cs = window.getComputedStyle(totalRaisedEl);
+    const probe = document.createElement('span');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText = 'position:absolute;left:-9999px;top:0;white-space:pre;letter-spacing:0;visibility:hidden;';
+    probe.style.fontFamily = cs.fontFamily;
+    probe.style.fontWeight = cs.fontWeight;
+    probe.style.fontStyle = cs.fontStyle;
+    probe.style.fontSize = DIGIT_PROBE_PX + 'px';
+    document.body.appendChild(probe);
+    let widest = 0;
+    for (let d = 0; d <= 9; d++) {
+      probe.textContent = String(d);
+      const w = probe.getBoundingClientRect().width;
+      if (w > widest) widest = w;
+    }
+    probe.remove();
+    if (widest > 0) {
+      document.documentElement.style.setProperty(
+        '--pv-digit-w', (widest / DIGIT_PROBE_PX).toFixed(4) + 'em'
+      );
+      // Cell width just changed, so every painted figure's em ratio is stale.
+      refreshFigureMetrics();
+    }
+  }
+
+  function figureMarkup(text) {
+    let html = '';
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      html += (ch >= '0' && ch <= '9')
+        ? `<span class="pv-digit">${ch}</span>`
+        : escapeHTML(ch);
+    }
+    return html;
+  }
+
+  /**
+   * Width of a rendered figure expressed in em of its own font-size, measured
+   * offscreen with the same face, weight, letter-spacing and digit cells. The
+   * ratio is scale-invariant, which is what lets CSS turn it into a font-size
+   * ceiling (100cqi / ratio) without a measure/resize feedback loop.
+   */
+  function measureFigureEm(el, text) {
+    const cs = window.getComputedStyle(el);
+    const fontPx = parseFloat(cs.fontSize) || 16;
+    const trackingPx = parseFloat(cs.letterSpacing);
+    const probe = document.createElement('span');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText = 'position:absolute;left:-9999px;top:0;white-space:pre;visibility:hidden;';
+    probe.style.fontFamily = cs.fontFamily;
+    probe.style.fontWeight = cs.fontWeight;
+    probe.style.fontStyle = cs.fontStyle;
+    probe.style.fontSize = DIGIT_PROBE_PX + 'px';
+    probe.style.letterSpacing = Number.isFinite(trackingPx)
+      ? (trackingPx / fontPx * DIGIT_PROBE_PX) + 'px'
+      : 'normal';
+    probe.innerHTML = figureMarkup(text);
+    document.body.appendChild(probe);
+    const width = probe.getBoundingClientRect().width;
+    probe.remove();
+    return width / DIGIT_PROBE_PX;
+  }
+
+  function setFigureMetric(el) {
+    const text = el && el.dataset.figure;
+    if (!text) return;
+    el.style.setProperty('--pv-fig-em', measureFigureEm(el, text).toFixed(3));
+  }
+
+  function refreshFigureMetrics() {
+    setFigureMetric(totalRaisedEl);
+    setFigureMetric(amountEl);
+  }
+
+  function scheduleDigitMeasure() {
+    const run = () => window.requestAnimationFrame(measureDigitCell);
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(run, run);
+    } else {
+      run();
+    }
+  }
+
+  function applyFont(family) {
+    const key = String(family || 'system');
+    if (key === lastFontKey) return;
+    lastFontKey = key;
+    const stack = Object.prototype.hasOwnProperty.call(FONT_STACKS, key)
+      ? FONT_STACKS[key]
+      : FONT_STACKS.system;
+    document.documentElement.style.setProperty('--pv-font', stack);
+    scheduleDigitMeasure();
+  }
+
+  /**
+   * The emcee payload carries settings_seq but not font_family. The setting is
+   * on the stage projection, which needs no PIN and moves on the same seq, so
+   * it is read once at startup and only again when settings actually change.
+   */
+  async function refreshFontSetting() {
+    try {
+      const res = await fetch('/api/state?role=stage', { headers: { 'Cache-Control': 'no-cache' } });
+      if (!res.ok) return;
+      const data = await res.json();
+      applyFont(data && data.font_family);
+    } catch (e) {
+      // Brandon is already the CSS default; a failed read changes nothing.
+    }
+  }
+
+  /**
+   * Paint a currency figure with each digit in a fixed-advance cell. Guarded on
+   * the rendered string so a 1.5s poll that changes nothing never rebuilds the
+   * DOM under the emcee.
+   */
+  function renderFigure(el, text) {
+    if (el.dataset.figure === text) return;
+    el.dataset.figure = text;
+    el.innerHTML = figureMarkup(text);
+    setFigureMetric(el);
+  }
+
   function init() {
     try {
       controlPin = sessionStorage.getItem('givebar_control_pin') || '';
@@ -66,6 +219,7 @@
     }
     setupHistoryControls();
     setupUnlockForm();
+    scheduleDigitMeasure();
     startSync();
   }
 
@@ -147,6 +301,13 @@
     }
     checkStaleness();
 
+    // Font is a settings-level choice, and settings_seq is the only signal for
+    // it in this payload.
+    if (data.settings_seq !== lastSettingsSeq) {
+      lastSettingsSeq = data.settings_seq;
+      refreshFontSetting();
+    }
+
     // 1. Current / Latest Donor (Held items are already excluded by server getEmceeState)
     const recentGifts = Array.isArray(data.recent_gifts) ? data.recent_gifts : [];
     const topGifts = Array.isArray(data.top_gifts) ? data.top_gifts : [];
@@ -175,7 +336,7 @@
       }
 
       if (amountEl) {
-        amountEl.textContent = formatCurrency(currentGift.amount_cents);
+        renderFigure(amountEl, formatCurrency(currentGift.amount_cents));
         amountEl.style.display = 'block';
       }
 
@@ -217,7 +378,7 @@
 
     // 4. Total Raised (prominent) + goal context
     if (totalRaisedEl) {
-      totalRaisedEl.textContent = formatCurrency(data.total_raised_cents || 0);
+      renderFigure(totalRaisedEl, formatCurrency(data.total_raised_cents || 0));
     }
     if (percentEl) {
       percentEl.textContent = `${data.percent || 0}%`;

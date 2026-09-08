@@ -1,12 +1,12 @@
 /* =========================================================================
-   Givebar — Master Stylesheet Entrypoint
+   Givebar — Layout Utilities & Operational Surfaces
+
+   tokens.css, base.css and components.css used to be pulled in from here
+   with CSS imports. That serialized four blocking round trips
+   (app.css -> tokens -> base -> components) and every page painted the
+   browser's default white canvas until the last one landed. Every page now
+   links all four in cascade order so they download in parallel.
    ========================================================================= */
-
-@import url('tokens.css');
-@import url('base.css');
-@import url('components.css');
-
-/* Layout Utilities & Operational Surfaces */
 
 /* Grid and Card Layouts */
 .grid-2 {

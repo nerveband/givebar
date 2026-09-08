@@ -15,6 +15,10 @@ html {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   color-scheme: dark;
+  /* The canvas lives on <html>, not just <body>: the browser paints the root
+     element's background over the whole viewport before layout finishes, so
+     this is what kills the white first frame on navigation. */
+  background-color: var(--bg-canvas, #070603);
 }
 
 body {

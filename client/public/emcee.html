@@ -4,7 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Presenter View — Givebar</title>
-  <link rel="stylesheet" href="css/app.css?v=5.0.0">
+  <meta name="color-scheme" content="dark">
+  <style>html{background:#08080a;color-scheme:dark}</style>
+  <link rel="stylesheet" href="css/tokens.css?v=6.1.0">
+  <link rel="stylesheet" href="css/base.css?v=6.1.0">
+  <link rel="stylesheet" href="css/components.css?v=6.1.0">
+  <link rel="stylesheet" href="css/app.css?v=6.1.0">
+  <link rel="preload" href="/assets/fonts/brandon-regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/brandon-bold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/brandon-black.woff2" as="font" type="font/woff2" crossorigin>
   <style>
     /* =========================================================================
        Presenter View — Direction B "Presentation Contrast"
@@ -25,16 +33,29 @@
       --pv-hairline-soft: #1c1d22;
       --pv-radius: 6px;
       --pv-gap: clamp(12px, 2.2vh, 22px);
+
+      /* Brandon Grotesque is the licensed face for the surfaces read under
+         pressure (chart + presenter). @font-face and --font-brandon live in
+         tokens.css; this only points at them. JS overrides --pv-font when the
+         font_family setting names a different stack. */
+      --pv-font: var(--font-brandon);
     }
 
     * {
       box-sizing: border-box;
     }
 
+    /* Same value as the inline critical style in <head> and as body below, so
+       the first painted frame, the root canvas and the loaded page are one
+       colour. base.css paints <html> with --bg-canvas; this surface is darker. */
+    html {
+      background: var(--pv-canvas);
+    }
+
     body {
       background: var(--pv-canvas); /* Deep near-black OLED surface */
       color: var(--pv-ink);
-      font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
+      font-family: var(--pv-font);
       margin: 0;
       padding: 0;
       min-height: 100dvh;
@@ -251,6 +272,9 @@
       border-radius: var(--pv-radius);
       padding: clamp(14px, 2.4vh, 26px) clamp(14px, 3vw, 32px);
       text-align: center;
+      /* Query container for the figure below, so the total can size itself
+         against the panel it must fit inside rather than the viewport. */
+      container-type: inline-size;
     }
 
     .presenter-total-label {
@@ -262,13 +286,38 @@
     }
 
     .presenter-total-value {
-      font-size: clamp(3rem, 12vw, 7rem);
+      /* A currency figure must never break mid-number: at 375px a ten-digit
+         total ($1,234,567,890) wrapped onto two lines, splitting the figure.
+         nowrap forbids that, and the second term of min() keeps it honest —
+         --pv-fig-em is the measured width of the CURRENT figure in em (set by
+         emcee.js), so 100cqi divided by that ratio is the largest size that
+         still fits the panel on one line. Unmeasured, the fallback of 1 makes
+         the cap inert and clamp() wins. */
+      font-size: min(clamp(3rem, 12vw, 7rem), calc(100cqi / var(--pv-fig-em, 1)));
+      white-space: nowrap;
       font-weight: 800;
       color: var(--pv-gold-bright);
       font-variant-numeric: tabular-nums;
       letter-spacing: -0.03em;
       line-height: 1.02;
       margin: clamp(2px, 0.6vh, 8px) 0;
+    }
+
+    /* Brandon Grotesque carries NO tabular figures. Measured on this surface at
+       200px: digit advances run 74.81px ('1') to 124.81px ('0'), a 50px spread,
+       and adding font-variant-numeric: tabular-nums or font-feature-settings:
+       "tnum" 1 changes not one advance because the face lacks the feature. The
+       total is centered, so every digit that changes drags the whole figure
+       sideways. Each digit therefore gets a fixed-advance cell whose width is
+       the widest digit of the ACTIVE face, measured once in emcee.js and stored
+       in em so it tracks the clamp() font-size. Before that measurement lands
+       the custom property is unset, the declaration is invalid at
+       computed-value time, and the width falls back to auto — never clipped.
+       Not 1ch: that is the ZERO advance, narrower than 0, 4 and 8 here. */
+    .pv-digit {
+      display: inline-block;
+      width: var(--pv-digit-w);
+      text-align: center;
     }
 
     .presenter-total-sub {
@@ -645,6 +694,6 @@
     </form>
   </div>
 
-  <script src="js/emcee.js?v=5.0.0"></script>
+  <script src="js/emcee.js?v=6.1.0"></script>
 </body>
 </html>

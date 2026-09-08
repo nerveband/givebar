@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { getStageState, getEmceeState, getControlState, getVolunteerState, getEventState, foldLedger } from "../ledger";
 import { sanitizeEventState } from "../projection";
 import { isControlAuthorized } from "../auth";
+import { getPresenceView } from "../presence";
 
 export function getStatePayload(role: string, db: Database, sinceSeq = 0, volunteerId?: string, pin?: string): { status: number; payload: unknown } {
   switch (role) {
@@ -14,13 +15,18 @@ export function getStatePayload(role: string, db: Database, sinceSeq = 0, volunt
       if (!isControlAuthorized(eventState.control_pin, pin || "")) {
         return { status: 401, payload: { error: "UNAUTHORIZED", message: "Control Room PIN required" } };
       }
-      return { status: 200, payload: getControlState(db) };
+      return { status: 200, payload: { ...getControlState(db), presence: getPresenceView() } };
     }
     case "entry":
       return { status: 200, payload: getVolunteerState(db, volunteerId) };
     default: {
       const fullState = getEventState(db);
       const hasBloomerangKey = Boolean(fullState.bloomerang_api_key && fullState.bloomerang_api_key.trim() !== "");
+      // Presence follows the same default-open rule as everything else: open
+      // until a control PIN exists, gated the instant one does. The key is
+      // absent rather than empty when gated, so a panel can tell "no roster
+      // for you" from "nobody connected".
+      const presence = isControlAuthorized(fullState.control_pin, pin || "") ? getPresenceView() : undefined;
       return {
         status: 200,
         payload: {
@@ -32,7 +38,8 @@ export function getStatePayload(role: string, db: Database, sinceSeq = 0, volunt
             has_bloomerang_api_key: hasBloomerangKey,
             bloomerang_key_masked: hasBloomerangKey ? "••••••••••••••" : ""
           },
-          folded: foldLedger(db)
+          folded: foldLedger(db),
+          ...(presence ? { presence } : {})
         }
       };
     }

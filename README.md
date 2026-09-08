@@ -39,6 +39,26 @@ Everything runs on a single self-contained process backed by embedded SQLite in 
 | **Podium Screen** | `/emcee` | Podium iPad / Teleprompter | High-contrast OLED black display with 72px total, 3-second glance vocal shoutout cards (with phonetic guide & table number), and milestone countdown. |
 | **Volunteer Pledge Pad** | `/entry` | Volunteer Phones / Tablets | Mobile-optimized 2-stage progressive disclosure in the bottom thumb zone with ask-tier presets, custom numpad, $9,500 guardrail modal, offline outbox, and 8-second floating undo toast. |
 
+### Presence
+
+Home (`/`) includes a **Presence** section with the active browser count and a
+roster grouped by operator page. Home, Preview, Manage Donations, Add Donation,
+Settings, Testing, and History report presence without adding overlays to their
+interfaces. The fullscreen Chart and Presenter are not tracked.
+
+Select your display name in Presence to rename this browser. The name is saved
+locally; an existing volunteer name is used when available, otherwise a Station
+label is assigned. These are browser identities, not authenticated user accounts
+or a guaranteed count of unique people.
+
+Browsers send a heartbeat every 5 seconds; entries expire 15 seconds after their
+last heartbeat. Backgrounded tabs stop reporting after a 30-second grace period.
+Presence is ephemeral and never writes to the donation ledger. A disconnected
+Home marks its cached roster stale rather than claiming everyone is still live.
+
+When a Control Room PIN is configured, unlock an operator page first, then return
+to Home to view the roster. Names and counts are hidden when access is denied.
+
 ---
 
 ## Core Architectural Invariants
@@ -79,7 +99,7 @@ cd givebar
 # Run development server with live reload
 bun dev
 
-# Run automated test suite (43 tests)
+# Run automated test suite
 bun test
 ```
 
