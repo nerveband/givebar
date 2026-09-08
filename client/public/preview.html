@@ -11,10 +11,8 @@
   <link rel="stylesheet" href="css/components.css?v=6.1.0">
   <link rel="stylesheet" href="css/app.css?v=6.1.0">
   <style>
-    /* In-shell chart destination. The chart runs in an iframe at true projector
-       geometry (1920x1080) and is scaled down with a transform, so the preview is
-       pixel-faithful to the room. The iframe src is set once in markup and never
-       touched again: it holds its own live connection and must not reload. */
+    /* Shared presentation preview. The live surface is loaded once at 1920x1080
+       and scaled into the operator shell without resetting its connection. */
 
     .preview-main {
       display: flex;
@@ -237,7 +235,7 @@
       flex-shrink: 0;
     }
 
-    .chart-embed {
+    .preview-embed {
       position: absolute;
       top: 0;
       left: 0;
@@ -245,6 +243,40 @@
       height: 1080px;
       border: 0;
       transform-origin: top left;
+    }
+
+    .preview-embed:fullscreen {
+      width: 100vw;
+      height: 100vh;
+      transform: none !important;
+    }
+
+    .preview-url {
+      flex-shrink: 0;
+    }
+
+    .preview-url .lh-url,
+    .preview-url .lh-copy {
+      min-height: 44px;
+      font-size: var(--text-sm);
+    }
+
+    .preview-url .lh-url-wrap {
+      flex-wrap: wrap;
+    }
+
+    .preview-url .lh-url {
+      flex-basis: 180px;
+    }
+
+    .preview-status {
+      color: var(--ink-secondary);
+      font-size: var(--text-sm);
+      margin: 0;
+    }
+
+    .preview-status:empty {
+      display: none;
     }
 
     @media (max-width: 860px) {
@@ -272,7 +304,7 @@
         <a href="/preview" class="ops-nav-item active" aria-current="page">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
         <a href="/add" class="ops-nav-item">Add Donation</a>
-        <a href="/presenter" class="ops-nav-item">Presenter View</a>
+        <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item">Settings</a>
         <a href="/testing" class="ops-nav-item">Testing</a>
         <a href="/history" class="ops-nav-item">History</a>
@@ -284,37 +316,49 @@
       <header class="preview-head">
         <h1 class="preview-title">Fullscreen Bar Chart</h1>
         <div class="preview-actions">
-          <!-- The chart link lives in the hub with every other surface link, so
-               there is exactly one place on this page to copy it. -->
+          <!-- Other room links remain available without leaving the preview. -->
           <div class="linkhub" data-linkhub data-linkhub-current="/chart">
             <button type="button" class="lh-toggle" data-linkhub-toggle aria-expanded="false" aria-controls="linkhub-panel" aria-label="Surface links">
               <svg class="lh-icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,9.95a56,56,0,0,1-79.22-79.22l24.12-24.12A56,56,0,0,1,152,100.1a8,8,0,0,1-13,9.3,40,40,0,0,0-57.05-2.72L57.7,130.8a40,40,0,0,0,56.58,56.58l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.31,11.31l9.95-9.94a40,40,0,0,1,56.58,56.58L172.18,140.4a40,40,0,0,1-57.06-2.71,8,8,0,0,0-13,9.3,56,56,0,0,0,84.66,3.72l24.12-24.12A56.08,56.08,0,0,0,207.62,48.38Z"/></svg>
               <span class="lh-toggle-text">Links</span>
             </button>
           </div>
-          <a id="link-open-chart" class="btn-open" href="/chart" target="_blank" rel="noopener">
+          <button type="button" id="btn-preview-fullscreen" class="btn-open">
+            <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" style="width:14px;height:14px;"><path d="M216,48V96a8,8,0,0,1-16,0V56H160a8,8,0,0,1,0-16h48A8,8,0,0,1,216,48ZM96,200H56V160a8,8,0,0,0-16,0v48a8,8,0,0,0,8,8H96a8,8,0,0,0,0-16Zm112-48a8,8,0,0,0-8,8v40H160a8,8,0,0,0,0,16h48a8,8,0,0,0,8-8V160A8,8,0,0,0,208,152ZM48,104a8,8,0,0,0,8-8V56H96a8,8,0,0,0,0-16H48a8,8,0,0,0-8,8V96A8,8,0,0,0,48,104Z"/></svg>
+            Fullscreen
+          </button>
+          <a id="link-open-surface" class="btn-open" href="/chart" target="_blank" rel="noopener">
             <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" style="width:14px;height:14px;"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg>
             Open in new tab
           </a>
         </div>
       </header>
 
+      <div class="lh-row preview-url" data-surface-link>
+        <label class="lh-name" id="surface-url-label" for="surface-url">Fullscreen Bar Chart URL</label>
+        <div class="lh-url-wrap">
+          <input id="surface-url" class="lh-url" type="text" readonly>
+          <button type="button" class="lh-copy" data-copy><span data-copy-label>Copy</span></button>
+        </div>
+        <span class="lh-status" data-copy-status aria-live="polite"></span>
+      </div>
+      <p class="preview-status" id="preview-status" role="status"></p>
+
       <div class="preview-stage" id="preview-stage">
         <div class="preview-frame" id="preview-frame">
-          <!-- src is authored here and never reassigned: the chart keeps its own
-               live connection for the life of this page. No edit-mode parameter. -->
+          <!-- The selected live surface is loaded once by the script below. -->
           <iframe
-            id="chart-embed"
-            class="chart-embed"
-            src="/chart"
+            id="preview-embed"
+            class="preview-embed"
             title="Fullscreen Bar Chart, live"
+            allow="fullscreen"
             sandbox="allow-scripts allow-same-origin"></iframe>
         </div>
       </div>
     </main>
   </div>
 
-  <script src="js/presence.js?v=6.1.1"></script>
+  <script src="js/presence.js?v=6.2.0"></script>
   <script>
     (function () {
       'use strict';
@@ -324,10 +368,36 @@
 
       const stage = document.getElementById('preview-stage');
       const frame = document.getElementById('preview-frame');
-      const embed = document.getElementById('chart-embed');
-      const openLink = document.getElementById('link-open-chart');
+      const embed = document.getElementById('preview-embed');
+      const openLink = document.getElementById('link-open-surface');
+      const isPresenter = window.location.pathname === '/presenter-preview';
+      const surfacePath = isPresenter ? '/presenter' : '/chart';
+      const surfaceTitle = isPresenter ? 'Presenter View' : 'Fullscreen Bar Chart';
+      const absoluteUrl = window.location.origin + surfacePath;
+      document.title = surfaceTitle + ' — Givebar';
+      document.querySelector('.preview-title').textContent = surfaceTitle;
+      document.getElementById('surface-url-label').textContent = surfaceTitle + ' URL';
+      document.getElementById('surface-url').value = absoluteUrl;
+      document.querySelector('[data-linkhub]').setAttribute('data-linkhub-current', surfacePath);
+      document.querySelectorAll('.ops-nav-item').forEach(link => {
+        const active = link.getAttribute('href') === (isPresenter ? '/presenter-preview' : '/preview');
+        link.classList.toggle('active', active);
+        if (active) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      });
+      openLink.href = absoluteUrl;
+      embed.title = surfaceTitle + ', live';
+      embed.src = surfacePath;
 
-      openLink.href = window.location.origin + '/chart';
+      document.getElementById('btn-preview-fullscreen').addEventListener('click', async () => {
+        const status = document.getElementById('preview-status');
+        status.textContent = '';
+        try {
+          await embed.requestFullscreen();
+        } catch (error) {
+          status.textContent = 'Fullscreen is unavailable in this browser. Use Open in new tab instead.';
+        }
+      });
 
       // Scale the projector-geometry iframe into whatever space the panel has.
       // Transform only — the document inside is never reloaded.
@@ -351,6 +421,6 @@
       fit();
     })();
   </script>
-  <script src="js/linkhub.js?v=6.1.0"></script>
+  <script src="js/linkhub.js?v=6.2.0"></script>
 </body>
 </html>

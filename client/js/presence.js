@@ -64,6 +64,7 @@
     '/emcee': null,
     '/settings': 'settings',
     '/testing': 'testing',
+    '/presenter-preview': 'preview',
     '/history': 'history',
     '/preview': 'preview'
   };

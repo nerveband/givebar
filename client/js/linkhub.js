@@ -187,6 +187,8 @@
   function init() {
     var containers = document.querySelectorAll('[data-linkhub]');
     for (var i = 0; i < containers.length; i++) mount(containers[i]);
+    var surfaceLinks = document.querySelectorAll('[data-surface-link]');
+    for (var j = 0; j < surfaceLinks.length; j++) wireCopy(surfaceLinks[j]);
   }
 
   if (document.readyState === 'loading') {

@@ -39,6 +39,16 @@ Everything runs on a single self-contained process backed by embedded SQLite in 
 | **Podium Screen** | `/emcee` | Podium iPad / Teleprompter | High-contrast OLED black display with 72px total, 3-second glance vocal shoutout cards (with phonetic guide & table number), and milestone countdown. |
 | **Volunteer Pledge Pad** | `/entry` | Volunteer Phones / Tablets | Mobile-optimized 2-stage progressive disclosure in the bottom thumb zone with ask-tier presets, custom numpad, $9,500 guardrail modal, offline outbox, and 8-second floating undo toast. |
 
+### Presentation previews
+
+The operator sidebar opens the chart preview at `/preview` and the presenter
+preview at `/presenter-preview`. Both show the live screen inset, a copyable
+standalone URL, a **Fullscreen** button, and **Open in new tab**.
+
+Fullscreen expands the live iframe without reloading it; leaving fullscreen
+returns to the preview. If the browser denies fullscreen, use the new-tab link.
+Shared room URLs remain `/chart` and `/presenter`, without the operator shell.
+
 ### Presence
 
 Home (`/`) includes a **Presence** section with the active browser count and a

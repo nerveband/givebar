@@ -172,7 +172,7 @@ export const server = Bun.serve({
       return serveStaticFile("client/public/history.html");
     }
 
-    if (pathname === "/preview" || pathname === "/preview.html") {
+    if (pathname === "/preview" || pathname === "/preview.html" || pathname === "/presenter-preview") {
       return serveStaticFile("client/public/preview.html");
     }
 
