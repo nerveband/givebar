@@ -792,14 +792,7 @@
     return `$${Math.floor(cents / 100).toLocaleString('en-US')}`;
   }
 
-  function formatRelativeTime(epochMs) {
-    const sec = Math.max(0, Math.floor((Date.now() - epochMs) / 1000));
-    if (sec < 60) return `${sec}s`;
-    const min = Math.floor(sec / 60);
-    if (min < 60) return `${min}m`;
-    const hrs = Math.floor(min / 60);
-    return `${hrs}h`;
-  }
+  function formatRelativeTime(epochMs) { const sec = Math.max(0, Math.floor((Date.now() - epochMs) / 1000)); if (sec < 60) return `${sec}s`; const min = Math.floor(sec / 60); if (min < 60) return `${min}m`; const hrs = Math.floor(min / 60); if (hrs < 24) return `${hrs}h`; const days = Math.floor(hrs / 24); if (days < 7) return `${days}d`; const weeks = Math.floor(days / 7); return `${weeks}w`; }
 
   function escapeHTML(str) {
     if (!str) return '';
