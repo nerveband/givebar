@@ -37,7 +37,6 @@ const SAMPLE_TIERS = [
   10000    // $100
 ];
 
-let rehearsalCardCounter = 100;
 
 export async function handleRehearsalRequest(req: Request, db: Database): Promise<Response> {
   if (req.method.toUpperCase() !== "POST") {
@@ -69,7 +68,6 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
 
       case "typo": {
         // Explicitly inject a typo gift to test the 8s Yank queue
-        rehearsalCardCounter++;
         const typoDonation = {
           donation_id: crypto.randomUUID(),
           amount_cents: 500000, // $5,000
@@ -78,7 +76,6 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
           is_anonymous: false,
           payment_method: "pledge" as const,
           source: "rehearsal" as const,
-          card_number: `#${rehearsalCardCounter}`,
           entered_by: "REHEARSAL_BOT",
           notes: "Table 99 - Test typo for 8s stage review buffer",
           confirmed_major_gift: true
@@ -106,7 +103,6 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
         }
 
         const neededCents = Math.max(100000, targetCents - currentTotal + 500000); // Cross by $5k
-        rehearsalCardCounter++;
         const milestoneDonation = {
           donation_id: crypto.randomUUID(),
           amount_cents: neededCents,
@@ -115,7 +111,6 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
           is_anonymous: false,
           payment_method: "pledge" as const,
           source: "rehearsal" as const,
-          card_number: `#${rehearsalCardCounter}`,
           entered_by: "REHEARSAL_BOT",
           notes: "Milestone celebration trigger test",
           confirmed_major_gift: true
@@ -135,7 +130,6 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
 }
 
 function generateRandomDonation() {
-  rehearsalCardCounter++;
   const donorName = SAMPLE_DONORS[Math.floor(Math.random() * SAMPLE_DONORS.length)];
   const isAnon = donorName === "Anonymous Supporter" || Math.random() < 0.12;
   const amountCents = SAMPLE_TIERS[Math.floor(Math.random() * SAMPLE_TIERS.length)];
@@ -149,7 +143,6 @@ function generateRandomDonation() {
     is_anonymous: isAnon,
     payment_method: (Math.random() < 0.7 ? "pledge" : (Math.random() < 0.5 ? "card" : "check")) as "pledge" | "card" | "check",
     source: "rehearsal" as const,
-    card_number: `#0${rehearsalCardCounter}`,
     entered_by: `User_${Math.floor(Math.random() * 3) + 1}`,
     notes: `Table ${tableNum}`,
     confirmed_major_gift: true
