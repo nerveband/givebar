@@ -7,13 +7,7 @@ import { handleStateRequest } from "../server/src/routes/state";
 import { handleExportCSV } from "../server/src/routes/export";
 import { handleQRRequest } from "../server/src/routes/qr";
 
-function control(body: Record<string, unknown>): Request {
-  return new Request("http://localhost:3000/api/control", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-}
+import { controlRequest as control, operatorCookie } from "./auth-helper";
 
 /** Every object key reachable in a payload, so `has_control_pin` never masks a real leak. */
 function collectKeys(value: unknown, found: Set<string> = new Set()): Set<string> {
@@ -28,96 +22,93 @@ function collectKeys(value: unknown, found: Set<string> = new Set()): Set<string
   return found;
 }
 
-describe("Default-open authentication", () => {
+describe("Named operator session authentication", () => {
   let db: Database;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
   });
 
-  test("a fresh database ships with no PIN of any kind", () => {
-    const state = getEventState(db);
-    expect(state.control_pin).toBe("");
-    expect(state.entry_pin).toBe("");
-  });
-
-  test("every control-role surface returns real data with no credentials when no PIN is set", async () => {
-    recordDonation(db, {
-      donation_id: "don_open_1",
-      amount_cents: 425000,
-      donor_name: "Open Access Donor"
-    });
-
-    const stateRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db);
-    expect(stateRes.status).toBe(200);
-    const stateData = await stateRes.json();
-    expect(stateData.folded.total_raised_cents).toBe(425000);
-    expect(stateData.staged_chyrons.length).toBe(1);
-    expect(stateData.has_control_pin).toBe(false);
-
-    const freezeRes = await handleControlRequest(control({ action: "freeze" }), db);
-    expect(freezeRes.status).toBe(200);
-    expect(getEventState(db).is_frozen).toBe(1);
-
-    const csvRes = handleExportCSV(new Request("http://localhost:3000/api/export/csv"), db);
-    expect(csvRes.status).toBe(200);
-    expect(await csvRes.text()).toContain("Open Access Donor");
-  });
-
-  test("setting a PIN closes the surfaces, clearing it reopens them", async () => {
-    const setRes = await handleControlRequest(control({ action: "update_pins", control_pin: "8271" }), db);
-    expect(setRes.status).toBe(200);
-    expect(getEventState(db).control_pin).toBe("8271");
-
+  test("operator pages and APIs require sign-in; public roles stay readable", async () => {
+    const adminCookie = await operatorCookie(db, "founder", "1357911", "admin");
+    recordDonation(db, { donation_id: "don_session_1", amount_cents: 425000, donor_name: "Session Donor" });
     expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db).status).toBe(401);
+    expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=entry"), db).status).toBe(401);
     expect(handleExportCSV(new Request("http://localhost:3000/api/export/csv"), db).status).toBe(401);
     expect((await handleControlRequest(control({ action: "freeze" }), db)).status).toBe(401);
-
-    // Correct PIN still works
-    expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=control&pin=8271"), db).status).toBe(200);
-    expect((await handleControlRequest(control({ action: "freeze", pin: "8271" }), db)).status).toBe(200);
-
-    // Clearing requires the current PIN, then reopens everything
-    const clearRes = await handleControlRequest(control({ action: "update_pins", pin: "8271", control_pin: "" }), db);
-    expect(clearRes.status).toBe(200);
-    expect(getEventState(db).control_pin).toBe("");
-
-    expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db).status).toBe(200);
-    expect(handleExportCSV(new Request("http://localhost:3000/api/export/csv"), db).status).toBe(200);
-    expect((await handleControlRequest(control({ action: "unfreeze" }), db)).status).toBe(200);
+    const authedControl = new Request("http://localhost:3000/api/state?role=control", { headers: { Cookie: adminCookie } });
+    const stateData = await handleStateRequest(authedControl, db).json();
+    expect(stateData.folded.total_raised_cents).toBe(425000);
+    expect(stateData.me.username).toBe("founder");
+    expect((await handleControlRequest(control({ action: "freeze" }, adminCookie), db)).status).toBe(200);
+    const csv = handleExportCSV(new Request("http://localhost:3000/api/export/csv", { headers: { Cookie: adminCookie } }), db);
+    expect(csv.status).toBe(200);
+    expect(await csv.text()).toContain("Session Donor");
+    expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db).status).toBe(200);
+    expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=emcee"), db).status).toBe(200);
   });
 
-  test("update_settings persists a PIN change and rejects malformed PINs", async () => {
-    const okRes = await handleControlRequest(control({ action: "update_settings", control_pin: "424242" }), db);
-    expect(okRes.status).toBe(200);
-    expect(getEventState(db).control_pin).toBe("424242");
-
-    const shortRes = await handleControlRequest(control({ action: "update_settings", pin: "424242", control_pin: "12" }), db);
-    expect(shortRes.status).toBe(400);
-    expect((await shortRes.json()).error).toBe("INVALID_PIN");
-    expect(getEventState(db).control_pin).toBe("424242");
-
-    const changeRes = await handleControlRequest(control({ action: "update_settings", pin: "424242", control_pin: "777777" }), db);
-    expect(changeRes.status).toBe(200);
-    expect(getEventState(db).control_pin).toBe("777777");
+  test("wrong names, wrong PINs, and repeated guessing are rejected without leaking hashes", async () => {
+    await operatorCookie(db, "founder", "1357911", "admin");
+    expect((await handleControlRequest(control({ action: "login", username: "unknown", pin: "1357911" }), db)).status).toBe(401);
+    expect((await handleControlRequest(control({ action: "login", username: "founder", pin: "0000" }), db)).status).toBe(401);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await handleControlRequest(control({ action: "login", username: "founder", pin: "0000" }), db);
+    }
+    expect((await handleControlRequest(control({ action: "login", username: "founder", pin: "0000" }), db)).status).toBe(429);
+    const stored = db.query<{ pin_hash: string }, []>(`SELECT pin_hash FROM operator_account WHERE username = 'founder'`).get();
+    expect(stored?.pin_hash.includes("1357911")).toBe(false);
   });
 
-  test("auth_check reports whether a PIN is required without leaking it", async () => {
-    const openRes = await handleControlRequest(control({ action: "auth_check" }), db);
-    const openData = await openRes.json();
-    expect(openData.authenticated).toBe(true);
-    expect(openData.pin_required).toBe(false);
-
-    updateEventState(db, { control_pin: "3131" });
-
-    const closedRes = await handleControlRequest(control({ action: "auth_check" }), db);
-    const closedData = await closedRes.json();
-    expect(closedData.authenticated).toBe(false);
-    expect(closedData.pin_required).toBe(true);
-    expect(JSON.stringify(closedData).includes("3131")).toBe(false);
+  test("auth_check reports the signed-in operator without leaking PIN material", async () => {
+    expect((await (await handleControlRequest(control({ action: "auth_check" }), db)).json()).authenticated).toBe(false);
+    const adminCookie = await operatorCookie(db, "founder", "1357911", "admin");
+    const authenticated = await (await handleControlRequest(control({ action: "auth_check" }, adminCookie), db)).json();
+    expect(authenticated.authenticated).toBe(true);
+    expect(authenticated.username).toBe("founder");
+    expect(authenticated.role).toBe("admin");
+    expect(JSON.stringify(authenticated).includes("1357911")).toBe(false);
   });
 
-  test("migrates a legacy database that carried the seeded 9999 / 1234 PINs", () => {
+  test("disabling or signing out immediately revokes access", async () => {
+    const adminCookie = await operatorCookie(db, "founder", "1357911", "admin");
+    const created = await (await handleControlRequest(control({ action: "create_account", username: "volunteer", displayName: "Hall Volunteer", pin: "2468", role: "operator" }, adminCookie), db)).json();
+    const volunteerLogin = await handleControlRequest(control({ action: "login", username: "volunteer", pin: "2468" }), db);
+    const volunteerCookie = volunteerLogin.headers.get("set-cookie")?.split(";")[0] || "";
+    const authedEntry = new Request("http://localhost:3000/api/state?role=entry", { headers: { Cookie: volunteerCookie } });
+    expect(handleStateRequest(authedEntry, db).status).toBe(200);
+    expect((await handleControlRequest(control({ action: "update_account", id: created.id, disabled: true }, adminCookie), db)).status).toBe(200);
+    expect(handleStateRequest(authedEntry, db).status).toBe(401);
+    expect((await handleControlRequest(control({ action: "login", username: "volunteer", pin: "2468" }), db)).status).toBe(401);
+    expect((await handleControlRequest(control({ action: "logout" }, adminCookie), db)).status).toBe(200);
+    const authedControl = new Request("http://localhost:3000/api/state?role=control", { headers: { Cookie: adminCookie } });
+    expect(handleStateRequest(authedControl, db).status).toBe(401);
+  });
+
+  test("single-use invite links sign in once and PIN changes rotate sessions", async () => {
+    const adminCookie = await operatorCookie(db, "founder", "1357911", "admin");
+    const created = await (await handleControlRequest(control({ action: "create_account", username: "invited", displayName: "Invited Operator", pin: "2468", role: "operator" }, adminCookie), db)).json();
+    process.env.BREVO_API_KEY = "test-brevo-key";
+    const fetchSpy = globalThis.fetch;
+    let emailed = "";
+    globalThis.fetch = (async (_url: string | URL | Request, options: { body?: unknown } = {}) => {
+      emailed = JSON.parse(String(options.body || "{}")).to?.[0]?.email || "";
+      return new Response(JSON.stringify({ messageId: "test" }), { status: 201 });
+    }) as typeof fetch;
+    const invite = await (await handleControlRequest(control({ action: "send_invite", id: created.id, email: "operator@example.org" }, adminCookie), db)).json();
+    globalThis.fetch = fetchSpy;
+    delete process.env.BREVO_API_KEY;
+    expect(emailed).toBe("operator@example.org");
+    const token = new URL(invite.link).searchParams.get("invite") || "";
+    const redeemed = await handleControlRequest(control({ action: "redeem_invite", token }), db);
+    expect(redeemed.status).toBe(200);
+    expect((await handleControlRequest(control({ action: "redeem_invite", token }), db)).status).toBe(400);
+    const sessionCookie = redeemed.headers.get("set-cookie")?.split(";")[0] || "";
+    expect((await handleControlRequest(control({ action: "change_pin", current_pin: "2468", pin: "9753" }, sessionCookie), db)).status).toBe(200);
+    expect((await handleControlRequest(control({ action: "login", username: "invited", pin: "9753" }), db)).status).toBe(200);
+  });
+
+  test("migrated databases clear retired shared PINs and require named operators", () => {
     const legacy = new Database(":memory:", { create: true });
     legacy.exec(`
       CREATE TABLE event_state (
@@ -141,33 +132,24 @@ describe("Default-open authentication", () => {
     `);
     legacy.exec(`INSERT INTO event_state (id, updated_at) VALUES (1, 1700000000000);`);
     legacy.exec(`PRAGMA user_version = 5;`);
-
     migrateSchema(legacy);
-
     const migrated = getEventState(legacy);
     expect(migrated.control_pin).toBe("");
     expect(migrated.entry_pin).toBe("");
     expect(migrated.qr_url).toBe("https://legacy.example.org/give?utm_source=projector");
-    expect(legacy.query<{ user_version: number }, []>("PRAGMA user_version;").get()?.user_version).toBe(6);
-
-    // Migrated database is fully open
-    expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), legacy).status).toBe(200);
+    expect(legacy.query<{ user_version: number }, []>("PRAGMA user_version;").get()?.user_version).toBe(13);
+    expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), legacy).status).toBe(401);
     legacy.close();
-  });
-
-  test("an operator-set PIN survives a re-open of the same database", () => {
-    updateEventState(db, { control_pin: "5150" });
-    // Re-running migrations (server restart) must not resurrect the legacy default
-    migrateSchema(db);
-    expect(getEventState(db).control_pin).toBe("5150");
   });
 });
 
 describe("Presentation settings model", () => {
   let db: Database;
+  let cookie: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = initDatabase(":memory:");
+    cookie = await operatorCookie(db, "founder", "1357911", "admin");
   });
 
   test("all new presentation fields round-trip through update_settings onto every payload", async () => {
@@ -182,7 +164,7 @@ describe("Presentation settings model", () => {
       display_url: "give.example.org/gala",
       logo_url: "/assets/logo.svg",
       goal_cents: 123456700
-    }), db);
+    }, cookie), db);
     expect(res.status).toBe(200);
 
     const stored = getEventState(db);
@@ -204,7 +186,7 @@ describe("Presentation settings model", () => {
     expect(stageData.display_url).toBe("give.example.org/gala");
     expect(stageData.display_url_effective).toBe("give.example.org/gala");
 
-    const ctrlData = await handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db).json();
+    const ctrlData = await handleStateRequest(new Request("http://localhost:3000/api/state?role=control", { headers: { Cookie: cookie } }), db).json();
     expect(ctrlData.event_state.event_title).toBe("Hope Rising 2026");
     expect(ctrlData.event_state.chart_orientation).toBe("vertical");
     expect(ctrlData.event_state.qr_url).toBe("https://give.example.org/gala?utm_source=projector&utm_medium=qr");
@@ -220,7 +202,7 @@ describe("Presentation settings model", () => {
       action: "update_settings",
       qr_url: "https://give.example.org/gala/appeal?utm_source=table_card#pledge",
       display_url: ""
-    }), db);
+    }, cookie), db);
     expect(res.status).toBe(200);
 
     const stageData = await handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db).json();
@@ -229,7 +211,7 @@ describe("Presentation settings model", () => {
     expect(stageData.display_url_effective).toBe("https://give.example.org/gala/appeal");
 
     // An explicit display_url wins and never alters the encoded target
-    await handleControlRequest(control({ action: "update_settings", display_url: "example.org/give" }), db);
+    await handleControlRequest(control({ action: "update_settings", display_url: "example.org/give" }, cookie), db);
     const updated = await handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db).json();
     expect(updated.display_url_effective).toBe("example.org/give");
     expect(updated.qr_url).toBe("https://give.example.org/gala/appeal?utm_source=table_card#pledge");
@@ -239,7 +221,7 @@ describe("Presentation settings model", () => {
     const qrRes = await handleControlRequest(control({
       action: "update_settings",
       qr_donate_url: "https://give.example.org/legacy"
-    }), db);
+    }, cookie), db);
     expect(qrRes.status).toBe(400);
     const qrBody = await qrRes.json();
     expect(qrBody.error).toBe("INVALID_SETTING");
@@ -248,7 +230,7 @@ describe("Presentation settings model", () => {
     const milestoneRes = await handleControlRequest(control({
       action: "update_settings",
       milestones_json: JSON.stringify([{ cents: 100, label: "Legacy" }])
-    }), db);
+    }, cookie), db);
     expect(milestoneRes.status).toBe(400);
     expect((await milestoneRes.json()).error).toBe("INVALID_SETTING");
   });
@@ -258,7 +240,7 @@ describe("Presentation settings model", () => {
     expect(emptyRes.status).toBe(400);
     expect((await emptyRes.json()).error).toBe("QR_URL_MISSING");
 
-    await handleControlRequest(control({ action: "update_settings", qr_url: "https://give.example.org/gala?utm_source=qr" }), db);
+    await handleControlRequest(control({ action: "update_settings", qr_url: "https://give.example.org/gala?utm_source=qr" }, cookie), db);
 
     const res = handleQRRequest(new Request("http://localhost:3000/api/qr"), db);
     expect(res.status).toBe(200);
@@ -280,7 +262,7 @@ describe("Presentation settings model", () => {
     ];
 
     for (const { patch, error } of cases) {
-      const res = await handleControlRequest(control({ action: "update_settings", ...patch }), db);
+      const res = await handleControlRequest(control({ action: "update_settings", ...patch }, cookie), db);
       expect(res.status).toBe(400);
       expect((await res.json()).error).toBe(error);
     }
@@ -293,7 +275,7 @@ describe("Presentation settings model", () => {
     expect(state.goal_cents).toBe(50000000);
 
     for (const font of ["system", "humanist", "grotesk", "mono", "serif"]) {
-      const res = await handleControlRequest(control({ action: "update_settings", font_family: font }), db);
+      const res = await handleControlRequest(control({ action: "update_settings", font_family: font }, cookie), db);
       expect(res.status).toBe(200);
       expect(getEventState(db).font_family).toBe(font);
     }
@@ -313,7 +295,7 @@ describe("Presentation settings model", () => {
     const beforeFirst = before.milestones.find((m: { label: string }) => m.label === "Foundation");
     expect(beforeFirst.cents).toBe(12500000);
 
-    const res = await handleControlRequest(control({ action: "update_settings", goal_cents: 100000000 }), db);
+    const res = await handleControlRequest(control({ action: "update_settings", goal_cents: 100000000 }, cookie), db);
     expect(res.status).toBe(200);
 
     const after = await handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db).json();
@@ -332,9 +314,11 @@ describe("Presentation settings model", () => {
 
 describe("Milestone editing", () => {
   let db: Database;
+  let cookie: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = initDatabase(":memory:");
+    cookie = await operatorCookie(db, "founder", "1357911", "admin");
   });
 
   test("a fresh database seeds milestones and exposes them to the chart", async () => {
@@ -355,7 +339,7 @@ describe("Milestone editing", () => {
         { cents: 15000000, label: "Endowment", celebrate: false },
         { percent_of_goal: 80, label: "Stretch Goal" }
       ]
-    }), db);
+    }, cookie), db);
     expect(replaceRes.status).toBe(200);
 
     const stageData = await handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db).json();
@@ -373,7 +357,7 @@ describe("Milestone editing", () => {
         { cents: 7500000, label: "Community Center Renovation" },
         { cents: 15000000, label: "Endowment" }
       ]
-    }), db);
+    }, cookie), db);
     expect(editRes.status).toBe(200);
 
     const edited = await handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db).json();
@@ -382,7 +366,7 @@ describe("Milestone editing", () => {
     expect(edited.milestones[0].cents).toBe(7500000);
 
     // Deleting every milestone leaves an empty set rather than resurrecting defaults
-    const clearRes = await handleControlRequest(control({ action: "update_settings", milestones: [] }), db);
+    const clearRes = await handleControlRequest(control({ action: "update_settings", milestones: [] }, cookie), db);
     expect(clearRes.status).toBe(200);
     const cleared = await handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db).json();
     expect(cleared.milestones.length).toBe(0);
@@ -391,52 +375,39 @@ describe("Milestone editing", () => {
 
 describe("Secret containment across every role", () => {
   let db: Database;
+  let cookie: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = initDatabase(":memory:");
+    cookie = await operatorCookie(db, "founder", "1357911", "admin");
   });
 
-  test("no role payload ever carries control_pin, entry_pin, or bloomerang_api_key", async () => {
-    updateEventState(db, {
-      control_pin: "6162",
-      entry_pin: "7273",
-      bloomerang_api_key: "blm_live_supersecret"
-    });
-    recordDonation(db, {
-      donation_id: "don_secret_1",
-      amount_cents: 100000,
-      donor_name: "Secret Check Donor"
-    });
-
-    const forbiddenKeys = ["control_pin", "entry_pin", "bloomerang_api_key"];
-    const forbiddenValues = ["6162", "7273", "blm_live_supersecret"];
-
-    const roles = ["stage", "emcee", "entry", "control", "default"];
-    for (const role of roles) {
-      const res = handleStateRequest(new Request(`http://localhost:3000/api/state?role=${role}&pin=6162`), db);
+  test("no role payload ever carries PIN hashes, sessions, or bloomerang_api_key", async () => {
+    updateEventState(db, { bloomerang_api_key: "blm_live_supersecret" });
+    recordDonation(db, { donation_id: "don_secret_1", amount_cents: 100000, donor_name: "Secret Check Donor" });
+    const forbiddenKeys = ["pin_hash", "token_hash", "bloomerang_api_key", "control_pin", "entry_pin"];
+    const forbiddenValues = ["blm_live_supersecret"];
+    for (const role of ["stage", "emcee"]) {
+      const res = handleStateRequest(new Request(`http://localhost:3000/api/state?role=${role}`), db);
       expect(res.status).toBe(200);
       const text = await res.text();
-      for (const secret of forbiddenValues) {
-        expect(text.includes(secret)).toBe(false);
-      }
-      for (const key of collectKeys(JSON.parse(text))) {
-        expect(forbiddenKeys.includes(key)).toBe(false);
-      }
+      for (const secret of forbiddenValues) expect(text.includes(secret)).toBe(false);
+      for (const key of collectKeys(JSON.parse(text))) expect(forbiddenKeys.includes(key)).toBe(false);
     }
-
-    const ctrlActionRes = await handleControlRequest(control({ action: "freeze", pin: "6162" }), db);
+    for (const role of ["entry", "control"]) {
+      expect(handleStateRequest(new Request(`http://localhost:3000/api/state?role=${role}`), db).status).toBe(401);
+      const res = handleStateRequest(new Request(`http://localhost:3000/api/state?role=${role}`, { headers: { Cookie: cookie } }), db);
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      for (const secret of forbiddenValues) expect(text.includes(secret)).toBe(false);
+      for (const key of collectKeys(JSON.parse(text))) expect(forbiddenKeys.includes(key)).toBe(false);
+    }
+    const ctrlActionRes = await handleControlRequest(control({ action: "freeze" }, cookie), db);
     expect(ctrlActionRes.status).toBe(200);
     const ctrlActionText = await ctrlActionRes.text();
-    for (const secret of forbiddenValues) {
-      expect(ctrlActionText.includes(secret)).toBe(false);
-    }
-    for (const key of collectKeys(JSON.parse(ctrlActionText))) {
-      expect(forbiddenKeys.includes(key)).toBe(false);
-    }
-
-    const csvText = await handleExportCSV(new Request("http://localhost:3000/api/export/csv?pin=6162"), db).text();
-    for (const secret of forbiddenValues) {
-      expect(csvText.includes(secret)).toBe(false);
-    }
+    for (const secret of forbiddenValues) expect(ctrlActionText.includes(secret)).toBe(false);
+    for (const key of collectKeys(JSON.parse(ctrlActionText))) expect(forbiddenKeys.includes(key)).toBe(false);
+    const csvText = await handleExportCSV(new Request("http://localhost:3000/api/export/csv", { headers: { Cookie: cookie } }), db).text();
+    for (const secret of forbiddenValues) expect(csvText.includes(secret)).toBe(false);
   });
 });

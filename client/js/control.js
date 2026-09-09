@@ -1,6 +1,6 @@
 /**
  * Givebar — Manage Donations Controller
- * Unified dataset, Table & Stream views, client sorting/filtering,
+ * One donation table, client sorting/filtering,
  * keyed row updates, delete dialog with 30s undo affordance,
  * explicit PIN unlock screen on 401, staleness detector, and honest state isolation.
  */
@@ -11,7 +11,6 @@
   // State
   let currentDonations = [];
   let totalRaisedCents = 0;
-  let activeTab = 'table'; // 'table' | 'stream'
   let searchQuery = '';
   let sortColumn = 'time'; // 'donor' | 'amount' | 'time' | 'status'
   let sortDirection = 'desc'; // 'asc' | 'desc'
@@ -28,13 +27,9 @@
 
   // DOM Elements
   const summaryTotalRaisedEl = document.getElementById('summary-total-raised');
-  const tabTableBtn = document.getElementById('tab-table');
-  const tabStreamBtn = document.getElementById('tab-stream');
   const panelTable = document.getElementById('panel-table');
-  const panelStream = document.getElementById('panel-stream');
   const searchInput = document.getElementById('manage-search');
   const tbodyEl = document.getElementById('manage-tbody');
-  const streamEl = document.getElementById('manage-stream');
   const emptyStateEl = document.getElementById('empty-state');
   const emptyStateTitleEl = document.getElementById('empty-state-title');
   const emptyStateTextEl = document.getElementById('empty-state-text');
@@ -45,13 +40,6 @@
   const staleBanner = document.getElementById('stale-banner');
   const staleBannerText = document.getElementById('stale-banner-text');
   const btnReconnectPoll = document.getElementById('btn-reconnect-poll');
-
-  // Unlock Screen Elements
-  const unlockScreen = document.getElementById('unlock-screen');
-  const unlockForm = document.getElementById('unlock-form');
-  const unlockPinInput = document.getElementById('unlock-pin-input');
-  const btnSubmitUnlock = document.getElementById('btn-submit-unlock');
-  const unlockError = document.getElementById('unlock-error');
 
   // Modal Dialog Elements
   const deleteModal = document.getElementById('delete-modal');
@@ -65,125 +53,17 @@
   const undoMessage = document.getElementById('undo-message');
   const btnUndoDelete = document.getElementById('btn-undo-delete');
 
-  // --- PIN Storage Helpers ---
-  function getControlPin() {
-    return sessionStorage.getItem('givebar_control_pin') || localStorage.getItem('givebar_control_pin') || '';
-  }
-
-  function setControlPin(pin) {
-    sessionStorage.setItem('givebar_control_pin', pin);
-    localStorage.setItem('givebar_control_pin', pin);
-  }
-
-  function clearControlPin() {
-    sessionStorage.removeItem('givebar_control_pin');
-    localStorage.removeItem('givebar_control_pin');
-  }
-
   function init() {
-    setupTabListeners();
     setupSearchListener();
     setupSortHeaders();
     setupDeleteModal();
     setupUndoAction();
-    setupUnlockForm();
     setupStaleBanner();
+    window.addEventListener('givebar:donation-recorded', fetchState);
     startDataSync();
   }
 
-  // --- Unlock Screen & State Isolation ---
-  function setupUnlockForm() {
-    if (unlockForm) {
-      unlockForm.addEventListener('submit', handleUnlockSubmit);
-    }
-  }
 
-  async function handleUnlockSubmit(e) {
-    if (e) e.preventDefault();
-    const pin = (unlockPinInput?.value || '').trim();
-    if (!pin) {
-      showUnlockError('Please enter the Control Room PIN.');
-      if (unlockPinInput) unlockPinInput.focus();
-      return;
-    }
-
-    clearUnlockError();
-    if (btnSubmitUnlock) {
-      btnSubmitUnlock.disabled = true;
-      btnSubmitUnlock.textContent = 'Verifying...';
-    }
-
-    try {
-      const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
-        headers: {
-          'X-Control-Pin': pin,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (res.status === 401) {
-        showUnlockError('Invalid Control Room PIN.');
-        if (unlockPinInput) {
-          unlockPinInput.focus();
-          unlockPinInput.select();
-        }
-        return;
-      }
-
-      if (!res.ok) {
-        showUnlockError('Server error validating PIN. Please try again.');
-        return;
-      }
-
-      const data = await res.json();
-      setControlPin(pin);
-      lastSuccessfulUpdateAt = Date.now();
-      setAuthUIState('authenticated');
-      setDegradedState(false);
-      handleStateUpdate(data);
-
-      // Re-init SSE with valid PIN
-      initSSE();
-    } catch (err) {
-      showUnlockError('Network error connecting to server.');
-    } finally {
-      if (btnSubmitUnlock) {
-        btnSubmitUnlock.disabled = false;
-        btnSubmitUnlock.textContent = 'Unlock';
-      }
-    }
-  }
-
-  function showUnlockError(msg) {
-    if (unlockError) {
-      unlockError.textContent = msg;
-      unlockError.style.display = 'block';
-    }
-  }
-
-  function clearUnlockError() {
-    if (unlockError) {
-      unlockError.textContent = '';
-      unlockError.style.display = 'none';
-    }
-  }
-
-  function setAuthUIState(state) {
-    authState = state;
-    if (state === 'unauthenticated') {
-      if (unlockScreen) unlockScreen.style.display = 'flex';
-      if (authView) authView.style.display = 'none';
-      if (summaryTotalRaisedEl) summaryTotalRaisedEl.textContent = '—';
-      if (emptyStateEl) emptyStateEl.style.display = 'none';
-      if (staleBanner) staleBanner.style.display = 'none';
-      if (unlockPinInput) {
-        setTimeout(() => unlockPinInput.focus(), 50);
-      }
-    } else {
-      if (unlockScreen) unlockScreen.style.display = 'none';
-      if (authView) authView.style.display = 'block';
-    }
-  }
 
   function setupStaleBanner() {
     if (btnReconnectPoll) {
@@ -235,17 +115,14 @@
       sseSource = null;
     }
 
-    const pin = getControlPin();
-    if (!pin) return;
-
     try {
       if (window.EventSource) {
-        sseSource = new EventSource(`/api/state/stream?role=control&pin=${encodeURIComponent(pin)}`);
+        sseSource = new EventSource('/api/state/stream?role=control');
         sseSource.onmessage = function (event) {
           try {
             const data = JSON.parse(event.data);
             lastSuccessfulUpdateAt = Date.now();
-            setAuthUIState('authenticated');
+
             setDegradedState(false);
             handleStateUpdate(data);
           } catch (e) {}
@@ -261,21 +138,9 @@
   }
 
   async function fetchState() {
-    const pin = getControlPin();
     try {
-      const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
-        headers: {
-          'X-Control-Pin': pin,
-          'Cache-Control': 'no-cache'
-        }
-      });
+      const res = await GivebarSession.api('/api/state?role=control');
 
-      if (res.status === 401) {
-        // Unauthenticated state: never paint a zero or empty state
-        clearControlPin();
-        setAuthUIState('unauthenticated');
-        return;
-      }
 
       if (!res.ok) {
         setDegradedState(true);
@@ -284,7 +149,7 @@
 
       const data = await res.json();
       lastSuccessfulUpdateAt = Date.now();
-      setAuthUIState('authenticated');
+
       setDegradedState(false);
       handleStateUpdate(data);
     } catch (err) {
@@ -295,6 +160,7 @@
 
   function handleStateUpdate(data) {
     if (!data) return;
+    window.dispatchEvent(new CustomEvent('givebar:control-state', {detail:data}));
 
     // Total Raised
     totalRaisedCents = data.folded?.total_raised_cents || 0;
@@ -316,7 +182,8 @@
         createdAt: item.created_at || Date.now(),
         status,
         isHeld: Boolean(item.is_held),
-        enteredBy: item.entered_by || 'User'
+        enteredBy: item.entered_by || 'Unknown operator',
+        source: item.source
       };
     });
 
@@ -360,7 +227,6 @@
     // Authenticated with genuinely zero donations (State 2)
     if (currentDonations.length === 0) {
       if (panelTable) panelTable.style.display = 'none';
-      if (panelStream) panelStream.style.display = 'none';
       if (emptyStateEl) {
         emptyStateEl.style.display = 'block';
         if (emptyStateTitleEl) emptyStateTitleEl.textContent = 'No donations yet';
@@ -368,7 +234,7 @@
         if (emptyStateBtn) {
           emptyStateBtn.style.display = 'inline-flex';
           emptyStateBtn.textContent = '+ Add First Donation';
-          emptyStateBtn.onclick = () => { window.location.href = '/add'; };
+          emptyStateBtn.onclick = () => document.getElementById('btn-open-add').click();
         }
       }
       return;
@@ -377,7 +243,6 @@
     // Authenticated with search filter yielding 0 matches
     if (list.length === 0) {
       if (panelTable) panelTable.style.display = 'none';
-      if (panelStream) panelStream.style.display = 'none';
       if (emptyStateEl) {
         emptyStateEl.style.display = 'block';
         if (emptyStateTitleEl) emptyStateTitleEl.textContent = 'No donations match your search';
@@ -398,15 +263,8 @@
     // Authenticated with active donation rows
     if (emptyStateEl) emptyStateEl.style.display = 'none';
 
-    if (activeTab === 'table') {
-      if (panelTable) panelTable.style.display = 'block';
-      if (panelStream) panelStream.style.display = 'none';
-      renderKeyedTable(list);
-    } else {
-      if (panelTable) panelTable.style.display = 'none';
-      if (panelStream) panelStream.style.display = 'block';
-      renderKeyedStream(list);
-    }
+    if (panelTable) panelTable.style.display = 'block';
+    renderKeyedTable(list);
   }
 
   // --- Keyed Table Update (Preserves Focus & Selection) ---
@@ -442,13 +300,14 @@
       const statusHtml = getStatusBadgeHtml(item.status);
 
       const innerHtml = `
-        <td style="font-weight: 600; color: #f4f5f6;">${escapeHTML(item.donor)}</td>
+        <td style="font-weight:600;color:#f4f5f6">${escapeHTML(item.donor)}<div class="donation-attribution">${escapeHTML(GivebarOperator.source(item.source))} · ${escapeHTML(item.enteredBy)}</div></td>
         <td class="text-right amount-cell" style="color: #f4f5f6;">${formattedAmount}</td>
         <td class="text-center time-cell">${relativeTime}</td>
         <td class="text-center">${statusHtml}</td>
         <td class="text-right">
+          <button type="button" class="btn-secondary" data-copy-donation="${escapeHTML([item.donor, formattedAmount, relativeTime, GivebarOperator.source(item.source), item.enteredBy].join(' · '))}">Copy</button>
           <button type="button" class="btn-delete-row" data-action="delete" data-id="${escapeHTML(item.id)}" data-donor="${escapeHTML(item.donor)}" data-amount="${item.amountCents}" aria-label="Delete donation" title="Delete donation">
-            &#x2715;
+            Delete
           </button>
         </td>
       `;
@@ -482,89 +341,10 @@
     });
   }
 
-  // --- Keyed Stream Update ---
-  function renderKeyedStream(list) {
-    if (!streamEl) return;
-
-    const existingCards = new Map();
-    Array.from(streamEl.children).forEach(card => {
-      const id = card.getAttribute('data-donation-id');
-      if (id) existingCards.set(id, card);
-    });
-
-    const activeIds = new Set(list.map(d => d.id));
-    existingCards.forEach((card, id) => {
-      if (!activeIds.has(id)) card.remove();
-    });
-
-    let previousNode = null;
-    list.forEach(item => {
-      let card = existingCards.get(item.id);
-      const isNew = !card;
-
-      if (isNew) {
-        card = document.createElement('div');
-        card.setAttribute('data-donation-id', item.id);
-        card.style.cssText = 'background: #18191d; border: 1px solid #27282e; border-radius: var(--brand-radius); padding: var(--space-4); display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);';
-      }
-
-      const relativeTime = formatRelativeTime(item.createdAt);
-      const formattedAmount = formatCurrency(item.amountCents);
-      const statusHtml = getStatusBadgeHtml(item.status);
-
-      const innerHtml = `
-        <div style="display: flex; flex-direction: column; gap: 4px;">
-          <div style="font-weight: 700; font-size: var(--text-sm); color: #f4f5f6;">
-            ${escapeHTML(item.donor)}
-          </div>
-          <div style="font-size: var(--text-xs); color: #88888e; display: flex; align-items: center; gap: var(--space-2);">
-            <span>${relativeTime}</span>
-            <span>&bull;</span>
-            <span>${statusHtml}</span>
-          </div>
-        </div>
-        <div style="display: flex; align-items: center; gap: var(--space-4);">
-          <div style="font-size: var(--text-base); font-weight: 800; color: #f4f5f6; font-variant-numeric: tabular-nums;">
-            ${formattedAmount}
-          </div>
-          <button type="button" class="btn-delete-row" data-action="delete" data-id="${escapeHTML(item.id)}" aria-label="Delete donation" title="Delete donation">
-            &#x2715;
-          </button>
-        </div>
-      `;
-
-      if (card.innerHTML !== innerHtml) {
-        card.innerHTML = innerHtml;
-        const deleteBtn = card.querySelector('.btn-delete-row');
-        if (deleteBtn) {
-          deleteBtn.addEventListener('click', () => {
-            promptDeleteDonation(item);
-          });
-        }
-      }
-
-      if (isNew) {
-        if (previousNode && previousNode.nextSibling) {
-          streamEl.insertBefore(card, previousNode.nextSibling);
-        } else if (!previousNode && streamEl.firstChild) {
-          streamEl.insertBefore(card, streamEl.firstChild);
-        } else {
-          streamEl.appendChild(card);
-        }
-      } else {
-        const expectedNext = previousNode ? previousNode.nextSibling : streamEl.firstChild;
-        if (card !== expectedNext) {
-          streamEl.insertBefore(card, expectedNext);
-        }
-      }
-
-      previousNode = card;
-    });
-  }
 
   function getStatusBadgeHtml(status) {
     if (status === 'confirmed') {
-      return '<span class="status-badge" title="Confirmed">&#x2713;</span>';
+      return '<span class="status-badge confirmed"><svg viewBox="0 0 256 256" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M229.66,69.66l-128,128a8,8,0,0,1-11.32,0l-64-64a8,8,0,0,1,11.32-11.32L96,180.69,218.34,58.34a8,8,0,0,1,11.32,11.32Z"/></svg> Confirmed</span>';
     } else if (status === 'pending') {
       return '<span class="status-badge pending" title="Pending" style="color: #d4a359;"><svg class="icon" viewBox="0 0 256 256" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg> Pending</span>';
     } else if (status === 'removed') {
@@ -610,29 +390,6 @@
   }
 
   // --- Tab & Search Controls ---
-  function setupTabListeners() {
-    if (tabTableBtn) {
-      tabTableBtn.addEventListener('click', () => {
-        activeTab = 'table';
-        tabTableBtn.classList.add('active');
-        tabTableBtn.setAttribute('aria-selected', 'true');
-        tabStreamBtn.classList.remove('active');
-        tabStreamBtn.setAttribute('aria-selected', 'false');
-        renderCurrentView();
-      });
-    }
-
-    if (tabStreamBtn) {
-      tabStreamBtn.addEventListener('click', () => {
-        activeTab = 'stream';
-        tabStreamBtn.classList.add('active');
-        tabStreamBtn.setAttribute('aria-selected', 'true');
-        tabTableBtn.classList.remove('active');
-        tabTableBtn.setAttribute('aria-selected', 'false');
-        renderCurrentView();
-      });
-    }
-  }
 
   function setupSearchListener() {
     if (searchInput) {
@@ -692,19 +449,11 @@
   }
 
   async function executeDeleteDonation(donation) {
-    const pin = getControlPin();
     try {
-      const res = await fetch(`/api/donation/${donation.id}/void`, {
+      const res = await GivebarSession.api(`/api/donation/${donation.id}/void`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Control-Pin': pin
-        },
-        body: JSON.stringify({
-          entered_by: 'User',
-          reason: `Deleted via Manage Donations by User`,
-          pin
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Deleted via Manage Donations' })
       });
 
       if (!res.ok) {
@@ -760,19 +509,11 @@
   }
 
   async function executeRestoreDonation(donation) {
-    const pin = getControlPin();
     try {
-      const res = await fetch(`/api/donation/${donation.id}/restore`, {
+      const res = await GivebarSession.api(`/api/donation/${donation.id}/restore`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Control-Pin': pin
-        },
-        body: JSON.stringify({
-          entered_by: 'User',
-          reason: `Restored via Undo in Manage Donations by User`,
-          pin
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Restored via Manage Donations' })
       });
 
       if (!res.ok) {
@@ -789,10 +530,10 @@
 
   // --- Utilities ---
   function formatCurrency(cents) {
-    return `$${Math.floor(cents / 100).toLocaleString('en-US')}`;
+    return (cents / 100).toLocaleString('en-US', {style:'currency',currency:'USD',minimumFractionDigits:0,maximumFractionDigits:2});
   }
 
-  function formatRelativeTime(epochMs) { const sec = Math.max(0, Math.floor((Date.now() - epochMs) / 1000)); if (sec < 60) return `${sec}s`; const min = Math.floor(sec / 60); if (min < 60) return `${min}m`; const hrs = Math.floor(min / 60); if (hrs < 24) return `${hrs}h`; const days = Math.floor(hrs / 24); if (days < 7) return `${days}d`; const weeks = Math.floor(days / 7); return `${weeks}w`; }
+  function formatRelativeTime(epochMs) { return GivebarOperator.time(epochMs); }
 
   function escapeHTML(str) {
     if (!str) return '';

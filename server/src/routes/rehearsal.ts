@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { recordDonation, foldLedger, getEventState } from "../ledger";
 import { getMilestones } from "../projection";
-
+import { requireRole } from "../authz";
 const SAMPLE_DONORS = [
   "Dr. Tariq & Mona Al-Mansoor",
   "The Henderson Family Trust",
@@ -39,6 +39,8 @@ const SAMPLE_TIERS = [
 
 
 export async function handleRehearsalRequest(req: Request, db: Database): Promise<Response> {
+  const auth = requireRole(db, req, ["admin", "operator"]);
+  if (auth instanceof Response) return auth;
   if (req.method.toUpperCase() !== "POST") {
     return Response.json({ error: "METHOD_NOT_ALLOWED", message: "POST required" }, { status: 405 });
   }

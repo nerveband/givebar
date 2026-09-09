@@ -17,44 +17,39 @@ import { handleRehearsalRequest } from "../server/src/routes/rehearsal";
 import { handleStateRequest } from "../server/src/routes/state";
 import { generateQRCodeSVG } from "../server/src/routes/qr";
 import type { Database } from "bun:sqlite";
+import { authed, controlRequest, operatorCookie } from "./auth-helper";
 
 describe("Givebar Deep Fuzzing, Concurrency, and Stress Engine", () => {
   let db: Database;
+  let cookie: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     db = initDatabase(":memory:");
+    cookie = await operatorCookie(db);
   });
+
+  function donationRequest(id: string, body: Record<string, unknown>): Request {
+    return authed(new Request(`http://localhost:3000/api/donation/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }), cookie);
+  }
 
   // 1. Extreme Dollar Values & Boundary Limits
   test("fuzzes extreme amounts: $0, negative, $10M ceiling, integer overflow limits", async () => {
     // 0 cents -> rejected
-    const req0 = new Request("http://localhost:3000/api/donation/don_zero", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount_cents: 0, donor_name: "Zero Donor" })
-    });
+    const req0 = donationRequest("don_zero", { amount_cents: 0, donor_name: "Zero Donor" });
     const res0 = await handleDonationRequest(req0, db, ["api", "donation", "don_zero"]);
     expect(res0.status).toBe(400);
 
     // Negative cents -> rejected
-    const reqNeg = new Request("http://localhost:3000/api/donation/don_neg", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount_cents: -50000, donor_name: "Neg Donor" })
-    });
+    const reqNeg = donationRequest("don_neg", { amount_cents: -50000, donor_name: "Neg Donor" });
     const resNeg = await handleDonationRequest(reqNeg, db, ["api", "donation", "don_neg"]);
     expect(resNeg.status).toBe(400);
 
     // $10,000,000 (1000000000 cents) -> allowed with confirmed_major_gift
-    const reqMax = new Request("http://localhost:3000/api/donation/don_max", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount_cents: 1000000000,
-        donor_name: "Megadonor Foundation",
-        confirmed_major_gift: true
-      })
-    });
+    const reqMax = donationRequest("don_max", { amount_cents: 1000000000, donor_name: "Megadonor Foundation", confirmed_major_gift: true });
     const resMax = await handleDonationRequest(reqMax, db, ["api", "donation", "don_max"]);
     expect(resMax.status).toBe(201);
 
@@ -77,16 +72,7 @@ describe("Givebar Deep Fuzzing, Concurrency, and Stress Engine", () => {
     for (let i = 0; i < xssPayloads.length; i++) {
       const name = xssPayloads[i];
       const id = `don_fuzz_str_${i}`;
-      const req = new Request(`http://localhost:3000/api/donation/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount_cents: 50000,
-          donor_name: name,
-          donor_phonetic: "Phonetic Test",
-          notes: "Notes <script>alert(2)</script>"
-        })
-      });
+      const req = donationRequest(id, { amount_cents: 50000, donor_name: name, donor_phonetic: "Phonetic Test", notes: "Notes <script>alert(2)</script>" });
 
       const res = await handleDonationRequest(req, db, ["api", "donation", id]);
       expect(res.status).toBe(201);
@@ -108,15 +94,7 @@ describe("Givebar Deep Fuzzing, Concurrency, and Stress Engine", () => {
 
     for (let i = 0; i < count; i++) {
       const id = `don_concurrent_${i}_${Date.now()}`;
-      const req = new Request(`http://localhost:3000/api/donation/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount_cents: 10000, // $100
-          donor_name: `Concurrent Donor ${i}`,
-          source: "rehearsal"
-        })
-      });
+      const req = donationRequest(id, { amount_cents: 10000, donor_name: `Concurrent Donor ${i}`, source: "rehearsal" });
       promises.push(handleDonationRequest(req, db, ["api", "donation", id]));
     }
 
@@ -137,16 +115,7 @@ describe("Givebar Deep Fuzzing, Concurrency, and Stress Engine", () => {
 
     for (let i = 0; i < attempts; i++) {
       const id = `don_card_race_${i}`;
-      const req = new Request(`http://localhost:3000/api/donation/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount_cents: 25000,
-          donor_name: `Racer ${i}`,
-          card_number: cardNum,
-          entered_by: `CLERK_${i}`
-        })
-      });
+      const req = donationRequest(id, { amount_cents: 25000, donor_name: `Racer ${i}`, card_number: cardNum, entered_by: `CLERK_${i}` });
       promises.push(handleDonationRequest(req, db, ["api", "donation", id]));
     }
 
@@ -238,11 +207,7 @@ describe("Givebar Deep Fuzzing, Concurrency, and Stress Engine", () => {
   test("executes rehearsal modes burst, typo, and milestone repeatedly without errors", async () => {
     const modes = ["burst", "single", "typo", "milestone"];
     for (const mode of modes) {
-      const req = new Request("http://localhost:3000/api/rehearsal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode })
-      });
+      const req = authed(new Request("http://localhost:3000/api/rehearsal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) }), cookie);
       const res = await handleRehearsalRequest(req, db);
       expect(res.status).toBe(200);
     }

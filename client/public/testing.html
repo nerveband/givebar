@@ -6,11 +6,23 @@
   <title>Testing — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#070603;color-scheme:dark}</style>
-  <link rel="stylesheet" href="css/tokens.css?v=6.1.0">
+  <link rel="stylesheet" href="css/tokens.css?v=6.3.0">
   <link rel="stylesheet" href="css/base.css?v=6.1.0">
   <link rel="stylesheet" href="css/components.css?v=6.1.0">
-  <link rel="stylesheet" href="css/app.css?v=6.1.0">
+  <link rel="stylesheet" href="css/app.css?v=6.4.0">
   <style>
+    #authenticated-view { container-type: inline-size; }
+    .testing-workbench { display: grid; gap: 24px; align-items: start; margin-bottom: 28px; }
+    .testing-chart-preview, .testing-controls { min-width: 0; }
+    .testing-chart-preview h2 { margin: 0; font-size: 20px; }
+    .testing-preview-frame { position: relative; width: 100%; aspect-ratio: 16/9; overflow: hidden; border: 1px solid #44434a; border-radius: 12px; margin-top: 16px; background: #07080a; }
+    .testing-preview-frame iframe { position: absolute; inset: 0; width: 1920px; height: 1080px; border: 0; transform-origin: top left; }
+    .testing-controls .test-actions-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .testing-controls button { min-height: 48px !important; white-space: normal; }
+    @container (min-width: 52rem) {
+      .testing-workbench { grid-template-columns: minmax(0, 1fr) minmax(20rem, .55fr); }
+      .testing-chart-preview { position: sticky; top: 24px; }
+    }
     .test-banner {
       display: none;
       align-items: center;
@@ -118,7 +130,6 @@
         <a href="/" class="ops-nav-item">Home</a>
         <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
-        <a href="/add" class="ops-nav-item">Add Donation</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item">Settings</a>
         <a href="/testing" class="ops-nav-item active">Testing</a>
@@ -128,29 +139,22 @@
 
     <!-- Main Content Panel -->
     <main class="ops-main">
-      <!-- Unauthenticated Unlock Screen -->
-      <div id="unlock-screen" class="unlock-screen-wrap" style="display: none;">
-        <div class="unlock-card">
-          <svg class="unlock-icon" viewBox="0 0 256 256" fill="currentColor">
-            <path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/>
-          </svg>
-          <h2 class="unlock-title">Testing Unlock</h2>
-          <p class="unlock-desc">Enter the Control Room PIN.</p>
-          <div id="unlock-error" class="unlock-error" style="display: none;">Invalid Control Room PIN</div>
-          <form id="unlock-form" class="unlock-form" onsubmit="return false;">
-            <input type="password" id="unlock-pin-input" class="unlock-input" placeholder="Enter PIN" inputmode="numeric" autocomplete="current-password" required autofocus>
-            <button type="submit" id="btn-submit-unlock" class="btn-primary" style="min-height: 44px; width: 100%;">Unlock</button>
-          </form>
-        </div>
-      </div>
 
-      <div id="authenticated-view">
         <header style="margin-bottom: var(--space-5);">
         <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0 0 6px 0; color: #f4f5f6; letter-spacing: -0.02em;">
           Testing
         </h1>
       </header>
 
+      <div class="testing-workbench">
+      <section class="testing-chart-preview" aria-label="Live ballroom chart preview">
+        <div class="donation-dialog-heading"><h2>Live chart preview</h2><a href="/chart" target="_blank" rel="noopener" class="btn-secondary">Open fullscreen chart</a></div>
+        <p class="form-hint">The actual ballroom screen, using the same chart and live data. Sample gifts affect this event; purge only removes sample data.</p>
+        <div class="testing-preview-frame" id="testing-preview-frame">
+          <iframe id="testing-chart-preview" src="/chart" title="Live ballroom chart during testing" allow="fullscreen"></iframe>
+        </div>
+      </section>
+      <div class="testing-controls">
       <!-- Persistent Test Mode Banner (Shows whenever sample records exist) -->
       <section id="test-mode-banner" class="test-banner" role="status">
         <div>
@@ -215,6 +219,8 @@
 
         <div id="test-feedback" class="test-feedback" role="status" aria-live="polite"></div>
       </section>
+      </div>
+      </div>
 
       <!-- Active Sample Records Table -->
       <section style="background: #18191d; border: 1px solid #27282e; border-radius: var(--brand-radius); padding: var(--space-5);">
@@ -249,7 +255,15 @@
     </main>
   </div>
 
-  <script src="js/presence.js?v=6.2.0"></script>
+  <script src="js/session.js?v=1.0.0"></script>
+  <script src="js/presence.js?v=6.4.0"></script>
   <script src="js/testing.js?v=5.0.0"></script>
+  <script>
+    const previewFrame = document.getElementById('testing-preview-frame');
+    const previewChart = document.getElementById('testing-chart-preview');
+    new ResizeObserver(() => {
+      previewChart.style.transform = `scale(${previewFrame.clientWidth / 1920})`;
+    }).observe(previewFrame);
+  </script>
 </body>
 </html>

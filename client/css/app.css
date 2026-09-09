@@ -613,3 +613,109 @@
   font-size: var(--text-xs);
   color: #d4a359;
 }
+
+/* Shared operator donation language: the same states on entry and management. */
+.ops-shell .btn-delete-row, .ops-shell .btn-row-remove, .ops-shell [data-undo-id] {
+  color: #fca5a5; background: #3a171c; border: 1px solid #78313d;
+  min-width: 56px; min-height: 44px; border-radius: 8px; padding: 8px 12px;
+}
+.ops-shell .status-badge.confirmed, .ops-shell .recent-status.confirmed {
+  color: #86efac; background: #103424; border-radius: 6px; padding: 4px 8px;
+}
+.donation-attribution { color: var(--ink-secondary); font-size: 12px; font-weight: 400; line-height: 1.7; overflow-wrap: anywhere; }
+.ops-shell .btn-secondary { min-height: 44px; }
+.ops-shell .gbp-bar { padding: 16px; }
+.ops-shell .gbp-row { padding: 12px 16px; font-size: 14px; }
+.ops-shell .gbp-ghead { padding: 10px 16px; }
+dialog::backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
+@media (max-width: 600px) {
+  #panel-table { overflow-x: auto; }
+  .donations-table { min-width: 680px; }
+  .ops-shell input, .ops-shell select { font-size: 16px; }
+}
+.ops-shell [data-void-id] { color: #fca5a5; background: #3a171c; border-color: #78313d; min-height:44px; }
+.ops-shell .link-row { border-radius: 12px; padding: 18px; gap: 20px; }
+.ops-shell .hub-section-title { text-transform: none; letter-spacing: -.02em; font-size: 20px; }
+
+.operator-identity {
+  display: grid; gap: 6px; margin: 16px 12px; padding: 16px; text-align: left;
+  color: var(--ink-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: 12px; font: inherit; cursor: pointer; overflow-wrap: anywhere;
+}
+.operator-identity-label { font-size: 12px; color: var(--ink-secondary); }
+.operator-identity-action { font-size: 13px; color: #e6bd7b; text-decoration: underline; text-underline-offset: 3px; }
+.operator-dialog {
+  margin: auto; width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 32px);
+  padding: clamp(20px, 4vw, 32px); border: 1px solid #44434a; border-radius: 20px;
+  background: #18191d; color: #f4f5f6; box-shadow: 0 24px 80px #0009; overflow: auto;
+  font-family: var(--font-sans);
+}
+.operator-dialog form { display: grid; gap: 16px; }
+.operator-dialog h2 { margin: 0; font-size: 24px; line-height: 1.2; }
+.operator-dialog p { margin: 0; line-height: 1.5; color: #b7b8c1; }
+.operator-dialog label { font-weight: 700; }
+.operator-dialog label span { font-weight: 400; color: #b7b8c1; }
+.operator-dialog input {
+  width: 100%; min-height: 56px; padding: 12px 14px; color: #f4f5f6; background: #101114;
+  border: 1px solid #55555f; border-radius: 10px; font: inherit; font-size: 18px;
+}
+.operator-dialog input:focus-visible, .operator-identity:focus-visible { outline: 2px solid #e6bd7b; outline-offset: 3px; }
+.operator-dialog .operator-name-error { color: #fca5a5; }
+.operator-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.operator-dialog-actions button { min-height: 56px; padding: 12px 20px; }
+.operator-dialog [hidden] { display: none !important; }
+.choice-field { border: 0; margin: 0 0 24px; padding: 0; min-width: 0; }
+.choice-field legend { font-weight: 700; padding: 0; margin-bottom: 12px; }
+.choice-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.choice-options label { position: relative; cursor: pointer; flex: 1 1 130px; }
+.choice-options input { position: absolute; width: 20px; height: 20px; top: 18px; left: 12px; accent-color: #e6bd7b; }
+.choice-options span {
+  display: flex; align-items: center; min-height: 56px; padding: 12px 14px 12px 42px;
+  border: 1px solid #55555f; border-radius: 10px; background: #101114; color: #b7b8c1;
+}
+.choice-options input:checked + span { border-color: #e6bd7b; background: #30291c; color: #fff5dd; }
+.choice-options input:focus-visible + span { outline: 2px solid #e6bd7b; outline-offset: 3px; }
+.donation-dialog { width: min(640px, calc(100vw - 24px)); }
+.donation-dialog-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.donation-dialog [type="checkbox"] { width:22px; min-height:22px; height:22px; accent-color:#e6bd7b; flex-shrink:0; }
+.donation-check { display:flex; align-items:center; gap:12px; min-height:56px; }
+.donation-dialog details { border-top:1px solid #44434a; padding-top:16px; }
+.donation-dialog details summary { cursor:pointer; min-height:44px; color:#e6bd7b; }
+.donation-dialog details input { margin:8px 0 16px; }
+.donation-dialog #preset-grid button { flex:1 1 100px; min-height:56px; }
+.donation-dialog #btn-submit-add { min-height:56px; position:sticky; bottom:0; }
+.donation-dialog #add-error-banner { color:#fca5a5; }
+.donation-dialog #major-gift-confirmation { padding:16px; border:1px solid #e6bd7b; border-radius:12px; }
+#add-donation-status, #outbox-status { padding:16px; margin-bottom:20px; border:1px solid #41664a; border-radius:12px; color:#b5ecc1; }
+#outbox-status { border-color:#ad8650; color:#ffe1af; }
+.stage-message-controls { border:1px solid #3a3b43; border-radius:16px; padding:24px; margin-bottom:28px; background:#18191d; }
+.stage-message-controls h2 { margin:0; font-size:20px; }
+.stage-message-controls p { margin:12px 0; line-height:1.5; }
+.stage-message-actions { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0; }
+.stage-message-controls summary { cursor:pointer; padding:12px 0; color:#e6bd7b; }
+.impact-message-row { display:flex; gap:12px; align-items:center; margin:12px 0; }
+.impact-message-row input { min-width:0; flex:1; }
+.stage-message-controls .form-label { display:block; font-weight:700; margin:16px 0 8px; }
+.stage-message-controls .form-input-text {
+  display:block; width:100%; min-height:56px; padding:12px 14px; font:inherit; font-size:16px;
+  background:#101114; color:#f4f5f6; border:1px solid #55555f; border-radius:10px;
+}
+.stage-message-controls .form-input-text:focus-visible { outline:2px solid #e6bd7b; outline-offset:3px; }
+.fundraising-connection h3 { margin:0; font-size:24px; }
+.connection-badge { display:inline-block; padding:8px 12px; border-radius:999px; background:#302c21; color:#ffe1af; font-size:13px; white-space:nowrap; }
+.connection-badge[data-state="connected"] { color:#a4e7b6; background:#153b25; }
+.connection-summary { display:grid; grid-template-columns:minmax(100px,.5fr) minmax(0,1fr); gap:20px; margin:24px 0; padding:20px; background:#101114; border-radius:12px; }
+.connection-summary span { display:block; color:var(--ink-secondary); margin-bottom:8px; font-size:13px; }
+.connection-summary strong { font-size:18px; line-height:1.4; font-variant-numeric:tabular-nums; }
+.connection-config { margin-top:24px; padding-top:24px; border-top:1px solid var(--border-subtle); }
+.connection-config h4 { margin:0 0 20px; font-size:18px; }
+.connection-config .donation-check input { width:22px; height:22px; accent-color:#e6bd7b; }
+.connection-optional { margin-top:28px; border-top:1px solid var(--border-subtle); padding-top:24px; }
+.connection-optional summary { color:var(--ink-secondary); cursor:pointer; min-height:48px; }
+.connection-optional[open] summary { margin-bottom:20px; }
+@media (max-width:600px) { .connection-summary { grid-template-columns:1fr; } .donation-dialog-heading { flex-wrap:wrap; } }
+@media (max-width:600px) {
+  .donation-dialog #preset-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+  .donation-dialog #preset-grid button { padding:8px 4px; font-size:13px; }
+  .donation-dialog form > p { font-size:14px; }
+}

@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { foldLedger, type LedgerEvent } from "../ledger";
-import { isControlAuthorized, readControlPin } from "../auth";
+import { requireRole } from "../authz";
 
 function escapeCSV(val: unknown): string {
   if (val === null || val === undefined) return "";
@@ -16,11 +16,8 @@ function escapeCSV(val: unknown): string {
 }
 
 export function handleExportCSV(req: Request, db: Database): Response {
-  const url = new URL(req.url);
-  const pin = req.headers.get("X-Control-Pin") || url.searchParams.get("pin") || "";
-  if (!isControlAuthorized(readControlPin(db), pin)) {
-    return Response.json({ error: "UNAUTHORIZED", message: "Control Room PIN required to download finance CSV" }, { status: 401 });
-  }
+  const auth = requireRole(db, req, ["admin", "operator"]);
+  if (auth instanceof Response) return auth;
 
   const folded = foldLedger(db);
   const events = db.query<LedgerEvent, []>(`SELECT * FROM ledger ORDER BY seq ASC`).all();

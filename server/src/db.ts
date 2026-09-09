@@ -334,5 +334,88 @@ export function migrateSchema(db: Database): void {
 
       db.exec(`PRAGMA user_version = 6;`);
     }
+    if (userVersion < 7) {
+      db.exec(`ALTER TABLE event_state ADD COLUMN stage_reset_seq INTEGER NOT NULL DEFAULT 0;`);
+      db.exec(`ALTER TABLE event_state ADD COLUMN marker_mode TEXT NOT NULL DEFAULT 'milestones';`);
+      db.exec(`ALTER TABLE event_state ADD COLUMN marker_step_cents INTEGER NOT NULL DEFAULT 10000000;`);
+      db.exec(`ALTER TABLE event_state ADD COLUMN background_image_url TEXT NOT NULL DEFAULT '';`);
+      db.exec(`PRAGMA user_version = 7;`);
+    }
+    if (userVersion < 8) {
+      db.exec(`CREATE TABLE fundraising_sync (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        form_id TEXT NOT NULL DEFAULT '',
+        start_date TEXT NOT NULL DEFAULT '',
+        enabled INTEGER NOT NULL DEFAULT 0,
+        last_sync_at INTEGER,
+        last_error TEXT NOT NULL DEFAULT '',
+        imported_count INTEGER NOT NULL DEFAULT 0
+      );`);
+      db.exec(`INSERT INTO fundraising_sync (id) VALUES (1);`);
+      db.exec(`CREATE TABLE fundraising_receipt (
+        transaction_id TEXT PRIMARY KEY,
+        donation_id TEXT NOT NULL,
+        remote_snapshot TEXT NOT NULL
+      );`);
+      db.exec(`PRAGMA user_version = 8;`);
+    }
+    if (userVersion < 9) {
+      db.exec(`ALTER TABLE event_state ADD COLUMN gradient_start TEXT NOT NULL DEFAULT '#183b46';`);
+      db.exec(`ALTER TABLE event_state ADD COLUMN gradient_end TEXT NOT NULL DEFAULT '#39213d';`);
+      db.exec(`ALTER TABLE event_state ADD COLUMN gradient_angle INTEGER NOT NULL DEFAULT 135;`);
+      db.exec(`ALTER TABLE event_state ADD COLUMN gradient_intensity INTEGER NOT NULL DEFAULT 35;`);
+      db.exec(`ALTER TABLE event_state ADD COLUMN background_video_url TEXT NOT NULL DEFAULT '';`);
+      db.exec(`PRAGMA user_version = 9;`);
+    }
+    if (userVersion < 10) {
+      db.exec(`ALTER TABLE event_state ADD COLUMN impact_messages TEXT NOT NULL DEFAULT '[]';`);
+      db.exec(`PRAGMA user_version = 10;`);
+    }
+    if (userVersion < 11) {
+      db.exec(`ALTER TABLE event_state ADD COLUMN qr_image_url TEXT NOT NULL DEFAULT '';`);
+      db.exec(`ALTER TABLE event_state ADD COLUMN qr_image_backdrop INTEGER NOT NULL DEFAULT 1;`);
+      db.exec(`PRAGMA user_version = 11;`);
+    }
+    if (userVersion < 12) {
+      db.exec(`CREATE TABLE operator_account (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        display_name TEXT NOT NULL,
+        pin_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('admin', 'operator', 'presenter', 'display')),
+        disabled INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );`);
+      db.exec(`CREATE TABLE operator_session (
+        token_hash TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES operator_account(id) ON DELETE CASCADE,
+        expires_at INTEGER NOT NULL
+      );`);
+      db.exec(`CREATE INDEX operator_session_account ON operator_session(account_id);`);
+      db.exec(`CREATE TABLE login_attempt (
+        key TEXT PRIMARY KEY,
+        attempts INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );`);
+      db.exec(`CREATE TABLE access_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        actor_id TEXT,
+        action TEXT NOT NULL,
+        target_id TEXT,
+        created_at INTEGER NOT NULL
+      );`);
+      db.exec(`UPDATE event_state SET control_pin = '', entry_pin = '';`);
+      db.exec(`PRAGMA user_version = 12;`);
+    }
+    if (userVersion < 13) {
+      db.exec(`CREATE TABLE operator_invite (
+        token_hash TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES operator_account(id) ON DELETE CASCADE,
+        expires_at INTEGER NOT NULL,
+        used_at INTEGER
+      );`);
+      db.exec(`CREATE INDEX operator_invite_account ON operator_invite(account_id);`);
+      db.exec(`PRAGMA user_version = 13;`);
+    }
   })();
 }

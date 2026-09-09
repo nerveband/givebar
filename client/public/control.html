@@ -6,10 +6,10 @@
   <title>Manage Donations — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#070603;color-scheme:dark}</style>
-  <link rel="stylesheet" href="css/tokens.css?v=6.1.0">
+  <link rel="stylesheet" href="css/tokens.css?v=6.3.0">
   <link rel="stylesheet" href="css/base.css?v=6.1.0">
   <link rel="stylesheet" href="css/components.css?v=6.1.0">
-  <link rel="stylesheet" href="css/app.css?v=6.1.0">
+  <link rel="stylesheet" href="css/app.css?v=6.4.0">
   <style>
     /* --- Surface link hub. The panel is out of flow, so revealing it never
        moves page content. Identical markup, position, and behaviour on
@@ -174,7 +174,6 @@
         <a href="/" class="ops-nav-item">Home</a>
         <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item active">Manage Donations</a>
-        <a href="/add" class="ops-nav-item">Add Donation</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item">Settings</a>
         <a href="/testing" class="ops-nav-item">Testing</a>
@@ -191,24 +190,7 @@
         <button type="button" id="btn-reconnect-poll" class="btn-ghost" style="padding: 2px 8px; font-size: 11px; color: #d4a359;">Refresh</button>
       </div>
 
-      <!-- Unauthenticated Unlock Screen (State 1) -->
-      <div id="unlock-screen" class="unlock-screen-wrap" style="display: none;">
-        <div class="unlock-card">
-          <svg class="unlock-icon" viewBox="0 0 256 256" fill="currentColor">
-            <path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/>
-          </svg>
-          <h2 class="unlock-title">Control Room Unlock</h2>
-          <p class="unlock-desc">Enter the Control Room PIN.</p>
-          <div id="unlock-error" class="unlock-error" style="display: none;">Invalid Control Room PIN</div>
-          <form id="unlock-form" class="unlock-form" onsubmit="return false;">
-            <input type="password" id="unlock-pin-input" class="unlock-input" placeholder="Enter PIN" inputmode="numeric" autocomplete="current-password" required autofocus>
-            <button type="submit" id="btn-submit-unlock" class="btn-primary" style="min-height: 44px; width: 100%;">Unlock</button>
-          </form>
-        </div>
-      </div>
-
       <!-- Authenticated Content (States 2 & 3) -->
-      <div id="authenticated-view">
         <header style="margin-bottom: var(--space-6); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);">
           <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0; color: #f4f5f6; letter-spacing: -0.02em;">
             Manage Donations
@@ -223,9 +205,7 @@
             <a id="link-export-csv" href="api/export/csv" class="btn-secondary" style="min-height: 38px; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
               Download CSV
             </a>
-            <a href="/add" class="btn-primary" style="min-height: 38px; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
-              + Add Donation
-            </a>
+            <button type="button" id="btn-open-add" class="btn-primary">Add donation</button>
           </div>
         </header>
 
@@ -233,6 +213,21 @@
         <section class="summary-strip" aria-label="Summary Strip">
           <div class="summary-strip-label">Total Raised</div>
           <div class="summary-strip-val" id="summary-total-raised">—</div>
+        </section>
+        <p id="add-donation-status" role="status" hidden></p>
+        <div id="outbox-status" role="status" hidden><span id="outbox-count">0</span> gifts waiting to sync. Keep this browser open. <button type="button" id="btn-retry-outbox" class="btn-secondary">Retry now</button></div>
+        <section class="stage-message-controls" aria-labelledby="stage-message-title">
+          <div class="donation-dialog-heading"><h2 id="stage-message-title">On the ballroom screen</h2><a href="/preview" class="btn-secondary">View screen</a></div>
+          <p class="form-hint">Send a live announcement, or let short impact messages rotate every 12 seconds.</p>
+          <label class="form-label" for="live-stage-message">Stage message</label>
+          <input id="live-stage-message" class="form-input-text" maxlength="160" placeholder="Your announcement for the room">
+          <div class="stage-message-actions"><button type="button" id="publish-stage-message" class="btn-primary">Show message now</button><button type="button" id="hide-stage-message" class="btn-secondary">Return to impact messages</button></div>
+          <p id="stage-message-status" role="status"></p>
+          <details><summary>Edit rotating impact messages</summary>
+            <p class="form-hint">Keep each point short enough to read from across the ballroom. Remove every point to leave the message area blank.</p>
+            <div id="impact-message-list"></div>
+            <div class="stage-message-actions"><button type="button" id="add-impact-message" class="btn-secondary">Add point</button><button type="button" id="save-impact-messages" class="btn-primary">Save rotation</button></div>
+          </details>
         </section>
 
         <!-- Inline Undo Affordance -->
@@ -243,14 +238,6 @@
 
         <!-- Controls Row: Tabs & Search -->
         <div class="controls-bar">
-          <div class="view-tabs" role="tablist" aria-label="Donations View">
-            <button type="button" id="tab-table" class="view-tab active" role="tab" aria-selected="true" aria-controls="panel-table">
-              Table
-            </button>
-            <button type="button" id="tab-stream" class="view-tab" role="tab" aria-selected="false" aria-controls="panel-stream">
-              Stream
-            </button>
-          </div>
 
           <div class="search-wrap">
             <svg class="search-icon" width="14" height="14" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
@@ -261,7 +248,7 @@
         </div>
 
         <!-- Table View -->
-        <div id="panel-table" role="tabpanel" aria-labelledby="tab-table">
+        <div id="panel-table" role="region" aria-label="Donations">
           <table class="donations-table">
             <thead>
               <tr>
@@ -288,25 +275,42 @@
           </table>
         </div>
 
-        <!-- Stream View -->
-        <div id="panel-stream" role="tabpanel" aria-labelledby="tab-stream" style="display: none;">
-          <div id="manage-stream" style="display: flex; flex-direction: column; gap: var(--space-3);">
-            <!-- Keyed stream cards render here -->
-          </div>
-        </div>
 
         <!-- Empty State (Authenticated with 0 donations) -->
         <div id="empty-state" class="empty-state-box" style="display: none;">
           <div class="empty-state-title" id="empty-state-title">No donations yet</div>
           <p class="empty-state-text" id="empty-state-text">Gifts appear here as they are recorded.</p>
-          <a href="/add" id="empty-state-btn" class="btn-primary" style="display: inline-flex;">
-            + Add First Donation
-          </a>
+          <button type="button" id="empty-state-btn" class="btn-primary">Add first donation</button>
         </div>
       </div>
 
     </main>
   </div>
+
+  <dialog id="add-donation-dialog" class="operator-dialog donation-dialog" aria-labelledby="add-dialog-title">
+    <form id="add-donation-form" novalidate>
+      <div class="donation-dialog-heading"><h2 id="add-dialog-title">Add donation</h2><button type="button" id="btn-close-add" class="btn-secondary">Close</button></div>
+      <p>Record a pledge or offline gift. Online gifts are imported automatically—do not enter them again.</p>
+      <label for="donor-name-input">Donor name (required)</label>
+      <input id="donor-name-input" autocomplete="off" required>
+      <label for="amount-numeric-input">Amount in dollars (required)</label>
+      <input id="amount-numeric-input" inputmode="decimal" value="500" required>
+      <div id="preset-grid" class="choice-options" role="group" aria-label="Quick amounts"></div>
+      <label class="donation-check"><input id="donation-anonymous" type="checkbox">Anonymous on public screens</label>
+      <p class="form-hint">The team keeps the donor name. The audience sees “Anonymous Supporter.”</p>
+      <details><summary>Pronunciation and optional details</summary>
+        <label for="donor-phonetic-input">Name pronunciation</label><input id="donor-phonetic-input" autocomplete="off">
+        <div id="field-card-number-wrap" hidden><label for="card-number-input">Card number</label><input id="card-number-input" inputmode="numeric"></div>
+        <div id="field-table-number-wrap" hidden><label for="table-number-input">Table number</label><input id="table-number-input"></div>
+      </details>
+      <p id="add-error-banner" role="alert" hidden></p>
+      <div id="major-gift-confirmation" hidden>
+        <h3>Confirm large donation</h3><p id="guardrail-body"></p>
+        <label class="donation-check"><input id="major-gift-confirmed" type="checkbox">I checked the amount and donor name.</label>
+      </div>
+      <button id="btn-submit-add" type="submit" class="btn-primary">Record donation</button>
+    </form>
+  </dialog>
 
   <!-- Accessible Delete Confirmation Modal Dialog -->
   <div id="delete-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-body">
@@ -320,8 +324,11 @@
     </div>
   </div>
 
-  <script src="js/presence.js?v=6.2.0"></script>
-  <script src="js/control.js?v=6.1.0"></script>
-  <script src="js/linkhub.js?v=6.2.0"></script>
+  <script src="js/session.js?v=1.0.0"></script>
+  <script src="js/presence.js?v=6.4.0"></script>
+  <script src="js/control.js?v=6.4.0"></script>
+  <script src="js/entry.js?v=6.4.0"></script>
+  <script src="js/linkhub.js?v=6.4.0"></script>
+  <script src="js/stage-messages.js?v=6.4.0"></script>
 </body>
 </html>

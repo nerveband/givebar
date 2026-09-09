@@ -7,8 +7,11 @@ import { handleRehearsalRequest } from "./routes/rehearsal";
 import { handleWebhookRequest } from "./routes/webhook";
 import { handleQRRequest } from "./routes/qr";
 import { handlePresenceRequest } from "./presence";
+import { createFundraisingSync } from "./fundraising";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import type { Database } from "bun:sqlite";
+import { getSession } from "./authz";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -16,6 +19,8 @@ const DB_PATH = process.env.GIVEBAR_DB_PATH || "data/givebar.sqlite";
 
 // Initialize SQLite WAL Database
 export const db = initDatabase(DB_PATH);
+const fundraising = createFundraisingSync(db);
+fundraising.start();
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -25,6 +30,8 @@ const MIME_TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".jpg": "image/jpeg",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
   ".woff": "font/woff"
@@ -78,6 +85,13 @@ function serveStaticFile(relativePath: string): Response {
   }
   return new Response("Not Found", { status: 404 });
 }
+function serveOperatorFile(req: Request, db: Database, relativePath: string): Response {
+  const session = getSession(req, db);
+  if (!session || (session.role !== "admin" && session.role !== "operator")) {
+    return serveStaticFile("client/public/signin.html");
+  }
+  return serveStaticFile(relativePath);
+}
 
 export const server = Bun.serve({
   port: PORT,
@@ -90,106 +104,74 @@ export const server = Bun.serve({
     if (req.method === "OPTIONS") {
       return new Response(null, {
         headers: {
-          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Origin": req.headers.get("origin") || "",
+          Vary: "Origin",
           "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, X-Control-Pin, Authorization"
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          "Access-Control-Allow-Credentials": "true"
         }
       });
     }
+    const security: Record<string, string> = {
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+    };
 
     // --- API Routes ---
     if (pathname.startsWith("/api/")) {
       const parts = pathname.split("/").filter(Boolean); // ['api', 'state'] etc.
 
       if (parts[1] === "state") {
-        if (parts[2] === "stream") {
-          return handleStateStreamRequest(req, db);
-        }
-        return handleStateRequest(req, db);
+        const response = parts[2] === "stream" ? handleStateStreamRequest(req, db) : handleStateRequest(req, db);
+        for (const [key, value] of Object.entries(security)) response.headers.set(key, value);
+        return response;
       }
 
-      if (parts[1] === "donation") {
-        return handleDonationRequest(req, db, parts);
-      }
+      let api: Response | null = null;
+      if (parts[1] === "donation") api = await handleDonationRequest(req, db, parts);
+      else if (parts[1] === "control") api = await handleControlRequest(req, db);
+      else if (parts[1] === "export" && parts[2] === "csv") api = handleExportCSV(req, db);
+      else if (parts[1] === "rehearsal") api = await handleRehearsalRequest(req, db);
+      else if (parts[1] === "webhooks") api = await handleWebhookRequest(req, db, parts);
+      else if (parts[1] === "qr") api = handleQRRequest(req, db);
+      else if (parts[1] === "presence") api = await handlePresenceRequest(req, db);
+      else if (parts[1] === "fundraising") api = await fundraising.handle(req);
+      else api = Response.json({ error: "NOT_FOUND", message: `API route ${pathname} not found` }, { status: 404 });
+      for (const [key, value] of Object.entries(security)) api.headers.set(key, value);
+      return api;
 
-      if (parts[1] === "control") {
-        return handleControlRequest(req, db);
-      }
-
-      if (parts[1] === "export" && parts[2] === "csv") {
-        return handleExportCSV(req, db);
-      }
-
-      if (parts[1] === "rehearsal") {
-        return handleRehearsalRequest(req, db);
-      }
-
-      if (parts[1] === "webhooks") {
-        return handleWebhookRequest(req, db, parts);
-      }
-
-      if (parts[1] === "qr") {
-        return handleQRRequest(req, db);
-      }
-
-      if (parts[1] === "presence") {
-        return handlePresenceRequest(req, db);
-      }
-
-      return Response.json({ error: "NOT_FOUND", message: `API route ${pathname} not found` }, { status: 404 });
     }
 
     // --- Surface Page Routes ---
+    // Public ballroom display. Totals, messages, QR, funded progress, and donor chyrons are intentionally public.
+    let page: Response;
     if (pathname === "/" || pathname === "/index.html") {
-      return serveStaticFile("client/public/index.html");
+      page = serveStaticFile("client/public/index.html");
+    } else if (pathname === "/chart" || pathname === "/chart.html" || pathname === "/stage" || pathname === "/stage.html") {
+      page = serveStaticFile("client/public/stage.html");
+    } else if (pathname === "/presenter" || pathname === "/presenter.html" || pathname === "/emcee" || pathname === "/emcee.html") {
+      page = serveStaticFile("client/public/emcee.html");
+    } else if (pathname === "/preview" || pathname === "/preview.html" || pathname === "/presenter-preview") {
+      page = serveStaticFile("client/public/preview.html");
+    } else if (pathname === "/donations" || pathname === "/donations.html" || pathname === "/control" || pathname === "/control.html") {
+      page = serveOperatorFile(req, db, "client/public/control.html");
+    } else if (pathname === "/add" || pathname === "/add.html" || pathname === "/entry" || pathname === "/entry.html") {
+      return Response.redirect(new URL("/donations", req.url), 308);
+    } else if (pathname === "/settings" || pathname === "/settings.html") {
+      page = serveOperatorFile(req, db, "client/public/settings.html");
+    } else if (pathname === "/testing" || pathname === "/testing.html") {
+      page = serveOperatorFile(req, db, "client/public/testing.html");
+    } else if (pathname === "/history" || pathname === "/history.html") {
+      page = serveOperatorFile(req, db, "client/public/history.html");
+    } else if (pathname.startsWith("/css/") || pathname.startsWith("/js/") || pathname.startsWith("/assets/")) {
+      page = serveStaticFile(join("client", pathname));
+    } else {
+      return new Response("Page Not Found", { status: 404 });
     }
+    for (const [key, value] of Object.entries(security)) page.headers.set(key, value);
+    return page;
 
-    if (pathname === "/chart" || pathname === "/chart.html" || pathname === "/stage" || pathname === "/stage.html") {
-      return serveStaticFile("client/public/stage.html");
-    }
-
-    if (pathname === "/donations" || pathname === "/donations.html" || pathname === "/control" || pathname === "/control.html") {
-      return serveStaticFile("client/public/control.html");
-    }
-
-    if (pathname === "/add" || pathname === "/add.html" || pathname === "/entry" || pathname === "/entry.html") {
-      return serveStaticFile("client/public/entry.html");
-    }
-
-    if (pathname === "/presenter" || pathname === "/presenter.html" || pathname === "/emcee" || pathname === "/emcee.html") {
-      return serveStaticFile("client/public/emcee.html");
-    }
-
-    if (pathname === "/settings" || pathname === "/settings.html") {
-      return serveStaticFile("client/public/settings.html");
-    }
-
-    if (pathname === "/testing" || pathname === "/testing.html") {
-      return serveStaticFile("client/public/testing.html");
-    }
-
-    if (pathname === "/history" || pathname === "/history.html") {
-      return serveStaticFile("client/public/history.html");
-    }
-
-    if (pathname === "/preview" || pathname === "/preview.html" || pathname === "/presenter-preview") {
-      return serveStaticFile("client/public/preview.html");
-    }
-
-    // --- Static Asset Serving (CSS, JS, Assets) ---
-    if (pathname.startsWith("/css/")) {
-      return serveStaticFile(join("client", pathname));
-    }
-
-    if (pathname.startsWith("/js/")) {
-      return serveStaticFile(join("client", pathname));
-    }
-
-    if (pathname.startsWith("/assets/")) {
-      return serveStaticFile(join("client", pathname));
-    }
-
-    return new Response("Page Not Found", { status: 404 });
   }
 });
 

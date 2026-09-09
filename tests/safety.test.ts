@@ -12,42 +12,35 @@ import {
 } from "../server/src/ledger";
 import { handleDonationRequest } from "../server/src/routes/donation";
 import { handleControlRequest } from "../server/src/routes/control";
+import { authed, controlRequest, operatorCookie } from "./auth-helper";
 import type { Database } from "bun:sqlite";
 
 describe("Givebar Live Safety Rails & Invariants", () => {
   let db: Database;
+  let cookie: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = initDatabase(":memory:");
+    cookie = await operatorCookie(db);
   });
 
   test("rejects negative or zero amounts", async () => {
-    const req = new Request("http://localhost:3000/api/donation/don_invalid", {
+    const res = await handleDonationRequest(authed(new Request("http://localhost:3000/api/donation/don_invalid", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount_cents: -5000,
-        donor_name: "Negative Donor"
-      })
-    });
-
-    const res = await handleDonationRequest(req, db, ["api", "donation", "don_invalid"]);
+      body: JSON.stringify({ amount_cents: -5000, donor_name: "Negative Donor" })
+    }), cookie), db, ["api", "donation", "don_invalid"]);
     expect(res.status).toBe(400);
     const data = await res.json();
     expect(data.error).toBe("VALIDATION_ERROR");
   });
 
   test("rejects donation missing donor name", async () => {
-    const req = new Request("http://localhost:3000/api/donation/don_missing_name", {
+    const res = await handleDonationRequest(authed(new Request("http://localhost:3000/api/donation/don_missing_name", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount_cents: 100000,
-        donor_name: "   "
-      })
-    });
-
-    const res = await handleDonationRequest(req, db, ["api", "donation", "don_missing_name"]);
+      body: JSON.stringify({ amount_cents: 100000, donor_name: "   " })
+    }), cookie), db, ["api", "donation", "don_missing_name"]);
     expect(res.status).toBe(400);
   });
 
@@ -113,20 +106,15 @@ describe("Givebar Live Safety Rails & Invariants", () => {
   });
 
   test("calculates milestone gaps accurately across multi-tier goals", async () => {
-    const seedReq = new Request("http://localhost:3000/api/control", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "update_settings",
-        goal_cents: 100000000, // $1,000,000
-        milestones: [
-          { cents: 25000000, label: "Staffing" },
-          { cents: 50000000, label: "Legal Clinic" },
-          { cents: 100000000, label: "Expansion" }
-        ]
-      })
-    });
-    expect((await handleControlRequest(seedReq, db)).status).toBe(200);
+    expect((await handleControlRequest(controlRequest({
+      action: "update_settings",
+      goal_cents: 100000000,
+      milestones: [
+        { cents: 25000000, label: "Staffing" },
+        { cents: 50000000, label: "Legal Clinic" },
+        { cents: 100000000, label: "Expansion" }
+      ]
+    }, cookie), db)).status).toBe(200);
 
     // Record $150,000
     recordDonation(db, {

@@ -14,7 +14,7 @@ import {
   toggleDonationAnonymity,
   type EventStateRecord
 } from "../ledger";
-import { isControlAuthorized, isControlPinConfigured } from "../auth";
+import { changePin, createInvite, getSession, login, logout, normalizeUsername, redeemInvite, requireRole } from "../authz";
 import {
   FONT_FAMILY_KEYS,
   isChartOrientation,
@@ -27,25 +27,111 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
   if (req.method.toUpperCase() !== "POST" && req.method.toUpperCase() !== "PUT") {
     return Response.json({ error: "METHOD_NOT_ALLOWED", message: "POST or PUT required" }, { status: 405 });
   }
-
   try {
     const body = await req.json() as Record<string, unknown>;
     const action = String(body.action || (req.method.toUpperCase() === "PUT" ? "update_settings" : ""));
-    const currentState = getEventState(db);
-
-    const providedPin = String(body.pin || req.headers.get("X-Control-Pin") || "");
-    const isControlPinValid = isControlAuthorized(currentState.control_pin, providedPin);
-    if (!isControlPinValid && action !== "auth_check") {
-      return Response.json({ error: "UNAUTHORIZED", message: "Invalid or missing Control Room PIN" }, { status: 401 });
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    if (action === "login") {
+      return (await login(db, String(body.username || ""), String(body.pin || ""), ip)).response;
     }
-
+    if (action === "logout") return logout(req, db);
     if (action === "auth_check") {
-      return Response.json({
-        ok: isControlPinValid,
-        authenticated: isControlPinValid,
-        pin_required: isControlPinConfigured(currentState.control_pin)
-      });
+      const session = getSession(req, db);
+      return Response.json({ ok: Boolean(session), authenticated: Boolean(session), username: session?.username || null, role: session?.role || null });
     }
+    if (action === "redeem_invite") return redeemInvite(db, String(body.token || ""));
+    if (action === "change_pin") return changePin(db, req, String(body.current_pin || ""), String(body.pin || body.next_pin || ""));
+    if (action === "bootstrap_admin") {
+      const existing = db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM operator_account WHERE disabled = 0`).get()?.count || 0;
+      if (existing !== 0) return Response.json({ error: "FORBIDDEN", message: "An administrator already exists." }, { status: 403 });
+      const username = normalizeUsername(body.username);
+      const displayName = String(body.displayName || body.display_name || "").trim().slice(0, 80);
+      const pin = String(body.pin || "");
+      if (!username || !displayName || pin.length < 4 || pin.length > 12) {
+        return Response.json({ error: "INVALID_ACCOUNT", message: "Name, display name, and a 4-12 character PIN are required." }, { status: 400 });
+      }
+      const id = crypto.randomUUID();
+      db.query(`INSERT INTO operator_account (id, username, display_name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, 'admin', ?)`)
+        .run(id, username, displayName, await Bun.password.hash(pin), Date.now());
+      db.query(`INSERT INTO access_audit (actor_id, action, created_at) VALUES (?, 'bootstrap_admin', ?)`).run(id, Date.now());
+      return Response.json({ ok: true, id });
+    }
+    if (action === "create_account") {
+      const admin = requireRole(db, req, ["admin"]);
+      if (admin instanceof Response) return admin;
+      const username = normalizeUsername(body.username);
+      const displayName = String(body.displayName || body.display_name || "").trim().slice(0, 80);
+      const pin = String(body.pin || "");
+      const role = String(body.role || "operator");
+      if (!username || !displayName || pin.length < 4 || pin.length > 12 || !["admin", "operator"].includes(role)) {
+        return Response.json({ error: "INVALID_ACCOUNT", message: "Name, display name, 4-12 character PIN, and admin/operator role are required." }, { status: 400 });
+      }
+      const id = crypto.randomUUID();
+      try {
+        db.query(`INSERT INTO operator_account (id, username, display_name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+          .run(id, username, displayName, await Bun.password.hash(pin), role, Date.now());
+      } catch {
+        return Response.json({ error: "ACCOUNT_EXISTS", message: "That operator name already exists." }, { status: 409 });
+      }
+      db.query(`INSERT INTO access_audit (actor_id, action, target_id, created_at) VALUES (?, 'create_account', ?, ?)`).run(admin.accountId, id, Date.now());
+      return Response.json({ ok: true, id });
+    }
+    if (action === "send_invite") {
+      const admin = requireRole(db, req, ["admin"]);
+      if (admin instanceof Response) return admin;
+      const id = String(body.id || "");
+      const row = db.query<{ id: string }, [string]>(`SELECT id FROM operator_account WHERE id = ?`).get(id);
+      if (!row) return Response.json({ error: "NOT_FOUND", message: "Operator not found." }, { status: 404 });
+      try {
+        const { link } = await createInvite(db, req, id, String(body.email || ""));
+        db.query(`INSERT INTO access_audit (actor_id, action, target_id, created_at) VALUES (?, 'send_invite', ?, ?)`).run(admin.accountId, id, Date.now());
+        return Response.json({ ok: true, link });
+      } catch (error) {
+        return Response.json({ error: "INVITE_FAILED", message: error instanceof Error ? error.message : "Could not send invite." }, { status: 400 });
+      }
+    }
+    if (action === "update_account") {
+      const admin = requireRole(db, req, ["admin"]);
+      if (admin instanceof Response) return admin;
+      const id = String(body.id || "");
+      const row = db.query<{ id: string }, [string]>(`SELECT id FROM operator_account WHERE id = ?`).get(id);
+      if (!row) return Response.json({ error: "NOT_FOUND", message: "Operator not found." }, { status: 404 });
+      const displayName = body.displayName !== undefined || body.display_name !== undefined ? String(body.displayName || body.display_name || "").trim().slice(0, 80) : undefined;
+      const role = body.role !== undefined ? String(body.role) : undefined;
+      const pin = body.pin !== undefined ? String(body.pin) : undefined;
+      const disabled = body.disabled !== undefined ? Boolean(body.disabled) : undefined;
+      if (displayName !== undefined && !displayName) return Response.json({ error: "INVALID_ACCOUNT", message: "Display name cannot be empty." }, { status: 400 });
+      if (role !== undefined && !["admin", "operator"].includes(role)) return Response.json({ error: "INVALID_ACCOUNT", message: "Role must be admin or operator." }, { status: 400 });
+      if (pin !== undefined && pin !== "" && (pin.length < 4 || pin.length > 12)) return Response.json({ error: "INVALID_PIN", message: "PIN must be 4-12 characters." }, { status: 400 });
+      if (disabled !== undefined && id === admin.accountId && disabled) return Response.json({ error: "INVALID_ACCOUNT", message: "You cannot disable your own administrator account." }, { status: 400 });
+      if (displayName !== undefined) db.query(`UPDATE operator_account SET display_name = ? WHERE id = ?`).run(displayName, id);
+      if (role !== undefined) db.query(`UPDATE operator_account SET role = ? WHERE id = ?`).run(role, id);
+      if (pin) db.query(`UPDATE operator_account SET pin_hash = ? WHERE id = ?`).run(await Bun.password.hash(pin), id);
+      if (disabled !== undefined) db.query(`UPDATE operator_account SET disabled = ? WHERE id = ?`).run(disabled ? 1 : 0, id);
+      db.query(`INSERT INTO access_audit (actor_id, action, target_id, created_at) VALUES (?, 'update_account', ?, ?)`).run(admin.accountId, id, Date.now());
+      return Response.json({ ok: true });
+    }
+    if (action === "list_accounts") {
+      const admin = requireRole(db, req, ["admin"]);
+      if (admin instanceof Response) return admin;
+      const accounts = db.query<{ id: string; username: string; display_name: string; role: string; disabled: number }, []>(
+        `SELECT id, username, display_name, role, disabled FROM operator_account ORDER BY username`
+      ).all();
+      return Response.json({ ok: true, accounts: accounts.map((account) => ({ ...account, disabled: Boolean(account.disabled) })) });
+    }
+    if (action === "list_audit") {
+      const admin = requireRole(db, req, ["admin"]);
+      if (admin instanceof Response) return admin;
+      const rows = db.query<{ actor: string | null; action: string; target: string | null; created_at: number }, []>(
+        `SELECT a.username AS actor, l.action, l.target_id AS target, l.created_at
+         FROM access_audit l LEFT JOIN operator_account a ON a.id = l.actor_id
+         ORDER BY l.id DESC LIMIT 100`
+      ).all();
+      return Response.json({ ok: true, audit: rows });
+    }
+    const operator = requireRole(db, req, ["admin", "operator"]);
+    if (operator instanceof Response) return operator;
+    const currentState = getEventState(db);
 
     switch (action) {
       case "update_settings": {
@@ -71,20 +157,8 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
             }, { status: 409 });
           }
         }
-        // Empty string clears the PIN and reopens the surface; 4-12 chars sets one.
-        if (typeof body.control_pin === "string") {
-          const cp = body.control_pin.trim();
-          if (cp !== "" && (cp.length < 4 || cp.length > 12)) {
-            return Response.json({ error: "INVALID_PIN", message: "Control PIN must be between 4 and 12 characters, or empty to disable it" }, { status: 400 });
-          }
-          patch.control_pin = cp;
-        }
-        if (typeof body.entry_pin === "string") {
-          const ep = body.entry_pin.trim();
-          if (ep !== "" && (ep.length < 4 || ep.length > 12)) {
-            return Response.json({ error: "INVALID_PIN", message: "Entry PIN must be between 4 and 12 characters, or empty to disable it" }, { status: 400 });
-          }
-          patch.entry_pin = ep;
+        if (body.control_pin !== undefined || body.entry_pin !== undefined) {
+          return Response.json({ error: "REMOVED_AUTH", message: "Shared PINs are retired. Create a named operator account instead." }, { status: 410 });
         }
 
         if (typeof body.event_name === "string" && body.event_name.trim()) {
@@ -132,6 +206,63 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
             }, { status: 400 });
           }
           patch.chart_orientation = orientation;
+        }
+        if (body.marker_mode !== undefined) {
+          if (!["milestones", "dollars", "none"].includes(String(body.marker_mode))) {
+            return Response.json({ error: "INVALID_SETTING", message: "Choose milestones, dollars, or no chart markers." }, { status: 400 });
+          }
+          patch.marker_mode = String(body.marker_mode);
+        }
+        if (body.marker_step_cents !== undefined) {
+          if (typeof body.marker_step_cents !== "number" || !Number.isSafeInteger(body.marker_step_cents) || body.marker_step_cents < 100) {
+            return Response.json({ error: "INVALID_SETTING", message: "Marker spacing must be at least $1 in whole cents." }, { status: 400 });
+          }
+          patch.marker_step_cents = body.marker_step_cents;
+        }
+        if (typeof body.background_image_url === "string") {
+          patch.background_image_url = body.background_image_url.trim();
+        }
+        if (body.qr_image_url !== undefined) {
+          const image = typeof body.qr_image_url === "string" ? body.qr_image_url.trim() : null;
+          if (image === null || image.length > 2800000 || (image !== "" && !/^(?:https:\/\/[^\s]+|\/(?!\/)[^\s]+|data:image\/(?:png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/]+={0,2})$/i.test(image))) {
+            return Response.json({ error: "INVALID_SETTING", message: "Choose a PNG, JPEG, WebP, or SVG image up to 2 MB, an HTTPS image URL, or a local asset path." }, { status: 400 });
+          }
+          patch.qr_image_url = image;
+        }
+        if (body.qr_image_backdrop !== undefined) {
+          if (typeof body.qr_image_backdrop !== "boolean") {
+            return Response.json({ error: "INVALID_SETTING", message: "QR backdrop must be on or off." }, { status: 400 });
+          }
+          patch.qr_image_backdrop = body.qr_image_backdrop ? 1 : 0;
+        }
+        for (const key of ["gradient_start", "gradient_end"] as const) {
+          if (body[key] !== undefined) {
+            if (typeof body[key] !== "string" || !/^#[0-9a-f]{6}$/i.test(body[key])) {
+              return Response.json({ error: "INVALID_SETTING", message: `${key} must be a six-digit hex color.` }, { status: 400 });
+            }
+            patch[key] = body[key];
+          }
+        }
+        for (const [key, max] of [["gradient_angle", 360], ["gradient_intensity", 100]] as const) {
+          if (body[key] !== undefined) {
+            if (typeof body[key] !== "number" || !Number.isInteger(body[key]) || body[key] < 0 || body[key] > max) {
+              return Response.json({ error: "INVALID_SETTING", message: `${key} must be between 0 and ${max}.` }, { status: 400 });
+            }
+            patch[key] = body[key];
+          }
+        }
+        if (typeof body.background_video_url === "string") {
+          const video = body.background_video_url.trim();
+          if (video && !/^(https?:\/\/|\/(?!\/))/i.test(video)) {
+            return Response.json({ error: "INVALID_SETTING", message: "Use an HTTPS video URL or a local asset path." }, { status: 400 });
+          }
+          patch.background_video_url = video;
+        }
+        if (body.impact_messages !== undefined) {
+          if (!Array.isArray(body.impact_messages) || body.impact_messages.length > 12 || body.impact_messages.some((text: unknown) => typeof text !== "string" || text.trim().length > 160)) {
+            return Response.json({ error: "INVALID_SETTING", message: "Use up to 12 impact messages, each no longer than 160 characters." }, { status: 400 });
+          }
+          patch.impact_messages = JSON.stringify(body.impact_messages.map((text: string) => text.trim()).filter(Boolean));
         }
         if (typeof body.text_color === "string") {
           const textColor = body.text_color.trim();
@@ -316,25 +447,6 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
         break;
       }
 
-      case "update_pins": {
-        const updates: Partial<EventStateRecord> = {};
-        if (typeof body.entry_pin === "string") {
-          const ep = body.entry_pin.trim();
-          if (ep !== "" && (ep.length < 4 || ep.length > 12)) {
-            return Response.json({ error: "INVALID_PIN", message: "Entry PIN must be between 4 and 12 characters, or empty to disable it" }, { status: 400 });
-          }
-          updates.entry_pin = ep;
-        }
-        if (typeof body.control_pin === "string") {
-          const cp = body.control_pin.trim();
-          if (cp !== "" && (cp.length < 4 || cp.length > 12)) {
-            return Response.json({ error: "INVALID_PIN", message: "Control PIN must be between 4 and 12 characters, or empty to disable it" }, { status: 400 });
-          }
-          updates.control_pin = cp;
-        }
-        updateEventState(db, updates);
-        break;
-      }
       case "start_timer": {
         const sec = typeof body.seconds === "number" ? Math.round(body.seconds) : undefined;
         startTimer(db, sec);
@@ -375,11 +487,19 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
       }
       case "purge_rehearsal": {
         db.transaction(() => {
-          db.exec("DELETE FROM ledger WHERE source = 'rehearsal';");
-          db.exec("DELETE FROM active_card WHERE entered_by LIKE 'CLERK_%' OR entered_by LIKE 'User_%' OR entered_by = 'REHEARSAL_BOT';");
+          const sampleIds = db.query<{ donation_id: string }, []>(
+            "SELECT DISTINCT donation_id FROM ledger WHERE source = 'rehearsal' AND event_type = 'create'"
+          ).all();
+          for (const { donation_id } of sampleIds) {
+            db.query("DELETE FROM active_card WHERE donation_id = ?").run(donation_id);
+            db.query("DELETE FROM held_donations WHERE donation_id = ?").run(donation_id);
+            db.query("DELETE FROM ledger WHERE donation_id = ? OR donation_id = ?").run(donation_id, `match_${donation_id}`);
+          }
           const folded = foldLedger(db);
           updateEventState(db, {
-            odometer_floor_cents: folded.total_raised_cents
+            odometer_floor_cents: folded.total_raised_cents,
+            stage_reset_seq: currentState.stage_reset_seq + 1,
+            pinned_donation_id: null
           });
         })();
         break;
@@ -393,14 +513,26 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
           updateEventState(db, { bloomerang_last_error: "API key is required" });
           return Response.json({ ok: false, error: "API key is required" }, { status: 400 });
         }
-        const now = Date.now();
-        updateEventState(db, {
-          bloomerang_api_key: candidateKey,
-          bloomerang_last_sync_at: now,
-          bloomerang_last_error: ""
-        });
-        const nextState = getControlState(db);
-        return Response.json({ ok: true, connected: true, last_sync_at: now, state: nextState });
+        try {
+          const response = await fetch("https://api.bloomerang.co/v2/database", {
+            headers: { "X-API-KEY": candidateKey, Accept: "application/json" },
+            signal: AbortSignal.timeout(10000), redirect: "error"
+          });
+          if (!response.ok) {
+            const message = `Bloomerang rejected the connection (HTTP ${response.status}). Check the CRM private API key.`;
+            updateEventState(db, { bloomerang_last_error: message });
+            return Response.json({ ok: false, connected: false, error: message }, { status: 502 });
+          }
+          const organization = await response.json() as { Id?: string; Name?: string };
+          if (!organization.Id || !organization.Name) throw new Error("Unexpected organization response");
+          updateEventState(db, { bloomerang_api_key: candidateKey, bloomerang_last_error: "" });
+          return Response.json({ ok: true, connected: true, organization: organization.Name,
+            last_sync_at: state.bloomerang_last_sync_at, state: getControlState(db) });
+        } catch {
+          const message = "Could not verify the Bloomerang connection. No donations were imported.";
+          updateEventState(db, { bloomerang_last_error: message });
+          return Response.json({ ok: false, connected: false, error: message }, { status: 502 });
+        }
       }
 
       case "reset_ledger": {
@@ -418,6 +550,8 @@ export async function handleControlRequest(req: Request, db: Database): Promise<
           db.exec("DELETE FROM connector_state;");
           updateEventState(db, {
             odometer_floor_cents: 0,
+            stage_reset_seq: currentState.stage_reset_seq + 1,
+            pinned_donation_id: null,
             is_frozen: 0,
             match_total_cents: 0,
             is_match_active: 0

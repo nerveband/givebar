@@ -6,10 +6,10 @@
   <title>Settings — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#070603;color-scheme:dark}</style>
-  <link rel="stylesheet" href="css/tokens.css?v=6.1.0">
+  <link rel="stylesheet" href="css/tokens.css?v=6.3.0">
   <link rel="stylesheet" href="css/base.css?v=6.1.0">
   <link rel="stylesheet" href="css/components.css?v=6.1.0">
-  <link rel="stylesheet" href="css/app.css?v=6.1.0">
+  <link rel="stylesheet" href="css/app.css?v=6.4.0">
   <style>
     .settings-accordion {
       display: flex;
@@ -289,20 +289,6 @@
       margin-bottom: 8px;
     }
 
-    .font-preview-title {
-      font-size: var(--text-lg);
-      color: #f4f5f6;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .font-preview-figure {
-      font-size: var(--text-3xl);
-      font-weight: 800;
-      color: #d4a359;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: -0.02em;
-    }
 
     /* Access / PIN */
     .pin-status {
@@ -413,7 +399,6 @@
         <a href="/" class="ops-nav-item">Home</a>
         <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
-        <a href="/add" class="ops-nav-item">Add Donation</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item active" aria-current="page">Settings</a>
         <a href="/testing" class="ops-nav-item">Testing</a>
@@ -423,24 +408,6 @@
 
     <!-- Main Content Panel -->
     <main class="ops-main">
-      <!-- Unlock screen: only ever shown after the server answers 401.
-           With no Control Room PIN configured this never appears. -->
-      <div id="unlock-screen" class="unlock-screen-wrap" style="display: none;">
-        <div class="unlock-card">
-          <svg class="unlock-icon" viewBox="0 0 256 256" fill="currentColor">
-            <path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/>
-          </svg>
-          <h2 class="unlock-title">Settings Unlock</h2>
-          <p class="unlock-desc">Enter the Control Room PIN.</p>
-          <div id="unlock-error" class="unlock-error" style="display: none;">Invalid Control Room PIN</div>
-          <form id="unlock-form" class="unlock-form" onsubmit="return false;">
-            <input type="password" id="unlock-pin-input" class="unlock-input" placeholder="Enter PIN" inputmode="numeric" autocomplete="current-password" required autofocus>
-            <button type="submit" id="btn-submit-unlock" class="btn-primary" style="min-height: 44px; width: 100%;">Unlock</button>
-          </form>
-        </div>
-      </div>
-
-      <div id="authenticated-view">
         <header style="margin-bottom: var(--space-5); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); max-width: 900px;">
           <div>
             <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0 0 6px 0; color: #f4f5f6; letter-spacing: -0.02em;">
@@ -502,7 +469,7 @@
 
               <div class="form-group">
                 <label class="form-label" for="setting-goal-dollars">Fundraising Goal (dollars)</label>
-                <input type="number" id="setting-goal-dollars" class="form-input-text" placeholder="500000" min="1" step="1">
+                <input type="text" inputmode="decimal" id="setting-goal-dollars" class="form-input-text" placeholder="1,500,000">
                 <div class="field-error" id="err-goal">Enter a goal of at least $1.</div>
               </div>
 
@@ -510,6 +477,25 @@
                 <label class="form-label" for="setting-trust-badge">Trust Badge Text</label>
                 <div class="form-hint">Printed under the QR code. Empty hides it.</div>
                 <input type="text" id="setting-trust-badge" class="form-input-text" placeholder="501(c)(3) Tax-Deductible Contribution">
+              </div>
+              <div class="form-group">
+                <fieldset id="setting-marker-mode" class="choice-field">
+                  <legend>Chart markers</legend>
+                  <div class="choice-options">
+                    <label><input type="radio" name="marker-mode" value="milestones" checked><span>Named milestones</span></label>
+                    <label><input type="radio" name="marker-mode" value="dollars"><span>Dollar amounts</span></label>
+                    <label><input type="radio" name="marker-mode" value="none"><span>No markers</span></label>
+                  </div>
+                </fieldset>
+                <fieldset id="setting-marker-step" class="choice-field">
+                  <legend>Dollar marker spacing</legend>
+                  <div class="choice-options">
+                    <label><input type="radio" name="marker-step" value="5000000"><span>$50,000</span></label>
+                    <label><input type="radio" name="marker-step" value="10000000" checked><span>$100,000</span></label>
+                    <label><input type="radio" name="marker-step" value="15000000"><span>$150,000</span></label>
+                    <label><input type="radio" name="marker-step" value="25000000"><span>$250,000</span></label>
+                  </div>
+                </fieldset>
               </div>
 
               <div class="form-group group-divider">
@@ -549,6 +535,9 @@
                 <label class="form-label" for="setting-logo-url">Logo URL</label>
                 <div class="form-hint">Direct link to a hosted png or svg.</div>
                 <input type="url" id="setting-logo-url" class="form-input-text" placeholder="https://example.org/logo.png">
+                <label class="form-label" for="setting-logo-file">Upload logo</label>
+                <input type="file" id="setting-logo-file" accept="image/png,image/jpeg,image/webp" class="form-input-text">
+                <div class="form-hint">PNG, JPEG, or WebP. Maximum 2 MB. Saved with your settings.</div>
               </div>
 
               <div class="inline-fields">
@@ -556,6 +545,7 @@
                   <label class="form-label" for="setting-bar-color">Bar Color</label>
                   <div class="form-hint">#hex or oklch(). Empty keeps amber.</div>
                   <input type="text" id="setting-bar-color" class="form-input-text" placeholder="#d4a359" spellcheck="false">
+                  <input type="color" id="setting-bar-picker" value="#d4a359" aria-label="Choose bar color">
                   <div class="field-error" id="err-bar-color">Use a #hex or oklch() value, or leave it empty.</div>
                 </div>
 
@@ -563,6 +553,7 @@
                   <label class="form-label" for="setting-text-color">Figure Text Color</label>
                   <div class="form-hint">#hex or oklch(). Empty keeps amber.</div>
                   <input type="text" id="setting-text-color" class="form-input-text" placeholder="#f4d19b" spellcheck="false">
+                  <input type="color" id="setting-text-picker" value="#f4d19b" aria-label="Choose figure text color">
                   <div class="field-error" id="err-text-color">Use a #hex or oklch() value, or leave it empty.</div>
                 </div>
               </div>
@@ -585,6 +576,29 @@
                   </select>
                 </div>
               </div>
+              <fieldset class="choice-field" id="gradient-controls">
+                <legend>Gradient appearance</legend>
+                <p class="form-hint">Choose Subtle Gradient above to use these colors. Preview changes before saving.</p>
+                <div class="inline-fields">
+                  <label class="form-group">First color<input id="setting-gradient-start" type="color" value="#183b46" class="form-input-text"></label>
+                  <label class="form-group">Second color<input id="setting-gradient-end" type="color" value="#39213d" class="form-input-text"></label>
+                </div>
+                <label class="form-label" for="setting-gradient-angle">Direction <output id="gradient-angle-value">135°</output></label>
+                <input id="setting-gradient-angle" type="range" min="0" max="360" value="135" style="width:100%">
+                <label class="form-label" for="setting-gradient-intensity">Intensity <output id="gradient-intensity-value">35%</output></label>
+                <input id="setting-gradient-intensity" type="range" min="0" max="100" value="35" style="width:100%">
+              </fieldset>
+              <div class="form-group">
+                <label class="form-label" for="setting-background-url">Background artwork URL</label>
+                <input type="url" id="setting-background-url" class="form-input-text" placeholder="https://example.org/artwork.webp">
+                <label class="form-label" for="setting-background-file">Upload background artwork</label>
+                <input type="file" id="setting-background-file" accept="image/png,image/jpeg,image/webp" class="form-input-text">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="setting-background-video">Looping background video URL</label>
+                <input id="setting-background-video" type="text" class="form-input-text" placeholder="/assets/gala-background-loop.mp4">
+                <p class="form-hint">Optional silent MP4. Background artwork remains visible if video cannot play. Reduced-motion viewers see the still artwork.</p>
+              </div>
 
               <div class="form-group">
                 <label class="form-label" for="setting-font-family">Typeface</label>
@@ -596,9 +610,10 @@
                   <option value="serif">Serif</option>
                 </select>
                 <div class="font-preview" id="font-preview">
-                  <div class="font-preview-label">Live preview</div>
-                  <div class="font-preview-title" id="font-preview-title">Raise the Roof 2026</div>
-                  <div class="font-preview-figure">$248,500</div>
+                  <div class="font-preview-label">Unsaved chart preview — the ballroom changes only after Save</div>
+                  <div style="position:relative;aspect-ratio:16/9;overflow:hidden" id="settings-preview-frame">
+                    <iframe id="settings-chart-preview" src="/chart?preview=1" title="Live chart settings preview" style="border:0;width:1920px;height:1080px;transform-origin:top left;position:absolute;top:0;left:0" sandbox="allow-scripts allow-same-origin"></iframe>
+                  </div>
                 </div>
               </div>
             </div>
@@ -616,14 +631,28 @@
             <div class="accordion-body" id="sec-qr-body">
               <div class="form-group">
                 <label class="form-label" for="setting-qr-url">QR Destination URL</label>
-                <div class="form-hint">Encoded in the QR code, never printed — put UTM parameters here. Empty removes the QR block from the chart.</div>
+                <div class="form-hint">Encoded in the automatic QR code. An uploaded graphic keeps its own destination—changing this URL cannot change the image.</div>
                 <input type="url" id="setting-qr-url" class="form-input-text" placeholder="https://give.example.org/gala?utm_source=ballroom&amp;utm_medium=qr" spellcheck="false">
                 <div class="field-error" id="err-qr-url">Enter a full http:// or https:// address, or leave it empty.</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="setting-qr-image-file">Custom QR artwork</label>
+                <p class="form-hint">Optional SVG, PNG, WebP, or JPEG, up to 2 MB. Transparency is preserved. Scan the uploaded code before the event to confirm its destination.</p>
+                <input type="file" id="setting-qr-image-file" accept="image/svg+xml,image/png,image/webp,image/jpeg" class="form-input-text">
+                <input type="hidden" id="setting-qr-image-url">
+                <div style="display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap">
+                  <img id="qr-artwork-preview" alt="Uploaded QR artwork" hidden style="width:160px;height:160px;object-fit:contain;background:#111114;border:1px solid #44434a;border-radius:8px">
+                  <button type="button" id="clear-qr-artwork" class="btn-secondary" hidden>Use automatic QR instead</button>
+                </div>
+                <label class="toggle-check-label" for="setting-qr-image-backdrop" style="margin-top:16px">
+                  <input type="checkbox" id="setting-qr-image-backdrop" class="anon-checkbox" checked>
+                  <span class="toggle-check-copy"><span>White backdrop behind custom artwork</span><span class="form-hint">Turn off for light-colored artwork designed for the dark chart. Keep a clear, high-contrast margin around the code.</span></span>
+                </label>
               </div>
 
               <div class="form-group">
                 <label class="form-label" for="setting-display-url">Printed Short URL</label>
-                <div class="form-hint">Printed under the QR code for people typing it. Empty prints the QR destination without its query string.</div>
+                <div class="form-hint">Printed beside the QR code for people typing it. Empty prints the QR destination without its query string.</div>
                 <input type="url" id="setting-display-url" class="form-input-text" placeholder="give.example.org/gala" spellcheck="false">
                 <div class="form-hint after" id="display-url-effective">Printed on the chart: <strong>—</strong></div>
               </div>
@@ -675,16 +704,6 @@
                 </div>
               </div>
 
-              <div class="form-group group-divider">
-                <label class="form-label" for="setting-stage-message">Stage Message</label>
-                <input type="text" id="setting-stage-message" class="form-input-text" placeholder="Every gift in the next ten minutes is matched">
-                <label for="toggle-stage-message-visible" class="toggle-check-label" style="margin-top: 8px;">
-                  <input type="checkbox" id="toggle-stage-message-visible" class="anon-checkbox">
-                  <span class="toggle-check-copy">
-                    <span>Show the stage message right now</span>
-                  </span>
-                </label>
-              </div>
             </div>
           </section>
 
@@ -721,7 +740,7 @@
               <div class="form-group group-divider">
                 <label class="form-label" for="setting-guardrail-threshold">Large Gift Confirmation Threshold (dollars)</label>
                 <div class="form-hint">Gifts at or above this make Add Donation ask for confirmation.</div>
-                <input type="number" id="setting-guardrail-threshold" class="form-input-text" placeholder="9500" min="1" step="1">
+                <input type="text" inputmode="decimal" id="setting-guardrail-threshold" class="form-input-text" placeholder="9,500">
               </div>
 
               <div class="form-group">
@@ -749,7 +768,7 @@
                 <div class="form-group">
                   <label class="form-label" for="setting-match-pool">Match Pool Total (dollars)</label>
                   <div class="form-hint">Matching stops once the pool is exhausted.</div>
-                  <input type="number" id="setting-match-pool" class="form-input-text" placeholder="100000" min="0" step="1">
+                  <input type="text" inputmode="decimal" id="setting-match-pool" class="form-input-text" placeholder="100,000">
                 </div>
               </div>
             </div>
@@ -760,14 +779,35 @@
             <button type="button" class="accordion-header" data-toggle="sec-connections" aria-expanded="false" aria-controls="sec-connections-body">
               <span class="accordion-header-text">
                 <span>Connections</span>
-                <span class="accordion-header-sub">Bloomerang CRM sync</span>
+                <span class="accordion-header-sub">Fundraising import and CRM credentials</span>
               </span>
               <svg class="accordion-chevron" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
             </button>
             <div class="accordion-body" id="sec-connections-body">
-              <div class="form-group">
-                <label class="form-label" for="setting-bloomerang-key">Bloomerang API Key</label>
-                <div class="form-hint">Stored server-side only, never sent to any screen. Leave the masked value to keep the current key.</div>
+              <section class="fundraising-connection" aria-labelledby="fundraising-title">
+                <div class="donation-dialog-heading"><h3 id="fundraising-title">Bloomerang Fundraising</h3><span id="fundraising-badge" class="connection-badge">Checking…</span></div>
+                <p class="form-hint">Online gifts flow into the donation ledger every 30 seconds. No manual re-entry needed.</p>
+                <div class="connection-summary">
+                  <div><span>Imported gifts</span><strong id="fundraising-count">—</strong></div>
+                  <div><span>Last successful sync</span><strong id="fundraising-last-sync">—</strong></div>
+                </div>
+                <p id="fundraising-status" role="status">Checking connection…</p>
+                <button id="fundraising-sync" type="button" class="btn-secondary">Sync now</button>
+                <div class="connection-config">
+                  <h4>Import settings</h4>
+                  <div class="inline-fields">
+                    <div class="form-group"><label class="form-label" for="fundraising-form-id">Gala form ID</label><input id="fundraising-form-id" class="form-input-text" inputmode="numeric" autocomplete="off"></div>
+                    <div class="form-group"><label class="form-label" for="fundraising-start-date">Include gifts from</label><input id="fundraising-start-date" class="form-input-text" type="date"></div>
+                  </div>
+                  <label class="donation-check"><input id="fundraising-enabled" type="checkbox">Automatically import gifts</label>
+                  <p class="form-hint">Refunds and corrections update the ledger. Processing-fee assistance and ticket purchases do not count as gifts.</p>
+                  <button id="fundraising-save" type="button" class="btn-primary">Save import settings</button>
+                </div>
+                <p class="form-hint">The API token is secured on the server. It is never shown here.</p>
+              </section>
+              <details class="connection-optional"><summary>Optional: Bloomerang CRM credential check</summary>
+                <label class="form-label" for="setting-bloomerang-key">Optional Bloomerang CRM API Key</label>
+                <div class="form-hint">CRM credential verification only—not a donation importer. Separate from the Fundraising connection above.</div>
                 <div style="position: relative; display: flex; align-items: center;">
                   <input type="password" id="setting-bloomerang-key" class="form-input-text" placeholder="Paste key" autocomplete="new-password" spellcheck="false">
                   <button type="button" id="btn-toggle-key-view" class="btn-ghost" style="position: absolute; right: 8px; padding: 4px 8px; font-size: var(--text-xs);" aria-label="Toggle key visibility">
@@ -786,7 +826,7 @@
 
                 <div id="conn-sync-info" style="font-size: var(--text-xs); color: #66676e; margin-top: var(--space-2);"></div>
                 <div id="conn-error-info" style="display: none; font-size: var(--text-xs); color: #f87171; margin-top: var(--space-2);"></div>
-              </div>
+              </details>
             </div>
           </section>
 
@@ -828,41 +868,30 @@
             </div>
           </section>
 
-          <!-- 8. ACCESS -->
+          <!-- 8. OPERATOR ACCOUNTS -->
           <section class="accordion-panel" id="sec-access">
             <button type="button" class="accordion-header" data-toggle="sec-access" aria-expanded="false" aria-controls="sec-access-body">
               <span class="accordion-header-text">
-                <span>Access</span>
-                <span class="accordion-header-sub">Control Room PIN and volunteer pad PIN</span>
+                <span>Operator accounts</span>
+                <span class="accordion-header-sub">Named sign-ins, roles, and revocation</span>
               </span>
               <svg class="accordion-chevron" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
             </button>
             <div class="accordion-body" id="sec-access-body">
+              <p class="form-hint">Administrators create named operators. Every operator signs in with their own name and PIN; disabling revokes their sessions immediately.</p>
               <div class="form-group">
-                <label class="form-label" for="setting-control-pin">Control Room PIN</label>
-                <div id="control-pin-status" class="pin-status open">Checking...</div>
-                <div class="form-hint">Guards Settings, Manage Donations, Testing, and History. Empty means no authentication on any of them.</div>
-                <input type="password" id="setting-control-pin" class="form-input-text" placeholder="Enter a new PIN" minlength="4" maxlength="12" autocomplete="new-password">
-                <div class="field-error" id="err-control-pin">A PIN must be 4 to 12 characters. Use Remove PIN to turn authentication off.</div>
-                <div class="pin-action-row">
-                  <button type="button" id="btn-apply-control-pin" class="btn-pin-apply">Save PIN</button>
-                  <button type="button" id="btn-clear-control-pin" class="btn-pin-clear">Remove PIN (no authentication)</button>
-                </div>
-                <div class="form-hint after" id="control-pin-feedback"></div>
+                <label class="form-label" for="operator-username">Operator name</label>
+                <input id="operator-username" class="form-input-text" autocomplete="username" maxlength="64">
+                <label class="form-label" for="operator-display">Display name</label>
+                <input id="operator-display" class="form-input-text" autocomplete="name" maxlength="80">
+                <label class="form-label" for="operator-pin">Operator PIN</label>
+                <input id="operator-pin" type="password" class="form-input-text" inputmode="numeric" autocomplete="new-password" minlength="4" maxlength="12">
+                <label class="form-label" for="operator-role">Role</label>
+                <select id="operator-role" class="form-input-text"><option value="operator">Operator</option><option value="admin">Administrator</option></select>
+                <div class="field-error" id="operator-error" role="alert"></div>
+                <button type="button" id="btn-create-operator" class="btn-secondary">Create operator</button>
               </div>
-
-              <div class="form-group group-divider">
-                <label class="form-label" for="setting-entry-pin">Volunteer Pad PIN</label>
-                <div id="entry-pin-status" class="pin-status open">Checking...</div>
-                <div class="form-hint">Guards Add Donation. Empty means anyone with the link can record gifts.</div>
-                <input type="password" id="setting-entry-pin" class="form-input-text" placeholder="Enter a new PIN" minlength="4" maxlength="12" autocomplete="new-password">
-                <div class="field-error" id="err-entry-pin">A PIN must be 4 to 12 characters. Use Remove PIN to turn authentication off.</div>
-                <div class="pin-action-row">
-                  <button type="button" id="btn-apply-entry-pin" class="btn-pin-apply">Save PIN</button>
-                  <button type="button" id="btn-clear-entry-pin" class="btn-pin-clear">Remove PIN (no authentication)</button>
-                </div>
-                <div class="form-hint after" id="entry-pin-feedback"></div>
-              </div>
+              <table class="donations-table"><thead><tr><th>Name</th><th>Display</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="operator-tbody"></tbody></table>
             </div>
           </section>
 
@@ -877,7 +906,9 @@
     </main>
   </div>
 
-  <script src="js/presence.js?v=6.2.0"></script>
-  <script src="js/settings.js?v=6.0.0"></script>
+  <script src="js/session.js?v=1.0.0"></script>
+  <script src="js/presence.js?v=6.4.0"></script>
+  <script src="js/settings.js?v=6.5.0"></script>
+  <script src="js/fundraising.js?v=6.4.0"></script>
 </body>
 </html>

@@ -33,96 +33,11 @@
   const unlockError = document.getElementById('unlock-error');
   const authView = document.getElementById('authenticated-view');
 
-  // PIN Helpers
-  function getControlPin() {
-    return sessionStorage.getItem('givebar_control_pin') || localStorage.getItem('givebar_control_pin') || '';
-  }
-
-  function setControlPin(pin) {
-    sessionStorage.setItem('givebar_control_pin', pin);
-    localStorage.setItem('givebar_control_pin', pin);
-  }
-
-  function clearControlPin() {
-    sessionStorage.removeItem('givebar_control_pin');
-    localStorage.removeItem('givebar_control_pin');
-  }
-
-  // The unlock screen only ever appears after the server answers 401.
-  // When no Control Room PIN is configured, the operator walks straight in.
-  function setAuthUIState(state) {
-    if (state === 'unauthenticated') {
-      if (unlockScreen) unlockScreen.style.display = 'flex';
-      if (authView) authView.style.display = 'none';
-      if (unlockPinInput) setTimeout(() => unlockPinInput.focus(), 50);
-    } else {
-      if (unlockScreen) unlockScreen.style.display = 'none';
-      if (authView) authView.style.display = 'block';
-    }
-  }
-
   function init() {
     setupGenerators();
     setupPurge();
-    setupUnlockForm();
     syncState();
     pollInterval = setInterval(syncState, 2000);
-  }
-
-  function setupUnlockForm() {
-    if (!unlockForm) return;
-    unlockForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const pin = (unlockPinInput?.value || '').trim();
-      if (!pin) {
-        showUnlockError('Please enter the Control Room PIN.');
-        return;
-      }
-      clearUnlockError();
-      if (btnSubmitUnlock) {
-        btnSubmitUnlock.disabled = true;
-        btnSubmitUnlock.textContent = 'Verifying...';
-      }
-      try {
-        const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
-          headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
-        });
-        if (res.status === 401) {
-          showUnlockError('Invalid Control Room PIN.');
-          if (unlockPinInput) { unlockPinInput.focus(); unlockPinInput.select(); }
-          return;
-        }
-        if (!res.ok) {
-          showUnlockError('Server error validating PIN.');
-          return;
-        }
-        const data = await res.json();
-        setControlPin(pin);
-        setAuthUIState('authenticated');
-        applyState(data);
-      } catch (err) {
-        showUnlockError('Network error connecting to server.');
-      } finally {
-        if (btnSubmitUnlock) {
-          btnSubmitUnlock.disabled = false;
-          btnSubmitUnlock.textContent = 'Unlock';
-        }
-      }
-    });
-  }
-
-  function showUnlockError(msg) {
-    if (unlockError) {
-      unlockError.textContent = msg;
-      unlockError.style.display = 'block';
-    }
-  }
-
-  function clearUnlockError() {
-    if (unlockError) {
-      unlockError.textContent = '';
-      unlockError.style.display = 'none';
-    }
   }
 
   // --- Operator Feedback ---
@@ -162,21 +77,12 @@
   }
 
   async function postRehearsal(body) {
-    const pin = getControlPin();
     try {
-      const res = await fetch('/api/rehearsal', {
+      const res = await GivebarSession.api('/api/rehearsal', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Control-Pin': pin
-        },
-        body: JSON.stringify({ ...body, pin })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
       });
-      if (res.status === 401) {
-        clearControlPin();
-        setAuthUIState('unauthenticated');
-        return { ok: false, message: 'Control Room PIN required.' };
-      }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         return { ok: false, message: errData.message || `Sample data generation failed (HTTP ${res.status}).` };
@@ -192,24 +98,15 @@
   function setupPurge() {
     if (!btnPurgeSampleData) return;
     btnPurgeSampleData.addEventListener('click', async () => {
-      const pin = getControlPin();
       btnPurgeSampleData.disabled = true;
       btnPurgeSampleData.textContent = 'Purging...';
       try {
-        const res = await fetch('/api/control', {
+        const res = await GivebarSession.api('/api/control', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Control-Pin': pin
-          },
-          body: JSON.stringify({ action: 'purge_rehearsal', pin })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'purge_rehearsal' })
         });
 
-        if (res.status === 401) {
-          clearControlPin();
-          setAuthUIState('unauthenticated');
-          return;
-        }
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           showFeedback(errData.message || `Purge failed (HTTP ${res.status}).`, 'error');
@@ -229,19 +126,10 @@
 
   // --- Sync & Render Sample Records ---
   async function syncState() {
-    const pin = getControlPin();
     try {
-      const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
-        headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
-      });
-      if (res.status === 401) {
-        clearControlPin();
-        setAuthUIState('unauthenticated');
-        return;
-      }
+      const res = await GivebarSession.api('/api/state?role=control');
       if (!res.ok) return;
       const data = await res.json();
-      setAuthUIState('authenticated');
       applyState(data);
     } catch (err) {
       console.warn('[Givebar Testing] Sync state error:', err);

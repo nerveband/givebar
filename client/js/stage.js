@@ -56,6 +56,8 @@
 
   var odometer = null;
   var lastTotalCents = null;
+  var lastResetSeq = null;
+  var previewOverrides = null;
   var lastGoalCents = 0;
   var currentQrEncoded = '';
   var lastSuccessfulUpdateAt = Date.now();
@@ -118,6 +120,13 @@
     setupFullscreenShortcut();
     if (WANT_FULLSCREEN) setupFullscreenHint();
     if (EDIT_MODE) EditMode.mount();
+    if (window.parent !== window && params.get('preview') === '1') {
+      window.addEventListener('message', function (event) {
+        if (event.origin !== window.location.origin || event.source !== window.parent || event.data?.type !== 'givebar:preview-settings') return;
+        previewOverrides = event.data.settings;
+        if (latestState) handleStateUpdate(latestState);
+      });
+    }
     startSync();
   }
 
@@ -190,6 +199,7 @@
   function handleStateUpdate(data) {
     if (!data) return;
     latestState = data;
+    if (previewOverrides) data = Object.assign({}, data, previewOverrides);
     lastSuccessfulUpdateAt = Date.now();
     lockedOut = false;
     checkStaleness();
@@ -202,12 +212,15 @@
     var totalCents = Math.max(0, Number(data.total_raised_cents) || 0);
     var goalCents = Math.max(0, Number(data.goal_cents) || 0);
     var isFirstPaint = lastTotalCents === null;
+    var resetSeq = Number(data.stage_reset_seq) || 0;
+    var resetRequested = lastResetSeq !== null && resetSeq !== lastResetSeq;
+    lastResetSeq = resetSeq;
     var increased = !isFirstPaint && totalCents > lastTotalCents;
     var goalChanged = goalCents !== lastGoalCents;
 
     // 1. Figure
     if (odometer) {
-      odometer.update(totalCents);
+      odometer.update(totalCents, { force: resetRequested });
     } else if (el.odometer) {
       el.odometer.textContent = formatCurrency(totalCents);
     }
@@ -230,8 +243,10 @@
     if (increased) pulse(orientation);
 
     // 5. Milestones
-    if (increased || goalChanged || isFirstPaint || milestonesChanged(data.milestones)) {
-      renderMilestones(data.milestones || [], goalCents, totalCents);
+    var markerSettingsChanged = lastMarkerKey !== data.marker_mode + ':' + data.marker_step_cents;
+    if (increased || goalChanged || isFirstPaint || markerSettingsChanged || milestonesChanged(data.milestones)) {
+      lastMarkerKey = data.marker_mode + ':' + data.marker_step_cents;
+      renderMilestones(data.milestones || [], goalCents, totalCents, data.marker_mode, data.marker_step_cents);
     } else {
       markMilestonesReached(totalCents);
     }
@@ -246,7 +261,8 @@
     // 8. Layout reflow from the visibility toggles
     var showRecent = data.show_recent_donations === undefined ? true : Boolean(data.show_recent_donations);
     var qrEncoded = typeof data.qr_url === 'string' ? data.qr_url.trim() : '';
-    var showQr = (data.show_qr === undefined ? true : Boolean(data.show_qr)) && qrEncoded !== '';
+    var qrArtwork = typeof data.qr_image_url === 'string' ? data.qr_image_url.trim() : '';
+    var showQr = (data.show_qr === undefined ? true : Boolean(data.show_qr)) && Boolean(qrEncoded || qrArtwork);
 
     var layout = 'full';
     if (!showRecent && !showQr) layout = 'minimal';
@@ -260,7 +276,7 @@
     }
 
     // 10. QR split: encode qr_url, print display_url_effective
-    if (showQr) renderQR(qrEncoded, data.display_url_effective, data.display_url);
+    if (showQr) renderQR(qrEncoded, data.display_url_effective, data.display_url, qrArtwork, data.qr_image_backdrop);
 
     // 11. Match / freeze banners
     if (el.matchBanner) {
@@ -310,6 +326,29 @@
     var bg = data.background_style;
     var validBg = (bg === 'subtle-gradient' || bg === 'vignette') ? bg : 'plain';
     document.body.setAttribute('data-bg-style', validBg);
+    document.body.style.setProperty('--stage-art', data.background_image_url ? 'url(' + JSON.stringify(data.background_image_url) + ')' : 'none');
+    document.body.style.setProperty('--gradient-start', data.gradient_start || '#183b46');
+    document.body.style.setProperty('--gradient-end', data.gradient_end || '#39213d');
+    document.body.style.setProperty('--gradient-angle', (data.gradient_angle ?? 135) + 'deg');
+    document.body.style.setProperty('--gradient-intensity', (data.gradient_intensity ?? 35) / 100);
+    var video = $('stage-background-video');
+    var videoUrl = data.background_video_url || '';
+    if (video) {
+      var canAnimate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches && !document.hidden;
+      if (videoUrl && video.getAttribute('src') !== videoUrl) {
+        video.src = videoUrl;
+        video.onerror = function () { video.hidden = true; };
+        video.onplaying = function () { video.hidden = false; };
+      } else if (!videoUrl && video.hasAttribute('src')) {
+        video.removeAttribute('src');
+        video.load();
+      }
+      if (!videoUrl || !canAnimate) { video.pause(); video.hidden = true; }
+      else if (video.paused && !video.error) video.play().catch(function () { video.hidden = true; });
+    }
+    document.body.setAttribute('data-marker-mode', data.marker_mode || 'milestones');
+    var trust = $('stage-trust-badge');
+    if (trust) trust.textContent = data.trust_badge_text || '';
   }
 
   /**
@@ -455,6 +494,7 @@
   // Milestones
   // =========================================================================
   var lastMilestoneSig = null;
+  var lastMarkerKey = '';
 
   function milestonesChanged(milestones) {
     return signature(milestones) !== lastMilestoneSig;
@@ -465,10 +505,22 @@
     return milestones.map(function (m) { return m.cents + ':' + (m.label || ''); }).join('|');
   }
 
-  function renderMilestones(milestones, goalCents, totalCents) {
+  function renderMilestones(milestones, goalCents, totalCents, mode, stepCents) {
     lastMilestoneSig = signature(milestones);
 
     var items = Array.isArray(milestones) ? milestones.slice() : [];
+    if (mode === 'none') {
+      paintTicks(el.milestonesH, [], totalCents, 'h');
+      paintTicks(el.milestonesV, [], totalCents, 'v');
+      return;
+    }
+    if (mode === 'dollars') {
+      var step = Math.max(Number(stepCents) || 10000000, Math.ceil(goalCents / 100));
+      items = [];
+      for (var target = step; target <= goalCents; target += step) {
+        items.push({ cents: target, label: formatShortCurrency(target) });
+      }
+    }
     if (items.length === 0 && goalCents > 0) {
       items = [0.25, 0.5, 0.75, 1].map(function (f) {
         var cents = Math.round(goalCents * f);
@@ -489,6 +541,7 @@
       .filter(function (t) { return t.pct > 0.5; })
       .sort(function (a, b) { return a.pct - b.pct; })
       .filter(function (t) {
+        if (mode === 'dollars') return true;
         // Keep projector labels from colliding.
         var clash = seen.some(function (p) { return Math.abs(p - t.pct) < 6; });
         if (clash) return false;
@@ -531,7 +584,7 @@
   // Recent donations feed
   // =========================================================================
   function chyronKey(c, index) {
-    return String(c.donation_id || (c.display_name + '|' + c.amount_cents + '|' + index));
+    return String(c.donation_id || index) + '|' + c.display_name + '|' + c.amount_cents;
   }
 
   function renderRecentDonations(chyrons, allowMotion) {
@@ -597,7 +650,7 @@
     el.feed.style.transition = 'none';
     el.feed.style.transform = 'translateY(' + (-newCount * step) + 'px)';
     void el.feed.offsetHeight;
-    el.feed.style.transition = 'transform var(--dur-conf) var(--ease-out)';
+    el.feed.style.transition = 'transform 1100ms var(--ease-out)';
     el.feed.style.transform = 'translateY(0)';
     clearEntering(entering);
   }
@@ -623,14 +676,16 @@
   // =========================================================================
   // QR split — encode qr_url, print display_url_effective
   // =========================================================================
-  function renderQR(encodeUrl, effective, fallbackDisplay) {
+  function renderQR(encodeUrl, effective, fallbackDisplay, artwork, backdrop) {
     var printed = (effective || fallbackDisplay || '').trim();
     if (!printed) printed = stripToHumanUrl(encodeUrl);
     if (el.qrUrl) el.qrUrl.textContent = printed;
 
-    if (el.qrImg && encodeUrl && encodeUrl !== currentQrEncoded) {
-      currentQrEncoded = encodeUrl;
-      el.qrImg.src = '/api/qr?url=' + encodeURIComponent(encodeUrl) + '&margin=1';
+    var source = artwork || '/api/qr?url=' + encodeURIComponent(encodeUrl) + '&margin=4';
+    if (el.qrImg) el.qrImg.parentElement.dataset.backdrop = artwork && !backdrop ? 'transparent' : 'white';
+    if (el.qrImg && source !== currentQrEncoded) {
+      currentQrEncoded = source;
+      el.qrImg.src = source;
     }
   }
 
@@ -662,8 +717,15 @@
       return;
     }
 
-    el.message.textContent = visible ? text : '';
-    el.message.hidden = !visible;
+    var messages = Array.isArray(data.impact_messages) ? data.impact_messages : [];
+    var next = visible ? text : messages.length ? messages[Math.floor(Date.now() / 12000) % messages.length] : '';
+    if (el.message.textContent !== next) {
+      el.message.textContent = next;
+      if (next && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        el.message.animate([{opacity:0, transform:'translateY(10px)'},{opacity:1, transform:'translateY(0)'}], {duration:650, easing:'cubic-bezier(.16,1,.3,1)'});
+      }
+    }
+    el.message.hidden = !next;
   }
 
   // =========================================================================
@@ -678,18 +740,8 @@
     var bar = null;
     var statusEl = null;
     var saveBtn = null;
-    var pinInput = null;
 
     function isDirty(field) { return mounted && dirty[field] === true; }
-
-    function pin() {
-      try { return window.sessionStorage.getItem('givebar_control_pin') || ''; }
-      catch (e) { return ''; }
-    }
-
-    function setPin(value) {
-      try { window.sessionStorage.setItem('givebar_control_pin', value); } catch (e) { /* private mode */ }
-    }
 
     function mount() {
       if (mounted) return;
@@ -867,21 +919,21 @@
         return;
       }
 
-      var currentPin = pin();
-      if (currentPin) payload.pin = currentPin;
-
       var token = ++saveToken;
       setStatus('Saving...', '');
       if (saveBtn) saveBtn.disabled = true;
 
       fetch('/api/control', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       }).then(function (res) {
         if (token !== saveToken) return null;   // a newer save owns the status
         if (res.status === 401) {
-          promptForPin();
+          setStatus('Operator sign-in required', 'err');
+          if (saveBtn) saveBtn.disabled = false;
+          location.replace('/signin.html?next=' + encodeURIComponent(location.pathname));
           return null;
         }
         return res.json().catch(function () { return { ok: res.ok }; });
@@ -893,7 +945,6 @@
           return;
         }
         dirty = {};
-        removePinInput();
         setStatus('Saved', 'ok');
         refreshBar();
       }).catch(function () {
@@ -903,30 +954,6 @@
       });
     }
 
-    function promptForPin() {
-      setStatus('Control PIN required', 'err');
-      if (saveBtn) saveBtn.disabled = false;
-      if (pinInput) { pinInput.focus(); return; }
-      pinInput = document.createElement('input');
-      pinInput.type = 'password';
-      pinInput.className = 'edit-pin-input';
-      pinInput.placeholder = 'PIN';
-      pinInput.setAttribute('aria-label', 'Control PIN');
-      pinInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          setPin(pinInput.value.trim());
-          save();
-        }
-      });
-      bar.insertBefore(pinInput, saveBtn);
-      pinInput.focus();
-    }
-
-    function removePinInput() {
-      if (pinInput && pinInput.parentNode) pinInput.parentNode.removeChild(pinInput);
-      pinInput = null;
-    }
 
     function sync() {
       if (!mounted) return;
@@ -1002,8 +1029,8 @@
   function formatShortCurrency(cents) {
     var dollars = Math.floor((Number(cents) || 0) / 100);
     if (dollars === 0) return '$0';
-    if (dollars >= 1000000) return '$' + Number((dollars / 1000000).toFixed(1)) + 'M';
-    if (dollars >= 1000) return '$' + Number((dollars / 1000).toFixed(0)) + 'k';
+    if (dollars >= 1000000) return '$' + (dollars / 1000000).toLocaleString('en-US', {maximumFractionDigits:6}) + 'M';
+    if (dollars >= 1000) return '$' + (dollars / 1000).toLocaleString('en-US', {maximumFractionDigits:3}) + 'k';
     return '$' + dollars;
   }
 

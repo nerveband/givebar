@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operator Sign In — Givebar</title>
+  <meta name="color-scheme" content="dark">
+  <style>html{background:#070603;color-scheme:dark}</style>
+  <link rel="stylesheet" href="css/tokens.css?v=6.3.0">
+  <link rel="stylesheet" href="css/base.css?v=6.1.0">
+  <link rel="stylesheet" href="css/components.css?v=6.1.0">
+  <link rel="stylesheet" href="css/app.css?v=6.4.0">
+</head>
+<body>
+  <main class="ops-main" style="max-width: 28rem; margin: 12vh auto;">
+    <h1 style="color:#f4f5f6;">Operator sign in</h1>
+    <p class="form-hint">Use your assigned operator name and PIN. Sessions expire after 12 hours.</p>
+    <div id="invite-notice" class="form-hint" hidden></div>
+    <form id="signin-form">
+      <label class="form-label" for="signin-username">Operator name</label>
+      <input id="signin-username" class="form-input-text" autocomplete="username" required maxlength="64">
+      <label class="form-label" for="signin-pin">PIN</label>
+      <input id="signin-pin" type="password" class="form-input-text" inputmode="numeric" autocomplete="current-password" required minlength="4" maxlength="12">
+      <div id="signin-error" class="field-error" role="alert"></div>
+      <button type="submit" class="btn-primary" style="width:100%;min-height:48px;">Sign in</button>
+    </form>
+    <form id="pin-form" hidden>
+      <h2 style="color:#f4f5f6;">Change your PIN</h2>
+      <label class="form-label" for="pin-current">Current PIN</label>
+      <input id="pin-current" type="password" class="form-input-text" autocomplete="current-password" minlength="4" maxlength="12">
+      <label class="form-label" for="pin-next">New PIN</label>
+      <input id="pin-next" type="password" class="form-input-text" autocomplete="new-password" minlength="4" maxlength="12">
+      <div id="pin-error" class="field-error" role="alert"></div>
+      <button type="submit" class="btn-secondary" style="width:100%;min-height:48px;">Change PIN</button>
+    </form>
+    <form id="bootstrap-form" hidden>
+      <h2 style="color:#f4f5f6;">Create the first administrator</h2>
+      <p class="form-hint">This appears only before any operator exists. Afterwards, administrators create accounts.</p>
+      <label class="form-label" for="bootstrap-username">Administrator name</label>
+      <input id="bootstrap-username" class="form-input-text" autocomplete="username" maxlength="64">
+      <label class="form-label" for="bootstrap-display">Display name</label>
+      <input id="bootstrap-display" class="form-input-text" autocomplete="name" maxlength="80">
+      <label class="form-label" for="bootstrap-pin">Administrator PIN</label>
+      <input id="bootstrap-pin" type="password" class="form-input-text" inputmode="numeric" autocomplete="new-password" minlength="4" maxlength="12">
+      <div id="bootstrap-error" class="field-error" role="alert"></div>
+      <button type="submit" class="btn-secondary" style="width:100%;min-height:48px;">Create administrator</button>
+    </form>
+  </main>
+  <script>
+    (async function () {
+      const params = new URLSearchParams(location.search);
+      const next = params.get("next") || "/donations";
+      const invite = params.get("invite");
+      if (invite) {
+        const redeem = await fetch("/api/control", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "redeem_invite", token: invite })
+        });
+        const notice = document.getElementById("invite-notice");
+        notice.hidden = false;
+        notice.textContent = redeem.ok
+          ? "Invite accepted. You are signed in — change your PIN below if you want."
+          : "That invite link is invalid, expired, or already used. Sign in normally.";
+        if (redeem.ok) {
+          document.getElementById("pin-form").hidden = false;
+          history.replaceState(null, "", location.pathname);
+        }
+      }
+      const check = await fetch("/api/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "auth_check" })
+      });
+      const session = await check.json();
+      if (session.authenticated && !invite) {
+        location.replace(next);
+        return;
+      }
+      if (session.authenticated) document.getElementById("pin-form").hidden = false;
+      const bootstrapForm = document.getElementById("bootstrap-form");
+      const state = await (await fetch("/api/state?role=default")).json();
+      if (!state.event.has_operator_accounts) bootstrapForm.hidden = false;
+      async function post(action, payload, errorEl) {
+        errorEl.textContent = "";
+        const res = await fetch("/api/control", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, ...payload })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          errorEl.textContent = data.message || "Sign-in failed.";
+          return false;
+        }
+        return true;
+      }
+      document.getElementById("signin-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const ok = await post("login", {
+          username: document.getElementById("signin-username").value,
+          pin: document.getElementById("signin-pin").value
+        }, document.getElementById("signin-error"));
+        if (ok) location.replace(next);
+      });
+      document.getElementById("pin-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const ok = await post("change_pin", {
+          current_pin: document.getElementById("pin-current").value,
+          pin: document.getElementById("pin-next").value
+        }, document.getElementById("pin-error"));
+        if (ok) location.replace(next);
+      });
+      bootstrapForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const ok = await post("bootstrap_admin", {
+          username: document.getElementById("bootstrap-username").value,
+          displayName: document.getElementById("bootstrap-display").value,
+          pin: document.getElementById("bootstrap-pin").value
+        }, document.getElementById("bootstrap-error"));
+        if (ok) location.reload();
+      });
+    })();
+  </script>
+</body>
+</html>

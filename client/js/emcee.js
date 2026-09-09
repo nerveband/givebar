@@ -22,7 +22,6 @@
   let lastSuccessfulUpdateAt = Date.now();
   let serverTimeOffsetMs = 0;
   let hasLoadedState = false;
-  let controlPin = '';
   let historyOpen = false;
   let historySignature = null;
   let allGifts = [];
@@ -71,12 +70,7 @@
   const btnOpenHistoryInline = document.getElementById('btn-full-history-inline');
   const btnCloseHistory = document.getElementById('btn-close-history');
 
-  // Unlock (only used when the server actually enforces a PIN)
-  const unlockEl = document.getElementById('presenter-unlock');
-  const unlockFormEl = document.getElementById('presenter-unlock-form');
-  const unlockPinEl = document.getElementById('presenter-unlock-pin');
-  const unlockSubmitEl = document.getElementById('presenter-unlock-submit');
-  const unlockErrorEl = document.getElementById('presenter-unlock-error');
+  // Unlock removed: presenter feed is intentionally public.
 
   // --- Typeface + fixed-advance figures -------------------------------------
 
@@ -212,13 +206,7 @@
   }
 
   function init() {
-    try {
-      controlPin = sessionStorage.getItem('givebar_control_pin') || '';
-    } catch (e) {
-      controlPin = '';
-    }
     setupHistoryControls();
-    setupUnlockForm();
     scheduleDigitMeasure();
     startSync();
   }
@@ -244,9 +232,7 @@
   }
 
   function stateQuery() {
-    return controlPin
-      ? `role=emcee&pin=${encodeURIComponent(controlPin)}`
-      : 'role=emcee';
+    return 'role=emcee';
   }
 
   function initSSE() {
@@ -275,17 +261,9 @@
 
   async function fetchState() {
     try {
-      const headers = { 'Cache-Control': 'no-cache' };
-      if (controlPin) headers['X-Control-Pin'] = controlPin;
-      const res = await fetch(`/api/state?${stateQuery()}`, { headers });
-      if (res.status === 401) {
-        // Never paint a fake zero total. A PIN is actually configured.
-        setUnlockVisible(true);
-        return;
-      }
+      const res = await fetch(`/api/state?${stateQuery()}`, { headers: { 'Cache-Control': 'no-cache' } });
       if (!res.ok) return;
       const data = await res.json();
-      setUnlockVisible(false);
       handleStateUpdate(data);
     } catch (err) {
       console.warn('[Givebar Presenter] State fetch failed:', err);
@@ -386,6 +364,9 @@
     if (goalEl) {
       goalEl.textContent = formatShortCurrency(data.goal_cents || 50000000);
     }
+    const progress = document.getElementById('presenter-progress');
+    progress.value = data.goal_cents > 0 ? Math.min(100, Math.max(0, data.total_raised_cents / data.goal_cents * 100)) : 0;
+    progress.setAttribute('aria-valuetext', `${formatCurrency(data.total_raised_cents || 0)} of ${formatCurrency(data.goal_cents || 0)}`);
 
     if (milestoneTextEl) {
       if (data.next_milestone) {
@@ -472,59 +453,7 @@
     historyListEl.innerHTML = allGifts.map(renderGiftRow).join('');
   }
 
-  // --- Unlock (only when the server enforces a PIN) ---
-  function setUnlockVisible(visible) {
-    if (!unlockEl) return;
-    unlockEl.hidden = !visible;
-    if (visible) {
-      if (mainViewEl) mainViewEl.hidden = true;
-      if (historyViewEl) historyViewEl.hidden = true;
-      historyOpen = false;
-      if (unlockPinEl && document.activeElement !== unlockPinEl) {
-        setTimeout(() => unlockPinEl.focus(), 50);
-      }
-    } else if (!historyOpen && mainViewEl) {
-      mainViewEl.hidden = false;
-    }
-  }
-
-  function setupUnlockForm() {
-    if (!unlockFormEl) return;
-    unlockFormEl.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const pin = (unlockPinEl && unlockPinEl.value || '').trim();
-      if (!pin) {
-        showUnlockError('Enter the PIN.');
-        return;
-      }
-      showUnlockError('');
-      if (unlockSubmitEl) unlockSubmitEl.disabled = true;
-      try {
-        const res = await fetch(`/api/state?role=emcee&pin=${encodeURIComponent(pin)}`, {
-          headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
-        });
-        if (res.status === 401) {
-          showUnlockError('Invalid PIN.');
-          if (unlockPinEl) unlockPinEl.select();
-          return;
-        }
-        if (!res.ok) {
-          showUnlockError('Server error validating PIN.');
-          return;
-        }
-        const data = await res.json();
-        controlPin = pin;
-        try { sessionStorage.setItem('givebar_control_pin', pin); } catch (err) {}
-        setUnlockVisible(false);
-        handleStateUpdate(data);
-        initSSE();
-      } catch (err) {
-        showUnlockError('No connection.');
-      } finally {
-        if (unlockSubmitEl) unlockSubmitEl.disabled = false;
-      }
-    });
-  }
+  // --- Unlock removed: presenter feed is intentionally public. ---
 
   function showUnlockError(msg) {
     if (!unlockErrorEl) return;

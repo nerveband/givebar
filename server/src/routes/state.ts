@@ -1,40 +1,39 @@
 import type { Database } from "bun:sqlite";
 import { getStageState, getEmceeState, getControlState, getVolunteerState, getEventState, foldLedger } from "../ledger";
 import { sanitizeEventState } from "../projection";
-import { isControlAuthorized } from "../auth";
 import { getPresenceView } from "../presence";
+import { getSession } from "../authz";
 
-export function getStatePayload(role: string, db: Database, sinceSeq = 0, volunteerId?: string, pin?: string): { status: number; payload: unknown } {
+export function getStatePayload(role: string, db: Database, sinceSeq = 0, req?: Request): { status: number; payload: unknown } {
+  const session = req ? getSession(req, db) : null;
+  const operator = session && (session.role === "admin" || session.role === "operator") ? session : null;
   switch (role) {
     case "stage":
       return { status: 200, payload: getStageState(db, sinceSeq) };
     case "emcee":
       return { status: 200, payload: getEmceeState(db) };
     case "control": {
-      const eventState = getEventState(db);
-      if (!isControlAuthorized(eventState.control_pin, pin || "")) {
-        return { status: 401, payload: { error: "UNAUTHORIZED", message: "Control Room PIN required" } };
+      if (!operator) {
+        return { status: 401, payload: { error: "UNAUTHORIZED", message: "Operator sign-in required" } };
       }
-      return { status: 200, payload: { ...getControlState(db), presence: getPresenceView() } };
+      return { status: 200, payload: { ...getControlState(db), presence: getPresenceView(), me: { username: operator.username, displayName: operator.displayName, role: operator.role } } };
     }
     case "entry":
-      return { status: 200, payload: getVolunteerState(db, volunteerId) };
+      if (!operator) {
+        return { status: 401, payload: { error: "UNAUTHORIZED", message: "Operator sign-in required" } };
+      }
+      return { status: 200, payload: getVolunteerState(db, operator.accountId) };
     default: {
       const fullState = getEventState(db);
       const hasBloomerangKey = Boolean(fullState.bloomerang_api_key && fullState.bloomerang_api_key.trim() !== "");
-      // Presence follows the same default-open rule as everything else: open
-      // until a control PIN exists, gated the instant one does. The key is
-      // absent rather than empty when gated, so a panel can tell "no roster
-      // for you" from "nobody connected".
-      const presence = isControlAuthorized(fullState.control_pin, pin || "") ? getPresenceView() : undefined;
+      const presence = operator ? getPresenceView() : undefined;
       return {
         status: 200,
         payload: {
           stage: getStageState(db, sinceSeq),
           event: {
             ...sanitizeEventState(fullState),
-            has_control_pin: Boolean(fullState.control_pin && fullState.control_pin.trim() !== ""),
-            has_entry_pin: Boolean(fullState.entry_pin && fullState.entry_pin.trim() !== ""),
+            has_operator_accounts: db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM operator_account WHERE disabled = 0`).get()?.count !== 0,
             has_bloomerang_api_key: hasBloomerangKey,
             bloomerang_key_masked: hasBloomerangKey ? "••••••••••••••" : ""
           },
@@ -50,10 +49,8 @@ export function handleStateRequest(req: Request, db: Database): Response {
   const url = new URL(req.url);
   const role = url.searchParams.get("role") || "stage";
   const sinceSeq = parseInt(url.searchParams.get("since") || "0", 10);
-  const volunteerId = url.searchParams.get("volunteer_id") || undefined;
-  const pin = req.headers.get("X-Control-Pin") || url.searchParams.get("pin") || "";
 
-  const { status, payload } = getStatePayload(role, db, sinceSeq, volunteerId, pin);
+  const { status, payload } = getStatePayload(role, db, sinceSeq, req);
 
   return new Response(JSON.stringify(payload), {
     status,
@@ -69,8 +66,6 @@ export function handleStateRequest(req: Request, db: Database): Response {
 export function handleStateStreamRequest(req: Request, db: Database): Response {
   const url = new URL(req.url);
   const role = url.searchParams.get("role") || "stage";
-  const volunteerId = url.searchParams.get("volunteer_id") || undefined;
-  const pin = req.headers.get("X-Control-Pin") || url.searchParams.get("pin") || "";
   let timerId: Timer | number | null = null;
 
   let lastSentHash = "";
@@ -81,7 +76,7 @@ export function handleStateStreamRequest(req: Request, db: Database): Response {
 
       const sendUpdate = () => {
         try {
-          const { status, payload } = getStatePayload(role, db, 0, volunteerId, pin);
+          const { status, payload } = getStatePayload(role, db, 0, req);
           if (status !== 200) {
             controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify(payload)}\n\n`));
             controller.close();

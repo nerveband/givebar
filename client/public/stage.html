@@ -9,10 +9,10 @@
   <link rel="preload" href="/assets/fonts/brandon-medium.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-black.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/tokens.css?v=6.1.0">
+  <link rel="stylesheet" href="css/tokens.css?v=6.3.0">
   <link rel="stylesheet" href="css/base.css?v=6.1.0">
   <link rel="stylesheet" href="css/components.css?v=6.1.0">
-  <link rel="stylesheet" href="css/app.css?v=6.1.0">
+  <link rel="stylesheet" href="css/app.css?v=6.4.0">
   <style>
     /* =========================================================================
        Fullscreen Bar Chart (Direction B — Presentation Contrast)
@@ -44,7 +44,7 @@
       --row-h: clamp(40px, 4.6vh, 62px);
       --row-gap: clamp(8px, 1.1vh, 16px);
       --logo-h: clamp(38px, 4.4vh, 62px);
-      --stage-radius: 8px;
+      --stage-radius: 28px;
     }
 
     * { box-sizing: border-box; }
@@ -74,11 +74,31 @@
 
     /* ---- Background styles ------------------------------------------------ */
     body[data-bg-style="plain"] { background: #07080a; }
-    body[data-bg-style="subtle-gradient"] {
-      background: radial-gradient(ellipse 120% 90% at 50% 12%, #16181f 0%, #07080a 72%);
-    }
     body[data-bg-style="vignette"] {
       background: radial-gradient(ellipse 90% 80% at 50% 50%, #131419 30%, #030304 100%);
+    }
+    body::before {
+      content: ""; position: fixed; inset: 0; pointer-events: none;
+      background-image: linear-gradient(120deg, rgba(9,12,20,.7), rgba(5,7,12,.82)), var(--stage-art);
+      background-size: cover; background-position: center; opacity: .72;
+    }
+    body[data-bg-style="subtle-gradient"]::after {
+      content: ""; position: fixed; inset: 0; pointer-events: none;
+      background: linear-gradient(var(--gradient-angle, 135deg), var(--gradient-start, #183b46), var(--gradient-end, #39213d));
+      opacity: var(--gradient-intensity, .35);
+    }
+    #stage-background-video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .48; pointer-events: none; }
+    #stage-canvas { z-index: 1; }
+    @media (prefers-reduced-motion: reduce) { #stage-background-video { display: none; } }
+    .barh-shell::after, .thermo-shell::after {
+      content: ""; position: absolute; inset: 0; border: 1px solid var(--stage-bar);
+      border-radius: var(--stage-radius); pointer-events: none;
+      box-shadow: 0 0 24px var(--stage-glow);
+      animation: barBreathe 5s ease-in-out infinite;
+    }
+    @keyframes barBreathe { 0%,100% { opacity: .22; } 50% { opacity: .65; } }
+    @media (prefers-reduced-motion: reduce) {
+      .barh-shell::after, .thermo-shell::after { animation: none; opacity: .3; }
     }
 
     #stage-canvas {
@@ -238,14 +258,18 @@
     }
 
     .stage-odometer-text {
-      --odo-ink: var(--stage-bar);
-      --odo-sep: var(--stage-bar);
-      font-size: clamp(4.5rem, 11.5vw, 14rem);
+      --odo-ink: var(--stage-ink);
+      --odo-sep: var(--stage-ink);
+      font-size: clamp(3rem, min(10.5vw, 19vh), 14rem);
       line-height: 1;
       font-weight: 900;
       letter-spacing: -0.035em;
-      color: var(--stage-bar);
+      color: var(--stage-ink);
       text-shadow: 0 0 clamp(24px, 3vw, 64px) var(--stage-glow-soft);
+    }
+    .stage-odometer-text .odometer-digit-val {
+      background: linear-gradient(180deg, var(--stage-ink) 15%, color-mix(in srgb, var(--stage-ink) 78%, var(--stage-bar)) 90%);
+      background-clip: text; -webkit-background-clip: text; color: transparent;
     }
 
     .goal-display {
@@ -436,6 +460,8 @@
       color: var(--stage-bar);
       font-weight: 700;
     }
+    body[data-marker-mode="dollars"] .mtick[data-reached="1"] .mtick-label { color: var(--stage-ink-dim); font-weight: 500; }
+    body[data-marker-mode="dollars"] .mtick-label { font-size: clamp(12px, .85vw, 19px); letter-spacing: 0; }
 
     .milestones-h .mtick-label {
       top: calc(100% + clamp(8px, 1vh, 14px));
@@ -483,7 +509,7 @@
     }
 
     .stage-panel {
-      background: rgba(255, 255, 255, 0.035);
+      background: rgba(10, 11, 13, 0.8);
       backdrop-filter: blur(20px) saturate(115%);
       -webkit-backdrop-filter: blur(20px) saturate(115%);
       border: 1px solid rgba(255, 255, 255, 0.075);
@@ -549,38 +575,49 @@
     .recent-feed-item[data-enter="pending"] { opacity: 0; }
     .recent-feed-item { opacity: 1; transition: opacity var(--dur-conf) var(--ease-out); }
 
-    .qr-block {
-      display: flex;
+    #stage-qr-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: auto 1fr auto;
+      column-gap: clamp(16px, 2vw, 36px);
+      row-gap: 8px;
       align-items: center;
-      gap: clamp(16px, 1.8vw, 32px);
     }
-
-    /* No white plate until the code actually loads, so a slow or missing QR
-       never flashes a blank card at the room. */
+    #stage-qr-panel .panel-title {
+      grid-area: 1 / 1;
+      margin: 0;
+      font-size: clamp(1rem, 1.6vw, 2rem);
+      color: var(--stage-ink-dim);
+      letter-spacing: .05em;
+    }
+    .qr-block { display: contents; }
     .qr-image-frame {
-      width: clamp(104px, 11vh, 168px);
-      height: clamp(104px, 11vh, 168px);
-      padding: 6px;
+      grid-area: 1 / 2 / 4 / 3;
+      width: clamp(128px, 20vh, 260px);
+      height: clamp(128px, 20vh, 260px);
       border-radius: 4px;
-      flex-shrink: 0;
     }
-
     .qr-image-frame img {
       width: 100%;
       height: 100%;
       display: block;
-      background: #ffffff;
+      object-fit: contain;
+      background: transparent;
     }
+    .qr-image-frame[data-backdrop="white"] img { background: #fff; border-radius: 4px; }
 
     .qr-image-frame img:not([src]) { display: none; }
 
     .qr-url-text {
-      font-size: clamp(1.1rem, 1.55vw, 2.05rem);
+      grid-area: 2 / 1;
+      font-size: clamp(1.4rem, 2.4vw, 3rem);
       font-weight: 700;
       color: var(--stage-ink);
       letter-spacing: -0.01em;
       word-break: break-word;
       min-width: 0;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
     }
 
     /* =========================================================================
@@ -828,9 +865,47 @@
       .recent-feed-item { transition: opacity var(--dur-ins) linear !important; }
       .logo-slot { transition: none !important; }
     }
+    #stage-trust-badge { grid-area: 3 / 1; }
+    .recent-viewport { mask-image: linear-gradient(to bottom, #000 75%, transparent); }
+    .recent-feed-item { transition: opacity 1000ms var(--ease-out), transform 1100ms var(--ease-out); }
+    #stage-trust-badge { font-size: clamp(12px, 1vw, 20px); color: var(--stage-ink-dim); margin-top: 12px; }
+    #stage-logo-img { filter: brightness(0) invert(1); }
+    .milestones-h .mtick[data-edge="end"] .mtick-line { visibility: hidden; }
+    .stage-message { min-height: 2.5em; }
+    @media (min-aspect-ratio: 1/1) {
+      body[data-orientation="vertical"] #stage-canvas {
+        grid-template-columns: minmax(0, 1fr) clamp(150px, 16vw, 300px) minmax(0, 1fr);
+        grid-template-rows: auto minmax(100px, .65fr) minmax(0, 1fr);
+        gap: clamp(20px, 3vh, 42px) clamp(20px, 2vw, 40px);
+      }
+      body[data-orientation="vertical"] .stage-header { grid-column: 1 / -1; grid-row: 1; }
+      body[data-orientation="vertical"] .stage-body,
+      body[data-orientation="vertical"] .stage-bottom-grid { display: contents !important; }
+      body[data-orientation="vertical"] .figure-block { grid-area: 2 / 3; align-self: center; justify-self: stretch; }
+      body[data-orientation="vertical"] .stage-odometer-text { font-size: clamp(3rem, 6.5vw, 10rem); }
+      body[data-orientation="vertical"] .stage-message { grid-area: 2 / 1; text-align: left; justify-self: start; align-self: center; font-size: clamp(1.5rem, 2.3vw, 3rem); }
+      body[data-orientation="vertical"] .thermo { grid-area: 2 / 2 / 4 / 3; padding: 10px 55px 64px 0; }
+      body[data-orientation="vertical"] .thermo-shell { width: clamp(46px, 4.6vw, 88px); }
+      body[data-orientation="vertical"] .thermo-track { border-radius: 999px 999px 0 0; }
+      body[data-orientation="vertical"] .thermo-shell::before {
+        content: ""; position: absolute; z-index: 2; left: 50%; bottom: -54px;
+        width: calc(100% + 48px); aspect-ratio: 1; transform: translateX(-50%); border-radius: 50%;
+        background: radial-gradient(circle at 35% 25%, var(--stage-bar-hi), var(--stage-bar) 50%, var(--stage-bar-lo));
+        border: 2px solid var(--stage-bar-hi); box-shadow: 0 0 36px var(--stage-glow), inset 0 0 0 7px #111114;
+      }
+      body[data-orientation="vertical"] .thermo-shell::after { border-radius: 999px 999px 0 0; }
+      body[data-orientation="vertical"] #stage-recent-panel { grid-area: 3 / 1; }
+      body[data-orientation="vertical"] #stage-qr-panel { grid-area: 3 / 3; }
+      body[data-orientation="vertical"] .qr-image-frame { width: clamp(128px, 17vh, 220px); height: clamp(128px, 17vh, 220px); }
+      body[data-orientation="vertical"] .recent-viewport { height: calc(3 * var(--row-h) + 2 * var(--row-gap)); }
+    }
+    @media (max-width: 520px) {
+      .qr-image-frame { width: 112px; height: 112px; }
+    }
   </style>
 </head>
 <body data-bg-style="plain" data-orientation="horizontal">
+  <video id="stage-background-video" muted autoplay loop playsinline aria-hidden="true" hidden></video>
 
   <main id="stage-canvas" data-layout="full">
 
@@ -910,12 +985,13 @@
           </div>
           <div id="stage-qr-url" class="qr-url-text"></div>
         </div>
+        <div id="stage-trust-badge"></div>
       </div>
     </footer>
 
   </main>
 
   <script src="js/odometer.js?v=6.0.0"></script>
-  <script src="js/stage.js?v=6.0.0"></script>
+  <script src="js/stage.js?v=6.5.0"></script>
 </body>
 </html>

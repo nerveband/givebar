@@ -93,6 +93,18 @@ export interface EventStateRecord {
   text_color: string;
   font_family: string;
   chart_orientation: string;
+  stage_reset_seq: number;
+  marker_mode: string;
+  marker_step_cents: number;
+  background_image_url: string;
+  gradient_start: string;
+  gradient_end: string;
+  gradient_angle: number;
+  gradient_intensity: number;
+  background_video_url: string;
+  impact_messages: string;
+  qr_image_url: string;
+  qr_image_backdrop: number;
   display_url: string;
   settings_seq: number;
   updated_at: number;
@@ -924,6 +936,18 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
         text_color = ?,
         font_family = ?,
         chart_orientation = ?,
+        stage_reset_seq = ?,
+        marker_mode = ?,
+        marker_step_cents = ?,
+        background_image_url = ?,
+        gradient_start = ?,
+        gradient_end = ?,
+        gradient_angle = ?,
+        gradient_intensity = ?,
+        background_video_url = ?,
+        impact_messages = ?,
+        qr_image_url = ?,
+        qr_image_backdrop = ?,
         display_url = ?,
         settings_seq = ?,
         updated_at = ?
@@ -980,6 +1004,18 @@ export function updateEventState(db: Database, patch: Partial<EventStateRecord>)
     updated.text_color || "",
     updated.font_family || "system",
     updated.chart_orientation || "horizontal",
+    updated.stage_reset_seq ?? 0,
+    updated.marker_mode || "milestones",
+    updated.marker_step_cents || 10000000,
+    updated.background_image_url || "",
+    updated.gradient_start,
+    updated.gradient_end,
+    updated.gradient_angle,
+    updated.gradient_intensity,
+    updated.background_video_url,
+    updated.impact_messages,
+    updated.qr_image_url,
+    updated.qr_image_backdrop,
     updated.display_url || "",
     updated.settings_seq,
     now

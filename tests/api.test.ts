@@ -9,12 +9,15 @@ import { handleWebhookRequest } from "../server/src/routes/webhook";
 import { handleQRRequest } from "../server/src/routes/qr";
 import { updateEventState } from "../server/src/ledger";
 import type { Database } from "bun:sqlite";
+import { authed, controlRequest, operatorCookie } from "./auth-helper";
 
 describe("Givebar HTTP API Endpoints & Safety Rails", () => {
   let db: Database;
+  let cookie: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = initDatabase(":memory:");
+    cookie = await operatorCookie(db);
   });
 
   test("GET /api/state returns role-tailored state payloads", async () => {
@@ -35,9 +38,7 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
     expect(emceeData.active_donation_count).toBe(0);
 
     // 3. Control Role
-    const ctrlReq = new Request("http://localhost:3000/api/state?role=control");
-    const ctrlRes = handleStateRequest(ctrlReq, db);
-    expect(ctrlRes.status).toBe(200);
+    const ctrlRes = handleStateRequest(authed(new Request("http://localhost:3000/api/state?role=control"), cookie), db);
     const ctrlData = await ctrlRes.json();
     expect(ctrlData.folded.total_raised_cents).toBe(0);
     expect(Array.isArray(ctrlData.staged_chyrons)).toBe(true);
@@ -52,11 +53,11 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
       entered_by: "V1"
     };
 
-    const req1 = new Request(`http://localhost:3000/api/donation/${donationId}`, {
+    const req1 = authed(new Request(`http://localhost:3000/api/donation/${donationId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
-    });
+    }), cookie);
 
     const res1 = await handleDonationRequest(req1, db, ["api", "donation", donationId]);
     expect(res1.status).toBe(201);
@@ -65,7 +66,7 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
     expect(data1.donation_id).toBe(donationId);
 
     // Test Collision on same card number #0777
-    const req2 = new Request(`http://localhost:3000/api/donation/don_api_2`, {
+    const req2 = authed(new Request(`http://localhost:3000/api/donation/don_api_2`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -74,7 +75,7 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
         card_number: "#0777",
         entered_by: "V2"
       })
-    });
+    }), cookie);
 
     const res2 = await handleDonationRequest(req2, db, ["api", "donation", "don_api_2"]);
     expect(res2.status).toBe(409);
@@ -85,11 +86,7 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
 
   test("POST /api/control actions: freeze, unfreeze, match", async () => {
     // 1. Freeze Screen
-    const freezeReq = new Request("http://localhost:3000/api/control", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "freeze", pin: "9999" })
-    });
+    const freezeReq = controlRequest({ action: "freeze" }, cookie);
     const freezeRes = await handleControlRequest(freezeReq, db);
     expect(freezeRes.status).toBe(200);
 
@@ -98,35 +95,25 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
     const stageData = await stageRes.json();
     expect(stageData.is_frozen).toBe(true);
 
-    // 2. Unfreeze Screen
-    const unfreezeReq = new Request("http://localhost:3000/api/control", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "unfreeze", pin: "9999" })
-    });
+    const unfreezeReq = controlRequest({ action: "unfreeze" }, cookie);
     const unfreezeRes = await handleControlRequest(unfreezeReq, db);
     expect(unfreezeRes.status).toBe(200);
 
     // 3. Set Match Grant
-    const matchReq = new Request("http://localhost:3000/api/control", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "set_match",
-        is_active: true,
-        total_cents: 10000000,
-        ratio: 1.0,
-        sponsor_title: "Anonymous Matching Sponsor",
-        pin: "9999"
-      })
-    });
+    const matchReq = controlRequest({
+      action: "set_match",
+      is_active: true,
+      total_cents: 10000000,
+      ratio: 1.0,
+      sponsor_title: "Anonymous Matching Sponsor"
+    }, cookie);
     const matchRes = await handleControlRequest(matchReq, db);
     expect(matchRes.status).toBe(200);
   });
 
   test("GET /api/export/csv generates RFC 4180 compliant auditable export", async () => {
     // Record two donations
-    await handleDonationRequest(new Request("http://localhost:3000/api/donation/don_csv_1", {
+    await handleDonationRequest(authed(new Request("http://localhost:3000/api/donation/don_csv_1", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -140,12 +127,9 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
         entered_by: "V1",
         notes: "Table 1"
       })
-    }), db, ["api", "donation", "don_csv_1"]);
+    }), cookie), db, ["api", "donation", "don_csv_1"]);
 
-    const exportReq = new Request("http://localhost:3000/api/export/csv", {
-      headers: { "X-Control-Pin": "9999" }
-    });
-    const exportRes = handleExportCSV(exportReq, db);
+    const exportRes = handleExportCSV(authed(new Request("http://localhost:3000/api/export/csv"), cookie), db);
     expect(exportRes.status).toBe(200);
     expect(exportRes.headers.get("Content-Type")).toContain("text/csv");
 
@@ -160,13 +144,11 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
 
   test("POST /api/rehearsal generates realistic mock gala events", async () => {
     updateEventState(db, { stage_delay_ms: 0 });
-    const burstReq = new Request("http://localhost:3000/api/rehearsal", {
+    const burstRes = await handleRehearsalRequest(authed(new Request("http://localhost:3000/api/rehearsal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode: "burst", count: 5 })
-    });
-
-    const burstRes = await handleRehearsalRequest(burstReq, db);
+    }), cookie), db);
     expect(burstRes.status).toBe(200);
     const data = await burstRes.json();
     expect(data.ok).toBe(true);
@@ -182,7 +164,7 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
     // Bloomerang webhook
     const bloomReq = new Request("http://localhost:3000/api/webhooks/bloomerang", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-webhook-secret": "test-secret" },
       body: JSON.stringify({
         Transaction: {
           Id: 88412,
@@ -199,7 +181,7 @@ describe("Givebar HTTP API Endpoints & Safety Rails", () => {
     // Stripe webhook
     const stripeReq = new Request("http://localhost:3000/api/webhooks/stripe", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-webhook-secret": "test-secret" },
       body: JSON.stringify({
         type: "payment_intent.succeeded",
         data: {

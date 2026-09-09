@@ -44,7 +44,6 @@
   var CLIENT_ID_KEY = 'givebar_presence_client_id';
   var NAME_KEY = 'givebar_presence_name';
   var VOLUNTEER_KEY = 'givebar_volunteer_id';
-  var PIN_KEY = 'givebar_control_pin';
 
   var ICON_USERS = 'M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-6.05-14.81,60,60,0,0,1,55.6,105.6,95.78,95.78,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z';
   var ICON_PENCIL = 'M227.32,73.37,182.63,28.69a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.32,96A16,16,0,0,0,227.32,73.37ZM48,163.31l88-88L180.69,120l-88,88H48ZM216,84.69,192,108.69,147.31,64,171.31,40Z';
@@ -202,14 +201,6 @@
   var timers = { beat: null, tick: null, hide: null };
   var mounts = [];
 
-  function controlPin() {
-    try {
-      return sessionStorage.getItem(PIN_KEY) || localStorage.getItem(PIN_KEY) || '';
-    } catch (err) {
-      return '';
-    }
-  }
-
   function heartbeat() {
     if (!surface) return Promise.resolve(false);
     return fetch('/api/presence', {
@@ -239,9 +230,9 @@
    */
   function pullRoster() {
     if (state.pushes > 0 || mounts.length === 0) return;
-    var pin = controlPin();
     fetch('/api/presence', {
-      headers: { 'Cache-Control': 'no-cache', 'X-Control-Pin': pin }
+      credentials: 'same-origin',
+      headers: { 'Cache-Control': 'no-cache' }
     }).then(function (res) {
       if (res.status === 401) {
         lockRoster();
@@ -283,6 +274,7 @@
   }
 
   function start() {
+    if (surface && !document.getElementById('operator-identity')) mountIdentity();
     if (state.started || !surface) return;
     state.started = true;
     state.paused = false;
@@ -450,6 +442,7 @@
       input.replaceWith(mount.me);
       if (commit && next !== '') {
         keep(NAME_KEY, next);
+        window.dispatchEvent(new Event('givebar:identitychange'));
         heartbeat().then(pullRoster);
       }
       paint(mount);
@@ -516,6 +509,79 @@
     return root;
   }
 
+  const easternTime = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
+  });
+  window.GivebarOperator = {
+    time: value => value ? easternTime.format(new Date(value)) : 'Time unavailable',
+    actor: () => resolvedName(),
+    source: value => ({ manual: 'Manual entry', bloomerang: 'Bloomerang', rehearsal: 'Rehearsal', stripe: 'Stripe', kindful: 'Kindful' })[value] || value || 'Source unavailable'
+  };
+  function mountIdentity() {
+    const sidebar = document.querySelector('.ops-sidebar');
+    if (!sidebar) return;
+    const button = document.createElement('button');
+    button.id = 'operator-identity';
+    button.type = 'button';
+    button.className = 'operator-identity';
+    button.innerHTML = '<span class="operator-identity-label">Recording donations as</span><strong></strong><span class="operator-identity-action">Change name</span>';
+    const repaint = () => { button.querySelector('strong').textContent = resolvedName(); };
+    window.addEventListener('givebar:identitychange', repaint);
+    repaint();
+    sidebar.append(button);
+    const dialog = document.createElement('dialog');
+    dialog.className = 'operator-dialog';
+    dialog.setAttribute('aria-labelledby', 'operator-dialog-title');
+    dialog.setAttribute('aria-describedby', 'operator-dialog-help');
+    dialog.innerHTML = '<form method="dialog" novalidate><h2 id="operator-dialog-title">Who is recording donations?</h2><p id="operator-dialog-help">Use your name so the team can see who added or changed a gift. This labels this browser; it is not a login.</p><label for="operator-name">Your name <span>(required)</span></label><input id="operator-name" maxlength="32" required autocomplete="name" aria-describedby="operator-name-error"><p id="operator-name-error" class="operator-name-error" role="alert" hidden>Enter your name to continue.</p><div class="operator-dialog-actions"><button type="button" class="btn-secondary" data-identity-cancel>Cancel</button><button type="submit" class="btn-primary">Save name</button></div></form>';
+    document.body.append(dialog);
+    const input = dialog.querySelector('input');
+    const error = dialog.querySelector('#operator-name-error');
+    const cancel = dialog.querySelector('[data-identity-cancel]');
+    let firstUse = false;
+    const open = () => {
+      firstUse = !localStorage.getItem(NAME_KEY);
+      dialog.querySelector('h2').textContent = firstUse ? 'Who is recording donations?' : 'Change your recording name';
+      dialog.querySelector('[type="submit"]').textContent = firstUse ? 'Start recording' : 'Save name';
+      cancel.hidden = firstUse;
+      error.hidden = true;
+      input.removeAttribute('aria-invalid');
+      input.value = firstUse ? '' : resolvedName();
+      dialog.showModal();
+      input.focus();
+      input.select();
+    };
+    dialog.querySelector('form').addEventListener('submit', event => {
+      event.preventDefault();
+      if (!input.value.trim()) {
+        error.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+        return;
+      }
+      window.GiveBarPresence.setName(input.value);
+      dialog.close();
+      repaint();
+      button.focus();
+    });
+    input.addEventListener('input', () => {
+      if (input.value.trim()) { error.hidden = true; input.removeAttribute('aria-invalid'); }
+    });
+    cancel.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('cancel', event => { if (firstUse) event.preventDefault(); });
+    button.addEventListener('click', open);
+    if (!localStorage.getItem(NAME_KEY)) open();
+  }
+  document.addEventListener('click', async event => {
+    const button = event.target.closest('[data-copy-donation]');
+    if (!button) return;
+    try {
+      await navigator.clipboard.writeText(button.dataset.copyDonation);
+      button.textContent = 'Copied';
+    } catch (_) { button.textContent = 'Copy unavailable'; }
+  });
+
   window.GiveBarPresence = {
     surface: surface,
     clientId: clientId,
@@ -543,6 +609,7 @@
       var next = String(name == null ? '' : name).trim().slice(0, 32);
       if (next === '') return false;
       keep(NAME_KEY, next);
+      window.dispatchEvent(new Event('givebar:identitychange'));
       render();
       heartbeat().then(pullRoster);
       return true;

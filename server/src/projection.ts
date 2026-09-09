@@ -170,7 +170,7 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
         donation_id: d.donation_id,
         display_name: d.is_anonymous ? "Anonymous Supporter" : d.display_name,
         amount_cents: d.amount_cents,
-        notes: d.notes,
+        notes: d.is_anonymous ? null : d.notes,
         created_at: d.created_at
       });
     }
@@ -189,7 +189,7 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
         donation_id: pinned.donation_id,
         display_name: pinned.is_anonymous ? "Anonymous Supporter" : pinned.display_name,
         amount_cents: pinned.amount_cents,
-        notes: pinned.notes || null,
+        notes: pinned.is_anonymous ? null : (pinned.notes || null),
         created_at: pinned.created_at
       };
     }
@@ -234,6 +234,18 @@ export function getStageState(db: Database, sinceSeq: number = 0) {
     text_color: eventState.text_color || "",
     font_family: eventState.font_family || "system",
     chart_orientation: eventState.chart_orientation || "horizontal",
+    stage_reset_seq: eventState.stage_reset_seq,
+    marker_mode: eventState.marker_mode,
+    marker_step_cents: eventState.marker_step_cents,
+    background_image_url: eventState.background_image_url,
+    gradient_start: eventState.gradient_start,
+    gradient_end: eventState.gradient_end,
+    gradient_angle: eventState.gradient_angle,
+    gradient_intensity: eventState.gradient_intensity,
+    background_video_url: eventState.background_video_url,
+    impact_messages: JSON.parse(eventState.impact_messages),
+    qr_image_url: eventState.qr_image_url,
+    qr_image_backdrop: Boolean(eventState.qr_image_backdrop),
     show_qr: Boolean(eventState.show_qr ?? 1),
     show_recent_donations: Boolean(eventState.show_recent_donations ?? 1),
     show_live_indicator: Boolean(eventState.show_live_indicator ?? 1),
@@ -457,15 +469,15 @@ export function getControlState(db: Database) {
  * Volunteer Pledge Pad Projection (/entry)
  * Returns ask tiers, personal audit log, and sanitized connection state.
  */
-export function getVolunteerState(db: Database, volunteerId?: string) {
+export function getVolunteerState(db: Database, displayName?: string) {
   const eventState = getEventState(db);
   const fullFold = foldLedger(db);
   const now = Date.now();
 
   let personalLog: DonationRecord[] = [];
-  if (volunteerId) {
+  if (displayName) {
     personalLog = Array.from(fullFold.all_records.values())
-      .filter(d => d.entered_by === volunteerId)
+      .filter(d => d.entered_by === displayName)
       .sort((a, b) => b.created_at - a.created_at)
       .slice(0, 20);
   }
@@ -482,8 +494,6 @@ export function getVolunteerState(db: Database, volunteerId?: string) {
     total_raised_cents: fullFold.total_raised_cents,
     goal_cents: eventState.goal_cents,
     major_gift_threshold_cents: eventState.major_gift_threshold_cents || 950000,
-    has_entry_pin: Boolean(eventState.entry_pin && eventState.entry_pin.trim() !== ""),
-    has_control_pin: Boolean(eventState.control_pin && eventState.control_pin.trim() !== ""),
     font_family: eventState.font_family || "system",
     text_color: eventState.text_color || "",
     settings_seq: eventState.settings_seq || 1,

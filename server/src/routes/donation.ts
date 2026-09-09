@@ -1,6 +1,10 @@
 import type { Database } from "bun:sqlite";
 import { recordDonation, amendDonation, voidDonation, restoreDonation, getEventState, CardSerialCollisionError, MajorGiftConfirmationRequiredError, type CreateDonationInput } from "../ledger";
+import { requireRole, type OperatorSession } from "../authz";
 export async function handleDonationRequest(req: Request, db: Database, pathParts: string[]): Promise<Response> {
+  const auth = requireRole(db, req, ["admin", "operator"]);
+  if (auth instanceof Response) return auth;
+  const actor: OperatorSession = auth;
   const method = req.method.toUpperCase();
 
   // Route: POST /api/donation or PUT /api/donation/:id
@@ -34,7 +38,7 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
         source: body.source || "manual",
         source_txn_id: body.source_txn_id,
         card_number: body.card_number,
-        entered_by: body.entered_by,
+        entered_by: actor.displayName,
         notes: body.notes,
         donor_phonetic: body.donor_phonetic,
         table_number: body.table_number,
@@ -79,7 +83,7 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
     const donationId = pathParts[2];
     try {
       const body = await req.json().catch(() => ({})) as { entered_by?: string; reason?: string };
-      const seq = voidDonation(db, donationId, body.entered_by, body.reason);
+      const seq = voidDonation(db, donationId, actor.displayName, body.reason);
       return Response.json({ ok: true, seq, donation_id: donationId, voided: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to void donation";
@@ -122,7 +126,7 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
     const donationId = pathParts[2];
     try {
       const body = await req.json().catch(() => ({})) as { entered_by?: string; reason?: string };
-      const seq = restoreDonation(db, donationId, body.entered_by, body.reason);
+      const seq = restoreDonation(db, donationId, actor.displayName, body.reason);
       return Response.json({ ok: true, seq, donation_id: donationId, restored: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to restore donation";

@@ -11,16 +11,8 @@
   const OPEN_SECTIONS_KEY = 'givebar_settings_open_sections';
   const DEFAULT_OPEN_SECTIONS = ['sec-event'];
 
-  // Typeface keys accepted by the server. The preview binds the same custom
-  // properties the chart uses, so what you see here is what the room gets.
-  const FONT_STACK_VARS = {
-    brandon: 'var(--font-brandon, var(--font-sans))',
-    humanist: 'var(--font-humanist, var(--font-sans))',
-    grotesk: 'var(--font-grotesk, var(--font-sans))',
-    mono: 'var(--font-mono)',
-    serif: 'var(--font-serif, Georgia, serif)'
-  };
-  const FONT_KEYS = Object.keys(FONT_STACK_VARS);
+  // Typeface keys accepted by the server and rendered by the chart iframe.
+  const FONT_KEYS = ['brandon', 'humanist', 'grotesk', 'mono', 'serif'];
   const DEFAULT_FONT_KEY = 'brandon';
   const ORIENTATIONS = ['horizontal', 'vertical'];
 
@@ -31,6 +23,10 @@
   let milestonesData = [];
   let askTiersData = [];
 
+  let loadedGoalCents = 0;
+  let loadedMilestones = '';
+  const field = id => document.getElementById(id);
+  const dollars = value => Number(String(value || '0').replaceAll(',', ''));
   // DOM Elements
   const btnSaveTop = document.getElementById('btn-save-top');
   const btnSaveBottom = document.getElementById('btn-save-bottom');
@@ -41,12 +37,6 @@
   const btnReloadConflict = document.getElementById('btn-reload-conflict');
   const successBanner = document.getElementById('settings-success-banner');
 
-  // Auth Elements
-  const unlockScreen = document.getElementById('unlock-screen');
-  const unlockForm = document.getElementById('unlock-form');
-  const unlockPinInput = document.getElementById('unlock-pin-input');
-  const btnSubmitUnlock = document.getElementById('btn-submit-unlock');
-  const unlockError = document.getElementById('unlock-error');
   const authView = document.getElementById('authenticated-view');
 
   // Event Inputs
@@ -69,8 +59,6 @@
   const bgStyleSelect = document.getElementById('setting-bg-style');
   const orientationSelect = document.getElementById('setting-chart-orientation');
   const fontFamilySelect = document.getElementById('setting-font-family');
-  const fontPreview = document.getElementById('font-preview');
-  const fontPreviewTitle = document.getElementById('font-preview-title');
 
   // QR Inputs
   const qrUrlInput = document.getElementById('setting-qr-url');
@@ -83,8 +71,6 @@
   const toggleShowRecent = document.getElementById('toggle-show-recent');
   const toggleShowLive = document.getElementById('toggle-show-live');
   const toggleShowGoal = document.getElementById('toggle-show-goal');
-  const stageMessageInput = document.getElementById('setting-stage-message');
-  const toggleStageMessageVisible = document.getElementById('toggle-stage-message-visible');
 
   // Donations Inputs
   const askTiersTbody = document.getElementById('ask-tiers-tbody');
@@ -108,48 +94,6 @@
   const toggleFeatureCard = document.getElementById('toggle-feature-card');
   const toggleFeatureTable = document.getElementById('toggle-feature-table');
 
-  // Access Inputs
-  const controlPinInput = document.getElementById('setting-control-pin');
-  const errControlPin = document.getElementById('err-control-pin');
-  const controlPinStatus = document.getElementById('control-pin-status');
-  const controlPinFeedback = document.getElementById('control-pin-feedback');
-  const btnApplyControlPin = document.getElementById('btn-apply-control-pin');
-  const btnClearControlPin = document.getElementById('btn-clear-control-pin');
-
-  const entryPinInput = document.getElementById('setting-entry-pin');
-  const errEntryPin = document.getElementById('err-entry-pin');
-  const entryPinStatus = document.getElementById('entry-pin-status');
-  const entryPinFeedback = document.getElementById('entry-pin-feedback');
-  const btnApplyEntryPin = document.getElementById('btn-apply-entry-pin');
-  const btnClearEntryPin = document.getElementById('btn-clear-entry-pin');
-
-  // --- PIN storage helpers ---
-  function getControlPin() {
-    return sessionStorage.getItem('givebar_control_pin') || localStorage.getItem('givebar_control_pin') || '';
-  }
-
-  function setStoredControlPin(pin) {
-    sessionStorage.setItem('givebar_control_pin', pin);
-    localStorage.setItem('givebar_control_pin', pin);
-  }
-
-  function clearStoredControlPin() {
-    sessionStorage.removeItem('givebar_control_pin');
-    localStorage.removeItem('givebar_control_pin');
-  }
-
-  // The unlock screen appears only when the server actually answers 401.
-  function setAuthUIState(state) {
-    if (state === 'unauthenticated') {
-      if (unlockScreen) unlockScreen.style.display = 'flex';
-      if (authView) authView.style.display = 'none';
-      if (unlockPinInput) setTimeout(() => unlockPinInput.focus(), 50);
-    } else {
-      if (unlockScreen) unlockScreen.style.display = 'none';
-      if (authView) authView.style.display = 'block';
-    }
-  }
-
   function init() {
     setupAccordion();
     setupMilestonesEditor();
@@ -158,67 +102,9 @@
     setupTestConnection();
     setupSaveHandlers();
     setupReloadConflict();
-    setupUnlockForm();
     setupLivePreviews();
-    setupPinControls();
+    setupOperators();
     loadSettings();
-  }
-
-  // --- Unlock ---
-  function setupUnlockForm() {
-    if (!unlockForm) return;
-    unlockForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const pin = (unlockPinInput?.value || '').trim();
-      if (!pin) {
-        showUnlockError('Please enter the Control Room PIN.');
-        return;
-      }
-      clearUnlockError();
-      if (btnSubmitUnlock) {
-        btnSubmitUnlock.disabled = true;
-        btnSubmitUnlock.textContent = 'Verifying...';
-      }
-      try {
-        const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
-          headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
-        });
-        if (res.status === 401) {
-          showUnlockError('Invalid Control Room PIN.');
-          if (unlockPinInput) { unlockPinInput.focus(); unlockPinInput.select(); }
-          return;
-        }
-        if (!res.ok) {
-          showUnlockError('Server error validating PIN.');
-          return;
-        }
-        const data = await res.json();
-        setStoredControlPin(pin);
-        setAuthUIState('authenticated');
-        populateForm(data);
-      } catch (err) {
-        showUnlockError('Network error connecting to server.');
-      } finally {
-        if (btnSubmitUnlock) {
-          btnSubmitUnlock.disabled = false;
-          btnSubmitUnlock.textContent = 'Unlock';
-        }
-      }
-    });
-  }
-
-  function showUnlockError(msg) {
-    if (unlockError) {
-      unlockError.textContent = msg;
-      unlockError.style.display = 'block';
-    }
-  }
-
-  function clearUnlockError() {
-    if (unlockError) {
-      unlockError.textContent = '';
-      unlockError.style.display = 'none';
-    }
   }
 
   // --- Accordion with persisted open/closed state ---
@@ -286,15 +172,46 @@
   }
 
   // --- Live previews ---
-  function applyFontPreview() {
-    const key = FONT_KEYS.includes(fontFamilySelect?.value) ? fontFamilySelect.value : DEFAULT_FONT_KEY;
-    if (fontPreview) fontPreview.style.fontFamily = FONT_STACK_VARS[key];
-    if (fontPreviewTitle) {
-      const title = (eventTitleInput?.value || '').trim()
-        || (eventNameInput?.value || '').trim()
-        || 'Your Fundraiser Title';
-      fontPreviewTitle.textContent = title;
-    }
+
+  function updateChartPreview() {
+    field('gradient-angle-value').value = field('setting-gradient-angle').value + '°';
+    field('gradient-intensity-value').value = field('setting-gradient-intensity').value + '%';
+    field('gradient-controls').hidden = bgStyleSelect.value !== 'subtle-gradient';
+    field('setting-marker-step').hidden = field('setting-marker-mode').querySelector(':checked').value !== 'dollars';
+    const artwork = field('setting-qr-image-url').value;
+    const artworkPreview = field('qr-artwork-preview');
+    artworkPreview.hidden = !artwork;
+    field('clear-qr-artwork').hidden = !artwork;
+    artworkPreview.style.background = field('setting-qr-image-backdrop').checked ? '#fff' : '#111114';
+    if (artwork && artworkPreview.getAttribute('src') !== artwork) artworkPreview.src = artwork;
+    if (!artwork) artworkPreview.removeAttribute('src');
+    const frame = field('settings-chart-preview');
+    if (!frame) return;
+    frame.style.transform = `scale(${field('settings-preview-frame').clientWidth / 1920})`;
+    frame.contentWindow?.postMessage({
+      type: 'givebar:preview-settings',
+      settings: {
+        event_title: eventTitleInput.value,
+        goal_cents: dollars(goalDollarsInput.value) * 100,
+        logo_url: logoUrlInput.value,
+        bar_color: barColorInput.value,
+        text_color: textColorInput.value,
+        background_style: bgStyleSelect.value,
+        background_image_url: field('setting-background-url').value,
+        gradient_start: field('setting-gradient-start').value,
+        gradient_end: field('setting-gradient-end').value,
+        gradient_angle: Number(field('setting-gradient-angle').value),
+        gradient_intensity: Number(field('setting-gradient-intensity').value),
+        background_video_url: field('setting-background-video').value.trim(),
+        qr_image_url: artwork,
+        qr_image_backdrop: field('setting-qr-image-backdrop').checked,
+        chart_orientation: orientationSelect.value,
+        font_family: fontFamilySelect.value,
+        marker_mode: field('setting-marker-mode').querySelector(':checked').value,
+        marker_step_cents: Number(field('setting-marker-step').querySelector(':checked').value),
+        milestones: milestonesData
+      }
+    }, location.origin);
   }
 
   // Mirrors the server rule: empty printed URL falls back to the QR destination
@@ -317,9 +234,58 @@
   }
 
   function setupLivePreviews() {
-    if (fontFamilySelect) fontFamilySelect.addEventListener('change', applyFontPreview);
-    if (eventTitleInput) eventTitleInput.addEventListener('input', applyFontPreview);
-    if (eventNameInput) eventNameInput.addEventListener('input', applyFontPreview);
+    document.getElementById('settings-form')?.addEventListener('input', updateChartPreview);
+    document.getElementById('settings-form')?.addEventListener('change', updateChartPreview);
+    document.getElementById('settings-form')?.addEventListener('focusout', event => {
+      const input = event.target;
+      if (!input.matches('.milestone-dollars,.tier-dollars,#setting-match-pool,#setting-guardrail-threshold')) return;
+      const value = dollars(input.value);
+      if (Number.isFinite(value)) input.value = value.toLocaleString('en-US');
+    });
+    const frame = field('settings-chart-preview');
+    frame?.addEventListener('load', updateChartPreview);
+    if (frame) new ResizeObserver(updateChartPreview).observe(field('settings-preview-frame'));
+    goalDollarsInput.addEventListener('blur', () => {
+      const value = dollars(goalDollarsInput.value);
+      if (Number.isFinite(value)) goalDollarsInput.value = value.toLocaleString('en-US');
+    });
+    for (const name of ['bar', 'text']) {
+      const picker = field(`setting-${name}-picker`);
+      const input = field(`setting-${name}-color`);
+      picker.addEventListener('input', () => {
+        input.value = picker.value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      input.addEventListener('input', () => {
+        if (/^#[0-9a-f]{6}$/i.test(input.value)) picker.value = input.value;
+      });
+    }
+    for (const name of ['logo', 'background', 'qr-image']) {
+      field(`setting-${name}-file`).addEventListener('change', async event => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const types = ['image/png', 'image/jpeg', 'image/webp'];
+        if (name === 'qr-image') types.push('image/svg+xml');
+        if (!types.includes(file.type) || file.size > 2 * 1024 * 1024) {
+          showError(`Choose a PNG, JPEG, WebP${name === 'qr-image' ? ', or SVG' : ''} image up to 2 MB.`);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          field(`setting-${name}-url`).value = reader.result;
+          updateChartPreview();
+          showSuccess('Image ready. Save Settings to publish it to the chart.');
+        };
+        reader.onerror = () => showError('Could not read the image. Choose it again.');
+        reader.readAsDataURL(file);
+      });
+    }
+    field('clear-qr-artwork').addEventListener('click', () => {
+      field('setting-qr-image-url').value = '';
+      field('setting-qr-image-file').value = '';
+      updateChartPreview();
+      showSuccess('Automatic QR selected. Save Settings to publish it.');
+    });
     if (qrUrlInput) qrUrlInput.addEventListener('input', applyPrintedUrlPreview);
     if (displayUrlInput) displayUrlInput.addEventListener('input', applyPrintedUrlPreview);
     if (qrUrlInput) {
@@ -363,14 +329,9 @@
 
   // --- Load Settings ---
   async function loadSettings() {
-    const pin = getControlPin();
     try {
-      const res = await fetch(`/api/state?role=control&pin=${encodeURIComponent(pin)}`, {
-        headers: { 'X-Control-Pin': pin, 'Cache-Control': 'no-cache' }
-      });
+      const res = await GivebarSession.api('/api/state?role=control');
       if (res.status === 401) {
-        clearStoredControlPin();
-        setAuthUIState('unauthenticated');
         return;
       }
       if (!res.ok) {
@@ -378,7 +339,6 @@
         return;
       }
       const data = await res.json();
-      setAuthUIState('authenticated');
       populateForm(data);
     } catch (err) {
       console.warn('[Givebar Settings] Load error:', err);
@@ -391,12 +351,24 @@
 
     currentSettingsSeq = data.settings_seq || 1;
     const es = data.event_state || {};
+    loadedGoalCents = es.goal_cents || 0;
+    loadedMilestones = JSON.stringify((data.milestones || []).map(m => ({ cents: m.cents || 0, label: m.label || '' })));
+    field('setting-marker-mode').querySelector(`input[value="${es.marker_mode || 'milestones'}"]`).checked = true;
+    field('setting-marker-step').querySelector(`input[value="${es.marker_step_cents || 10000000}"]`).checked = true;
+    field('setting-background-url').value = es.background_image_url || '';
+    field('setting-gradient-start').value = es.gradient_start || '#183b46';
+    field('setting-gradient-end').value = es.gradient_end || '#39213d';
+    field('setting-gradient-angle').value = es.gradient_angle ?? 135;
+    field('setting-gradient-intensity').value = es.gradient_intensity ?? 35;
+    field('setting-background-video').value = es.background_video_url || '';
+    field('setting-qr-image-url').value = es.qr_image_url || '';
+    field('setting-qr-image-backdrop').checked = Boolean(es.qr_image_backdrop ?? true);
 
     // 1. Event
     if (eventTitleInput) eventTitleInput.value = es.event_title || '';
     if (eventNameInput) eventNameInput.value = es.event_name || '';
     if (eventSubtitleInput) eventSubtitleInput.value = es.event_subtitle || '';
-    if (goalDollarsInput) goalDollarsInput.value = Math.floor((es.goal_cents || 0) / 100);
+    if (goalDollarsInput) goalDollarsInput.value = ((es.goal_cents || 0) / 100).toLocaleString('en-US');
     if (trustBadgeInput) trustBadgeInput.value = es.trust_badge_text || '';
 
     milestonesData = (Array.isArray(data.milestones) ? data.milestones : []).map(m => ({
@@ -420,7 +392,7 @@
     }
     setFieldValidity(barColorInput, errBarColor, true);
     setFieldValidity(textColorInput, errTextColor, true);
-    applyFontPreview();
+    updateChartPreview();
 
     // 3. Donation link & QR
     if (qrUrlInput) qrUrlInput.value = es.qr_url || '';
@@ -439,8 +411,6 @@
     if (toggleShowRecent) toggleShowRecent.checked = es.show_recent_donations !== undefined ? Boolean(es.show_recent_donations) : true;
     if (toggleShowLive) toggleShowLive.checked = es.show_live_indicator !== undefined ? Boolean(es.show_live_indicator) : true;
     if (toggleShowGoal) toggleShowGoal.checked = es.show_goal !== undefined ? Boolean(es.show_goal) : true;
-    if (stageMessageInput) stageMessageInput.value = es.stage_message || '';
-    if (toggleStageMessageVisible) toggleStageMessageVisible.checked = Boolean(es.stage_message_visible);
 
     // 5. Donations
     askTiersData = (Array.isArray(data.ask_tiers) ? data.ask_tiers : []).map(t => ({
@@ -449,12 +419,12 @@
     }));
     renderAskTiersRows();
 
-    if (guardrailThresholdInput) guardrailThresholdInput.value = Math.floor((es.major_gift_threshold_cents || 950000) / 100);
+    if (guardrailThresholdInput) guardrailThresholdInput.value = ((es.major_gift_threshold_cents || 950000) / 100).toLocaleString('en-US');
     if (stagingDelayInput) stagingDelayInput.value = Math.round((es.stage_delay_ms || 0) / 1000);
 
     if (toggleMatchActive) toggleMatchActive.checked = Boolean(es.is_match_active);
     if (matchTitleInput) matchTitleInput.value = es.match_sponsor_title || '';
-    if (matchPoolInput) matchPoolInput.value = Math.floor((es.match_total_cents || 0) / 100);
+    if (matchPoolInput) matchPoolInput.value = ((es.match_total_cents || 0) / 100).toLocaleString('en-US');
 
     // 6. Connections
     if (bloomerangKeyInput) {
@@ -469,27 +439,6 @@
     if (toggleFeatureCard) toggleFeatureCard.checked = Boolean(es.feature_card_number);
     if (toggleFeatureTable) toggleFeatureTable.checked = Boolean(es.feature_table_number);
 
-    // 8. Access — PIN inputs always start empty; status reflects the server.
-    if (controlPinInput) controlPinInput.value = '';
-    if (entryPinInput) entryPinInput.value = '';
-    setFieldValidity(controlPinInput, errControlPin, true);
-    setFieldValidity(entryPinInput, errEntryPin, true);
-    renderPinStatus(Boolean(data.has_control_pin), Boolean(data.has_entry_pin));
-  }
-
-  function renderPinStatus(hasControlPin, hasEntryPin) {
-    if (controlPinStatus) {
-      controlPinStatus.className = `pin-status ${hasControlPin ? 'locked' : 'open'}`;
-      controlPinStatus.textContent = hasControlPin
-        ? 'A Control Room PIN is set. Settings, Manage Donations, Testing, and History ask for it.'
-        : 'No Control Room PIN set. Every operator screen opens with no authentication.';
-    }
-    if (entryPinStatus) {
-      entryPinStatus.className = `pin-status ${hasEntryPin ? 'locked' : 'open'}`;
-      entryPinStatus.textContent = hasEntryPin
-        ? 'A Volunteer Pad PIN is set. Add Donation asks for it.'
-        : 'No Volunteer Pad PIN set. Add Donation opens with no authentication.';
-    }
   }
 
   function updateConnectionStatus(hasKey, lastSyncAt, lastError) {
@@ -525,7 +474,7 @@
   function setupMilestonesEditor() {
     if (!btnAddMilestone) return;
     btnAddMilestone.addEventListener('click', () => {
-      const goalDollars = parseInt(goalDollarsInput?.value || '0', 10) || 0;
+      const goalDollars = dollars(goalDollarsInput?.value);
       const suggestedDollars = goalDollars > 0 ? Math.round(goalDollars / 2) : 50000;
       milestonesData.push({
         cents: suggestedDollars * 100,
@@ -544,7 +493,7 @@
       return `
         <tr data-index="${idx}">
           <td>
-            <input type="number" class="form-input-text milestone-dollars" value="${dollars}" min="0" step="1" style="padding: 6px 8px; font-size: var(--text-xs);" aria-label="Milestone target in dollars">
+            <input type="text" inputmode="decimal" class="form-input-text milestone-dollars" value="${dollars.toLocaleString('en-US')}" style="padding:6px 8px" aria-label="Milestone target in dollars">
           </td>
           <td>
             <input type="text" class="form-input-text milestone-label" value="${escapeHTML(m.label || '')}" style="padding: 6px 8px; font-size: var(--text-xs);" aria-label="Milestone label">
@@ -565,7 +514,7 @@
 
     milestonesTbody.querySelectorAll('.milestone-dollars').forEach((inp, idx) => {
       inp.addEventListener('input', () => {
-        milestonesData[idx].cents = (parseInt(inp.value || '0', 10) || 0) * 100;
+        milestonesData[idx].cents = dollars(inp.value) * 100;
       });
     });
 
@@ -600,7 +549,7 @@
       return `
         <tr data-index="${idx}">
           <td>
-            <input type="number" class="form-input-text tier-dollars" value="${dollars}" min="1" step="1" style="padding: 6px 8px; font-size: var(--text-xs);" aria-label="Ask tier amount in dollars">
+            <input type="text" inputmode="decimal" class="form-input-text tier-dollars" value="${dollars.toLocaleString('en-US')}" style="padding:6px 8px" aria-label="Ask tier amount in dollars">
           </td>
           <td>
             <input type="text" class="form-input-text tier-label" value="${escapeHTML(t.label || `$${dollars.toLocaleString('en-US')}`)}" style="padding: 6px 8px; font-size: var(--text-xs);" aria-label="Ask tier label">
@@ -617,7 +566,7 @@
 
     askTiersTbody.querySelectorAll('.tier-dollars').forEach((inp, idx) => {
       inp.addEventListener('input', () => {
-        const val = parseInt(inp.value || '0', 10) || 0;
+        const val = dollars(inp.value);
         askTiersData[idx].cents = val * 100;
         if (!askTiersData[idx].label || askTiersData[idx].label.startsWith('$')) {
           askTiersData[idx].label = `$${val.toLocaleString('en-US')}`;
@@ -659,14 +608,13 @@
       clearBanners();
       btnTestConnection.textContent = 'Testing...';
 
-      const pin = getControlPin();
-      const enteredKey = bloomerangKeyInput?.value?.trim() || '';
+        const enteredKey = bloomerangKeyInput?.value?.trim() || '';
       try {
-        const res = await fetch('/api/control', {
+        const res = await GivebarSession.api('/api/control', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Control-Pin': pin
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             action: 'test_bloomerang',
@@ -678,7 +626,7 @@
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.connected) {
           updateConnectionStatus(true, data.last_sync_at, '');
-          showSuccess('Bloomerang connection verified successfully.');
+          showSuccess(`Connected to ${data.organization || 'Bloomerang'}. Credentials verified; this does not import donations.`);
         } else {
           updateConnectionStatus(false, null, data.error || 'Connection failed');
           showError(`Connection failed: ${data.error || 'Invalid API key or network error'}`);
@@ -689,101 +637,6 @@
         btnTestConnection.textContent = 'Test Connection';
       }
     });
-  }
-
-  // --- PIN set / change / clear (dedicated update_pins path) ---
-  function setupPinControls() {
-    if (btnApplyControlPin) {
-      btnApplyControlPin.addEventListener('click', () => applyPin('control'));
-    }
-    if (btnClearControlPin) {
-      btnClearControlPin.addEventListener('click', () => clearPin('control'));
-    }
-    if (btnApplyEntryPin) {
-      btnApplyEntryPin.addEventListener('click', () => applyPin('entry'));
-    }
-    if (btnClearEntryPin) {
-      btnClearEntryPin.addEventListener('click', () => clearPin('entry'));
-    }
-  }
-
-  function pinFeedback(kind, msg, tone) {
-    const el = kind === 'control' ? controlPinFeedback : entryPinFeedback;
-    if (!el) return;
-    el.textContent = msg;
-    el.style.color = tone === 'error' ? '#fca5a5' : '#86efac';
-  }
-
-  async function applyPin(kind) {
-    const input = kind === 'control' ? controlPinInput : entryPinInput;
-    const errEl = kind === 'control' ? errControlPin : errEntryPin;
-    const value = (input?.value || '').trim();
-
-    if (!setFieldValidity(input, errEl, value.length >= 4 && value.length <= 12)) {
-      pinFeedback(kind, '', 'error');
-      if (input) input.focus();
-      return;
-    }
-
-    const ok = await postPins(kind === 'control' ? { control_pin: value } : { entry_pin: value });
-    if (!ok) return;
-
-    if (kind === 'control') {
-      // Keep this browser authenticated with the PIN it just installed.
-      setStoredControlPin(value);
-      pinFeedback('control', 'Control Room PIN saved.', 'ok');
-    } else {
-      pinFeedback('entry', 'Volunteer Pad PIN saved.', 'ok');
-    }
-    if (input) input.value = '';
-    await loadSettings();
-  }
-
-  async function clearPin(kind) {
-    const ok = await postPins(kind === 'control' ? { control_pin: '' } : { entry_pin: '' });
-    if (!ok) return;
-
-    if (kind === 'control') {
-      clearStoredControlPin();
-      pinFeedback('control', 'Control Room PIN removed. Operator screens now open with no authentication.', 'ok');
-    } else {
-      pinFeedback('entry', 'Volunteer Pad PIN removed. Add Donation now opens with no authentication.', 'ok');
-    }
-    const input = kind === 'control' ? controlPinInput : entryPinInput;
-    if (input) input.value = '';
-    setFieldValidity(input, kind === 'control' ? errControlPin : errEntryPin, true);
-    await loadSettings();
-  }
-
-  async function postPins(patch) {
-    clearBanners();
-    const pin = getControlPin();
-    try {
-      const res = await fetch('/api/control', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Control-Pin': pin
-        },
-        body: JSON.stringify({ action: 'update_pins', pin, ...patch })
-      });
-
-      if (res.status === 401) {
-        clearStoredControlPin();
-        setAuthUIState('unauthenticated');
-        return false;
-      }
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        showError(errData.message || 'Could not update the PIN.');
-        return false;
-      }
-      return true;
-    } catch (err) {
-      console.error('[Givebar Settings] PIN update error:', err);
-      showError('Network error updating the PIN.');
-      return false;
-    }
   }
 
   // --- Save Handlers ---
@@ -804,7 +657,7 @@
     clearBanners();
 
     // Client-side validation so the operator sees the field, not a bare 400.
-    const goalDollars = parseInt(goalDollarsInput?.value || '0', 10);
+    const goalDollars = dollars(goalDollarsInput?.value);
     const goalOk = setFieldValidity(goalDollarsInput, errGoal, Number.isFinite(goalDollars) && goalDollars >= 1);
     const barOk = setFieldValidity(barColorInput, errBarColor, isValidColor(barColorInput?.value));
     const textOk = setFieldValidity(textColorInput, errTextColor, isValidColor(textColorInput?.value));
@@ -822,17 +675,19 @@
       if (target) target.focus();
       return;
     }
+    const changedMilestones = JSON.stringify(milestonesData.map(m => ({ cents: m.cents || 0, label: m.label || '' })));
+    if ((goalDollars * 100 !== loadedGoalCents || changedMilestones !== loadedMilestones) &&
+        !window.confirm(`This changes the live chart immediately after saving. Goal: $${goalDollars.toLocaleString('en-US')}. Apply the goal and milestone settings to the ballroom?`)) return;
 
-    const guardrailDollars = parseInt(guardrailThresholdInput?.value || '9500', 10) || 9500;
+    const guardrailDollars = dollars(guardrailThresholdInput?.value) || 9500;
     const stagingSec = Math.max(0, parseInt(stagingDelayInput?.value || '0', 10) || 0);
-    const matchPoolDollars = Math.max(0, parseInt(matchPoolInput?.value || '0', 10) || 0);
+    const matchPoolDollars = Math.max(0, dollars(matchPoolInput?.value));
     const fontKey = FONT_KEYS.includes(fontFamilySelect?.value) ? fontFamilySelect.value : DEFAULT_FONT_KEY;
     const orientation = ORIENTATIONS.includes(orientationSelect?.value) ? orientationSelect.value : 'horizontal';
 
     const payload = {
       action: 'update_settings',
       settings_seq: currentSettingsSeq,
-      pin: getControlPin(),
 
       // Event
       event_title: eventTitleInput?.value?.trim() || '',
@@ -849,9 +704,19 @@
       background_style: bgStyleSelect?.value || 'plain',
       font_family: fontKey,
       chart_orientation: orientation,
+      marker_mode: field('setting-marker-mode').querySelector(':checked').value,
+      marker_step_cents: Number(field('setting-marker-step').querySelector(':checked').value),
+      background_image_url: field('setting-background-url').value.trim(),
+      gradient_start: field('setting-gradient-start').value,
+      gradient_end: field('setting-gradient-end').value,
+      gradient_angle: Number(field('setting-gradient-angle').value),
+      gradient_intensity: Number(field('setting-gradient-intensity').value),
+      background_video_url: field('setting-background-video').value.trim(),
 
       // Donation link & QR
       qr_url: qrUrlInput?.value?.trim() || '',
+      qr_image_url: field('setting-qr-image-url').value,
+      qr_image_backdrop: field('setting-qr-image-backdrop').checked,
       display_url: displayUrlInput?.value?.trim() || '',
       show_qr: Boolean(toggleShowQr?.checked),
 
@@ -859,8 +724,6 @@
       show_recent_donations: Boolean(toggleShowRecent?.checked),
       show_live_indicator: Boolean(toggleShowLive?.checked),
       show_goal: Boolean(toggleShowGoal?.checked),
-      stage_message: stageMessageInput?.value?.trim() || '',
-      stage_message_visible: Boolean(toggleStageMessageVisible?.checked),
 
       // Donations
       ask_tiers: askTiersData.map(t => ({ cents: t.cents || 0, label: t.label || '' })),
@@ -884,11 +747,11 @@
 
     setSaveBusy(true);
     try {
-      const res = await fetch('/api/control', {
+      const res = await GivebarSession.api('/api/control', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Control-Pin': payload.pin
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
       });
@@ -926,6 +789,74 @@
     } finally {
       setSaveBusy(false);
     }
+  }
+  async function loadOperators() {
+    const tbody = document.getElementById('operator-tbody');
+    if (!tbody) return;
+    const res = await GivebarSession.api('/api/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list_accounts' })
+    });
+    if (res.status === 403) {
+      tbody.innerHTML = '<tr><td colspan="5">Only administrators can manage operators.</td></tr>';
+      return;
+    }
+    if (!res.ok) return;
+    const data = await res.json();
+    tbody.innerHTML = data.accounts.map((account) => `<tr><td>${escapeHTML(account.username)}</td><td>${escapeHTML(account.display_name)}</td><td>${escapeHTML(account.role)}</td><td>${account.disabled ? 'Disabled' : 'Active'}</td><td><button type="button" data-disable="${account.id}" data-disabled="${account.disabled ? 0 : 1}">${account.disabled ? 'Enable' : 'Disable'}</button> <button type="button" data-invite="${account.id}">Copy invite link</button></td></tr>`).join('');
+    tbody.querySelectorAll('[data-disable]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        await GivebarSession.api('/api/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update_account', id: button.dataset.disable, disabled: button.dataset.disabled === '1' })
+        });
+        await loadOperators();
+      });
+    });
+    tbody.querySelectorAll('[data-invite]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const email = window.prompt('Operator email for the one-time invite link:');
+        if (!email) return;
+        const res = await GivebarSession.api('/api/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'send_invite', id: button.dataset.invite, email })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          window.alert(data.message || 'Could not send invite.');
+          return;
+        }
+        await navigator.clipboard.writeText(data.link).catch(() => {});
+        window.alert(`Invite sent from info@wavedepth.com. Link copied:\n${data.link}`);
+      });
+    });
+  }
+  function setupOperators() {
+    const button = document.getElementById('btn-create-operator');
+    if (!button) return;
+    button.addEventListener('click', async () => {
+      const error = document.getElementById('operator-error');
+      error.textContent = '';
+      const payload = {
+        action: 'create_account',
+        username: document.getElementById('operator-username').value,
+        displayName: document.getElementById('operator-display').value,
+        pin: document.getElementById('operator-pin').value,
+        role: document.getElementById('operator-role').value
+      };
+      const res = await GivebarSession.api('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok) {
+        error.textContent = data.message || 'Could not create operator.';
+        return;
+      }
+      document.getElementById('operator-pin').value = '';
+      await loadOperators();
+    });
+    void loadOperators();
   }
 
   function setSaveBusy(busy) {

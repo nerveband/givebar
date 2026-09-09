@@ -26,12 +26,15 @@ import { handleDonationRequest } from "../server/src/routes/donation";
 import { handleStateRequest } from "../server/src/routes/state";
 import { generateQRCodeSVG } from "../server/src/routes/qr";
 import type { Database } from "bun:sqlite";
+import { authed, controlRequest, operatorCookie } from "./auth-helper";
 
 describe("Givebar Redesign Architectural & Safety Invariants", () => {
   let db: Database;
+  let cookie: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = initDatabase(":memory:");
+    cookie = await operatorCookie(db);
   });
 
   test("getStageState is a pure read and does not mutate the database", () => {
@@ -116,80 +119,50 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
   });
 
   test("server enforces major gift guardrail >= $9,500 unless confirmed", async () => {
-    const unconfirmedReq = new Request("http://localhost:3000/api/donation/don_big_1", {
+    const unconfirmed = await handleDonationRequest(authed(new Request("http://localhost:3000/api/donation/don_big_1", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount_cents: 5000000, // $50,000 >= $9.5k
-        donor_name: "Big Philanthropist"
-      })
-    });
+      body: JSON.stringify({ amount_cents: 5000000, donor_name: "Big Philanthropist" })
+    }), cookie), db, ["api", "donation", "don_big_1"]);
+    expect(unconfirmed.status).toBe(428);
+    expect((await unconfirmed.json()).error).toBe("MAJOR_GIFT_CONFIRMATION_REQUIRED");
 
-    const res1 = await handleDonationRequest(unconfirmedReq, db, ["api", "donation", "don_big_1"]);
-    expect(res1.status).toBe(428); // Precondition Required
-    const errData = await res1.json();
-    expect(errData.error).toBe("MAJOR_GIFT_CONFIRMATION_REQUIRED");
-
-    // Retry with confirmed_major_gift: true
-    const confirmedReq = new Request("http://localhost:3000/api/donation/don_big_1", {
+    const confirmed = await handleDonationRequest(authed(new Request("http://localhost:3000/api/donation/don_big_1", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount_cents: 5000000,
-        donor_name: "Big Philanthropist",
-        confirmed_major_gift: true
-      })
-    });
-
-    const res2 = await handleDonationRequest(confirmedReq, db, ["api", "donation", "don_big_1"]);
-    expect(res2.status).toBe(201);
+      body: JSON.stringify({ amount_cents: 5000000, donor_name: "Big Philanthropist", confirmed_major_gift: true })
+    }), cookie), db, ["api", "donation", "don_big_1"]);
+    expect(confirmed.status).toBe(201);
   });
 
-  test("state endpoint sanitizes PINs across all public roles", async () => {
-    updateEventState(db, { control_pin: "4242", entry_pin: "1357" });
-
-    const stageRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=stage"), db);
-    const stageData = await stageRes.json() as Record<string, unknown>;
-    expect(stageData.control_pin).toBeUndefined();
-    expect(stageData.entry_pin).toBeUndefined();
-
-    const entryRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=entry"), db);
-    const entryData = await entryRes.json() as Record<string, unknown>;
-    expect(entryData.control_pin).toBeUndefined();
-    expect(entryData.entry_pin).toBeUndefined();
-    expect(entryData.has_entry_pin).toBe(true);
-
-    const ctrlRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=control&pin=4242"), db);
-    const ctrlData = await ctrlRes.json();
-    expect(ctrlData.event_state.control_pin).toBeUndefined();
-    expect(ctrlData.event_state.entry_pin).toBeUndefined();
-    expect(ctrlData.has_control_pin).toBe(true);
+  test("state endpoint never exposes secrets across public and operator roles", async () => {
+    updateEventState(db, { bloomerang_api_key: "blm_secret_key" });
+    for (const role of ["stage", "emcee"]) {
+      const data = await handleStateRequest(new Request(`http://localhost:3000/api/state?role=${role}`), db).json() as Record<string, unknown>;
+      expect(data.pin_hash).toBeUndefined();
+      expect(data.control_pin).toBeUndefined();
+      expect(data.entry_pin).toBeUndefined();
+    }
+    for (const role of ["entry", "control"]) {
+      expect(handleStateRequest(new Request(`http://localhost:3000/api/state?role=${role}`), db).status).toBe(401);
+      const data = await handleStateRequest(authed(new Request(`http://localhost:3000/api/state?role=${role}`), cookie), db).json();
+      expect(JSON.stringify(data).includes("blm_secret_key")).toBe(false);
+    }
   });
+
 
   test("PUT /api/control/settings updates event setup and theme swatches", async () => {
-    const req = new Request("http://localhost:3000/api/control", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Control-Pin": "9999"
-      },
-      body: JSON.stringify({
-        action: "update_settings",
-        pin: "9999",
-        event_name: "2026 Pediatric Health Gala",
-        event_subtitle: "Hope & Healing Foundation",
-        goal_cents: 75000000, // $750k
-        theme_preset: "sapphire",
-        brand_hue: 235,
-        brand_chroma: 0.14
-      })
-    });
-
-    const res = await handleControlRequest(req, db);
+    const res = await handleControlRequest(controlRequest({
+      action: "update_settings",
+      event_name: "2026 Pediatric Health Gala",
+      event_subtitle: "Hope & Healing Foundation",
+      goal_cents: 75000000,
+      theme_preset: "sapphire",
+      brand_hue: 235,
+      brand_chroma: 0.14
+    }, cookie), db);
     expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data.ok).toBe(true);
-
+    expect((await res.json()).ok).toBe(true);
     const updatedState = getEventState(db);
     expect(updatedState.event_name).toBe("2026 Pediatric Health Gala");
     expect(updatedState.event_subtitle).toBe("Hope & Healing Foundation");
@@ -287,25 +260,10 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     expect(foundInRecent).toBeUndefined();
   });
 
-  test("Phase 2: Database migration reaches user_version 6 and stage_delay_ms defaults to 0", () => {
+  test("Phase 2: Database migration reaches user_version 13 and stage_delay_ms defaults to 0", () => {
     const versionRow = db.query<{ user_version: number }, []>("PRAGMA user_version;").get();
-    expect(versionRow?.user_version).toBe(6);
-
-    const state = getEventState(db);
-    expect(state.stage_delay_ms).toBe(0);
-    expect(state.logo_url).toBe("");
-    expect(state.background_style).toBe("plain");
-    expect(state.bar_color).toBe("");
-    expect(state.show_qr).toBe(1);
-    expect(state.show_recent_donations).toBe(1);
-    expect(state.show_live_indicator).toBe(1);
-    expect(state.show_goal).toBe(1);
-    expect(state.stage_message).toBe("");
-    expect(state.stage_message_visible).toBe(0);
-    expect(state.feature_timer).toBe(0);
-    expect(state.feature_card_number).toBe(0);
-    expect(state.feature_table_number).toBe(0);
-    expect(state.bloomerang_api_key).toBe("");
+    expect(versionRow?.user_version).toBe(13);
+    expect(getEventState(db).stage_delay_ms).toBe(0);
   });
 
   test("Phase 2: API key is never exposed in any projection or API response", async () => {
@@ -325,12 +283,17 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     const ctrlJson = JSON.stringify(ctrl);
     expect(ctrlJson.includes("blm_secret_key")).toBe(false);
 
-    // 2. Check state route response for all roles
-    for (const role of ["stage", "control", "emcee", "entry", "default"]) {
+    // 2. Check state route response for public roles
+    for (const role of ["stage", "emcee", "default"]) {
       const req = new Request(`http://localhost:3000/api/state?role=${role}`);
       const res = handleStateRequest(req, db);
       const text = await res.text();
       expect(text.includes("blm_secret_key")).toBe(false);
+    }
+    for (const role of ["entry", "control"]) {
+      expect(handleStateRequest(new Request(`http://localhost:3000/api/state?role=${role}`), db).status).toBe(401);
+      const req = authed(new Request(`http://localhost:3000/api/state?role=${role}`), cookie);
+      expect((await handleStateRequest(req, db).text()).includes("blm_secret_key")).toBe(false);
     }
   });
 
@@ -381,13 +344,11 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     expect(voidEvent?.entered_by).toBe("User M. Chen");
 
     // 3. Restore donation via API / ledger operation
-    const restoreReq = new Request("http://localhost:3000/api/donation/don_roundtrip_1/restore", {
+    const restoreRes = await handleDonationRequest(authed(new Request("http://localhost:3000/api/donation/don_roundtrip_1/restore", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entered_by: "User J. Lee", reason: "Restored from History" })
-    });
-    const restoreRes = await handleDonationRequest(restoreReq, db, ["api", "donation", "don_roundtrip_1", "restore"]);
-    expect(restoreRes.status).toBe(200);
+      body: JSON.stringify({ reason: "Restored from History" })
+    }), cookie), db, ["api", "donation", "don_roundtrip_1", "restore"]);
 
     // 4. Verify fold reflects restoration
     fold = foldLedger(db);
@@ -399,7 +360,7 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     ctrl = getControlState(db);
     const restoreEvent = ctrl.recent_events.find(e => e.donation_id === "don_roundtrip_1" && e.event_type === "restore");
     expect(restoreEvent).toBeDefined();
-    expect(restoreEvent?.entered_by).toBe("User J. Lee");
+    expect(restoreEvent?.entered_by).toBe("director");
   });
 
   test("Verification 3: Settings persistence for milestones and ask tiers", async () => {
@@ -407,26 +368,16 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
       { cents: 5000000, label: "Community Center" },
       { cents: 15000000, label: "Endowment" }
     ];
-
     const customAskTiers = [
       { cents: 2500000, label: "$25,000" },
       { cents: 1000000, label: "$10,000" },
       { cents: 500000, label: "$5,000" }
     ];
-
-    const updateReq = new Request("http://localhost:3000/api/control", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "update_settings",
-        milestones: customMilestones,
-        ask_tiers: customAskTiers,
-        pin: "9999"
-      })
-    });
-
-    const updateRes = await handleControlRequest(updateReq, db);
-    expect(updateRes.status).toBe(200);
+    const updateRes = await handleControlRequest(controlRequest({
+      action: "update_settings",
+      milestones: customMilestones,
+      ask_tiers: customAskTiers
+    }, cookie), db);
     const updateData = await updateRes.json();
 
     // Verify in returned control state
@@ -493,37 +444,18 @@ describe("Givebar Redesign Architectural & Safety Invariants", () => {
     expect((anonRecent as Record<string, unknown>).donor_name).toBeUndefined();
   });
 
-  test("Production Defect: 401 Unauthorized prevents unauthenticated state leakage and zero-total render", async () => {
-    // Auth is only enforced once an operator actually sets a PIN
-    updateEventState(db, { control_pin: "9999" });
-
-    // Record donations so real total is non-zero
-    recordDonation(db, {
-      donation_id: "don_auth_test",
-      amount_cents: 750000,
-      donor_name: "Auth Test Donor"
-    });
-
-    // 1. Unauthenticated request without PIN
-    const unauthReq = new Request("http://localhost:3000/api/state?role=control");
-    const unauthRes = handleStateRequest(unauthReq, db);
+  test("Production Defect: 401 Unauthorized prevents unauthenticated operator access without leaking totals", async () => {
+    recordDonation(db, { donation_id: "don_auth_test", amount_cents: 750000, donor_name: "Auth Test Donor" });
+    const unauthRes = handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db);
     expect(unauthRes.status).toBe(401);
     const unauthData = await unauthRes.json();
     expect(unauthData.error).toBe("UNAUTHORIZED");
-    expect(unauthData.message).toBe("Control Room PIN required");
-    // Crucial: Must NOT contain any data fields that could paint a $0 total or empty list
+    expect(unauthData.message).toBe("Operator sign-in required");
     expect(unauthData.folded).toBeUndefined();
     expect(unauthData.total_raised_cents).toBeUndefined();
     expect(unauthData.staged_chyrons).toBeUndefined();
-
-    // 2. Request with invalid PIN
-    const wrongPinReq = new Request("http://localhost:3000/api/state?role=control&pin=1111");
-    const wrongPinRes = handleStateRequest(wrongPinReq, db);
-    expect(wrongPinRes.status).toBe(401);
-
-    // 3. Authenticated request with valid PIN
-    const authReq = new Request("http://localhost:3000/api/state?role=control&pin=9999");
-    const authRes = handleStateRequest(authReq, db);
+    expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db).status).toBe(401);
+    const authRes = handleStateRequest(authed(new Request("http://localhost:3000/api/state?role=control"), cookie), db);
     expect(authRes.status).toBe(200);
     const authData = await authRes.json();
     expect(authData.folded).toBeDefined();

@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { isControlAuthorized, readControlPin } from "./auth";
+import { getSession } from "./authz";
 
 /**
  * Live Presence Registry
@@ -221,13 +221,9 @@ export function resetPresence(): void {
   registry.clear();
 }
 
-/**
- * Same default-open rule as every other surface: presence is readable by
- * anyone until an operator sets a control PIN, and gated the instant one exists.
- */
-export function isPresenceReadable(db: Database, req: Request, url: URL): boolean {
-  const provided = req.headers.get("X-Control-Pin") || url.searchParams.get("pin") || "";
-  return isControlAuthorized(readControlPin(db), provided);
+export function isPresenceReadable(db: Database, req: Request): boolean {
+  const session = getSession(req, db);
+  return Boolean(session && (session.role === "admin" || session.role === "operator"));
 }
 
 const NO_STORE_HEADERS: Record<string, string> = {
@@ -248,8 +244,8 @@ export async function handlePresenceRequest(req: Request, db: Database): Promise
   const url = new URL(req.url);
 
   if (req.method === "GET") {
-    if (!isPresenceReadable(db, req, url)) {
-      return new Response(JSON.stringify({ error: "UNAUTHORIZED", message: "Control Room PIN required" }), {
+    if (!isPresenceReadable(db, req)) {
+      return new Response(JSON.stringify({ error: "UNAUTHORIZED", message: "Operator sign-in required" }), {
         status: 401,
         headers: NO_STORE_HEADERS
       });

@@ -12,24 +12,25 @@ import {
   PRESENCE_TTL_MS
 } from "../server/src/presence";
 import type { Database } from "bun:sqlite";
+import { authed, operatorCookie } from "./auth-helper";
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36";
 const PHONE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
-
 describe("Live Presence Registry", () => {
   let db: Database;
+  let cookie: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = initDatabase(":memory:");
     resetPresence();
+    cookie = await operatorCookie(db);
   });
 
-  async function post(body: unknown, opts: { ua?: string; pin?: string } = {}) {
+  async function post(body: unknown, opts: { ua?: string } = {}) {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (opts.ua) headers["User-Agent"] = opts.ua;
-    if (opts.pin) headers["X-Control-Pin"] = opts.pin;
     const req = new Request("http://localhost:3000/api/presence", {
       method: "POST",
       headers,
@@ -38,11 +39,8 @@ describe("Live Presence Registry", () => {
     return handlePresenceRequest(req, db);
   }
 
-  async function getRoster(pin?: string) {
-    const req = new Request(
-      "http://localhost:3000/api/presence" + (pin ? `?pin=${encodeURIComponent(pin)}` : "")
-    );
-    return handlePresenceRequest(req, db);
+  async function getRoster() {
+    return handlePresenceRequest(authed(new Request("http://localhost:3000/api/presence"), cookie), db);
   }
 
   test("heartbeat registers an entry and reports it on the roster", async () => {
@@ -187,7 +185,7 @@ describe("Live Presence Registry", () => {
 
   test("presence rides the control role payload", async () => {
     await post({ client_id: "c-alpha", name: "Ashraf", surface: "donations" }, { ua: DESKTOP_UA });
-    const res = handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db);
+    const res = handleStateRequest(authed(new Request("http://localhost:3000/api/state?role=control"), cookie), db);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.presence.count).toBe(1);
@@ -196,66 +194,34 @@ describe("Live Presence Registry", () => {
     expect(data.presence.ttl_ms).toBe(PRESENCE_TTL_MS);
   });
 
-  test("presence rides the default role payload", async () => {
+  test("presence rides the default role payload for signed-in operators only", async () => {
     await post({ client_id: "c-alpha", name: "Ashraf", surface: "home" }, { ua: DESKTOP_UA });
-    const res = handleStateRequest(new Request("http://localhost:3000/api/state?role=all"), db);
-    const data = await res.json();
+    expect((await handleStateRequest(new Request("http://localhost:3000/api/state?role=all"), db).json()).presence).toBeUndefined();
+    const data = await handleStateRequest(authed(new Request("http://localhost:3000/api/state?role=all"), cookie), db).json();
     expect(data.presence.count).toBe(1);
   });
 
-  test("the state payload presence view is stable between ticks so SSE does not thrash", () => {
-    recordHeartbeat({ client_id: "c-alpha", name: "Ashraf", surface: "donations" }, DESKTOP_UA, 1_000);
-    const first = JSON.stringify(getStatePayload("control", db, 0, undefined, "").payload);
-    const second = JSON.stringify(getStatePayload("control", db, 0, undefined, "").payload);
-    // The SSE loop dedupes on the serialized payload: nothing in presence may
-    // be relative to "now", or a 350ms keep-alive becomes a 350ms broadcast.
-    expect(first).toBe(second);
-  });
-
-  test("presence is open when no PIN is set and gated the moment one is", async () => {
+  test("roster and operator state require sign-in; heartbeats stay public", async () => {
     await post({ client_id: "c-alpha", name: "Ashraf", surface: "donations" }, { ua: DESKTOP_UA });
-
-    // Default-open: no credentials configured, roster readable.
     expect((await getRoster()).status).toBe(200);
-    const openDefault = await (
-      await handleStateRequest(new Request("http://localhost:3000/api/state?role=all"), db)
-    ).json();
-    expect(openDefault.presence.count).toBe(1);
+    expect(handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db).status).toBe(401);
+    const authedControl = authed(new Request("http://localhost:3000/api/state?role=control"), cookie);
+    expect(handleStateRequest(authedControl, db).status).toBe(200);
 
-    updateEventState(db, { control_pin: "4242" });
-
-    const blocked = await getRoster();
-    expect(blocked.status).toBe(401);
-    expect((await blocked.json()).error).toBe("UNAUTHORIZED");
-
-    const allowed = await getRoster("4242");
-    expect(allowed.status).toBe(200);
-    expect((await allowed.json()).count).toBe(1);
-
-    const gatedDefault = await (
-      await handleStateRequest(new Request("http://localhost:3000/api/state?role=all"), db)
-    ).json();
-    expect(gatedDefault.presence).toBeUndefined();
-
-    const gatedControl = handleStateRequest(new Request("http://localhost:3000/api/state?role=control"), db);
-    expect(gatedControl.status).toBe(401);
-
-    const authedDefault = await (
-      await handleStateRequest(new Request("http://localhost:3000/api/state?role=all&pin=4242"), db)
-    ).json();
-    expect(authedDefault.presence.count).toBe(1);
+    const unauthed = new Request("http://localhost:3000/api/presence");
+    expect((await handlePresenceRequest(unauthed, db)).status).toBe(401);
   });
 
-  test("heartbeating never requires the PIN, so a gated event still reports its projector", async () => {
-    updateEventState(db, { control_pin: "4242" });
+  test("heartbeating never requires sign-in, so a gated event still reports its projector", async () => {
     const res = await post({ client_id: "c-chart", name: "Ballroom", surface: "chart" }, { ua: DESKTOP_UA });
     expect(res.status).toBe(200);
     expect(getPresenceView().count).toBe(1);
   });
 
+
   test("no presence payload ever carries donor data, PINs, or API keys", async () => {
-    updateEventState(db, { control_pin: "4242", entry_pin: "1111", bloomerang_api_key: "blm_live_SECRETKEY" });
-    const donation = new Request("http://localhost:3000/api/donation/don_presence_1", {
+    updateEventState(db, { bloomerang_api_key: "blm_live_SECRETKEY" });
+    const donation = authed(new Request("http://localhost:3000/api/donation/don_presence_1", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -264,13 +230,14 @@ describe("Live Presence Registry", () => {
         card_number: "#0777",
         entered_by: "V-1234"
       })
-    });
+    }), cookie);
     expect((await handleDonationRequest(donation, db, ["api", "donation", "don_presence_1"])).status).toBe(201);
 
-    await post({ client_id: "c-alpha", name: "Ashraf", surface: "donations" }, { ua: DESKTOP_UA, pin: "4242" });
+    await post({ client_id: "c-alpha", name: "Ashraf", surface: "donations" }, { ua: DESKTOP_UA });
 
-    const fromApi = await (await getRoster("4242")).text();
-    const controlPayload = getStatePayload("control", db, 0, undefined, "4242").payload;
+    const fromApi = await (await getRoster()).text();
+    const authedControl = authed(new Request("http://localhost:3000/api/state?role=control"), cookie);
+    const controlPayload = getStatePayload("control", db, 0, authedControl).payload;
     if (!controlPayload || typeof controlPayload !== "object" || !("presence" in controlPayload)) {
       throw new Error("control payload is missing presence");
     }
@@ -282,11 +249,9 @@ describe("Live Presence Registry", () => {
     for (const serialized of [fromApi, fromState, ackBody]) {
       expect(serialized).not.toContain("Senator Marcus");
       expect(serialized).not.toContain("0777");
-      expect(serialized).not.toContain("4242");
-      expect(serialized).not.toContain("1111");
       expect(serialized).not.toContain("blm_live_SECRETKEY");
       expect(serialized).not.toContain("bloomerang");
-      expect(serialized).not.toContain("control_pin");
+      expect(serialized).not.toContain("pin_hash");
     }
   });
 
