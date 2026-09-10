@@ -166,6 +166,8 @@ export const server = Bun.serve({
       page = serveOperatorFile(req, db, "client/public/history.html");
     } else if (pathname === "/signin" || pathname === "/signin.html") {
       page = serveStaticFile("client/public/signin.html");
+    } else if (pathname.startsWith("/css/") || pathname.startsWith("/js/") || pathname.startsWith("/assets/")) {
+      page = serveStaticFile(join("client", pathname));
     } else {
       return new Response("Page Not Found", { status: 404 });
     }
