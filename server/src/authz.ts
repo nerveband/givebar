@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-
+import nodemailer from "nodemailer";
 export type OperatorRole = "admin" | "operator" | "presenter" | "display";
 export interface OperatorSession {
   accountId: string;
@@ -113,6 +113,12 @@ function brevoKey(): string {
   return process.env.BREVO_API_KEY || "";
 }
 
+function smtpConfig(): { user: string; pass: string } | null {
+  const user = process.env.BREVO_SMTP_USER || "";
+  const pass = process.env.BREVO_SMTP_KEY || "";
+  return user && pass ? { user, pass } : null;
+}
+
 function appOrigin(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-proto");
   const proto = forwarded ? forwarded.split(",")[0].trim() : new URL(req.url).protocol.replace(":", "");
@@ -122,13 +128,19 @@ function appOrigin(req: Request): string {
 
 async function sendBrevoEmail(to: string, subject: string, html: string, text: string): Promise<void> {
   const key = brevoKey();
-  if (!key) throw new Error("Email is not configured. Set BREVO_API_KEY.");
-  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "api-key": key },
-    body: JSON.stringify({ sender: { email: "info@wavedepth.com", name: "Givebar" }, to: [{ email: to }], subject, htmlContent: html, textContent: text })
-  });
-  if (!response.ok) throw new Error(`Email send failed (HTTP ${response.status}).`);
+  if (key) {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "api-key": key },
+      body: JSON.stringify({ sender: { email: "info@wavedepth.com", name: "Givebar" }, to: [{ email: to }], subject, htmlContent: html, textContent: text })
+    });
+    if (!response.ok) throw new Error(`Email send failed (HTTP ${response.status}).`);
+    return;
+  }
+  const smtp = smtpConfig();
+  if (!smtp) throw new Error("Email is not configured. Set BREVO_API_KEY or BREVO_SMTP_KEY.");
+  const transporter = nodemailer.createTransport({ host: "smtp-relay.brevo.com", port: 587, auth: { user: smtp.user, pass: smtp.pass } });
+  await transporter.sendMail({ from: "Givebar <info@wavedepth.com>", to, subject, html, text });
 }
 
 export async function createInvite(db: Database, req: Request, accountId: string, email: string): Promise<{ link: string }> {

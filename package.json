@@ -22,9 +22,11 @@
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6"
   },
   "dependencies": {
+    "nodemailer": "^10.0.2",
     "qrcode": "^1.5.4"
   }
 }
