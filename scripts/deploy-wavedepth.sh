@@ -8,6 +8,7 @@
 #   4. replace the running container with the same bind mounts and env
 #   5. wait for /api/state to answer, or roll back to the previous image
 #
+# nginx-rc proxies givebar.wavedepth.com to 127.0.0.1:3333 (Cloudflare in front).
 # Secrets stay on the host: the Fundraising token is a mode-600 file under
 # private/, and the Brevo SMTP key is read from private/brevo-smtp-key (created
 # from the running container's environment on first use). Nothing is printed.
@@ -39,7 +40,7 @@ ensure_smtp_key() {
 }
 run_container() {
   docker rm -f givebar >/dev/null 2>&1 || true
-  docker run -d --name givebar --restart unless-stopped --network dokploy-network \
+  docker run -d --name givebar --restart unless-stopped \
     -p 127.0.0.1:3333:3000 \
     -e NODE_ENV=production -e PORT=3000 -e HOST=0.0.0.0 -e GIVEBAR_DB_PATH=/app/data/givebar.sqlite \
     -e GIVEBAR_FUNDRAISING_TOKEN_FILE=/run/secrets/givebar-fundraising-token \
