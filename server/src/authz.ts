@@ -158,16 +158,25 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[ch] as string);
 }
 
+/** Mints a single-use sign-in link (7 days) for an account. Works for a text message just as well as for the email. */
+export function createInviteLink(db: Database, req: Request, accountId: string): { link: string; expires_at: number; username: string; display_name: string } {
+  const account = db.query<{ display_name: string; username: string; disabled: number }, [string]>(`SELECT display_name, username, disabled FROM operator_account WHERE id = ?`).get(accountId);
+  if (!account) throw new Error("Operator not found.");
+  if (account.disabled) throw new Error("Enable the account before issuing a sign-in link.");
+  const raw = sessionToken();
+  const expiresAt = now() + INVITE_MS;
+  db.query(`INSERT INTO operator_invite (token_hash, account_id, expires_at) VALUES (?, ?, ?)`).run(sha256Hex(raw), accountId, expiresAt);
+  return { link: `${appOrigin(req)}/signin?invite=${raw}`, expires_at: expiresAt, username: account.username, display_name: account.display_name };
+}
+
 export async function createInvite(db: Database, req: Request, accountId: string, email: string): Promise<{ link: string }> {
   const address = email.trim().slice(0, 254);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) throw new Error("Enter a valid email address.");
   const account = db.query<{ display_name: string; username: string; role: OperatorRole }, [string]>(`SELECT display_name, username, role FROM operator_account WHERE id = ?`).get(accountId);
   if (!account) throw new Error("Operator not found.");
   const event = db.query<{ event_name: string; stage_delay_ms: number }, []>(`SELECT event_name, stage_delay_ms FROM event_state WHERE id = 1`).get()!;
-  const raw = sessionToken();
-  db.query(`INSERT INTO operator_invite (token_hash, account_id, expires_at) VALUES (?, ?, ?)`).run(sha256Hex(raw), accountId, now() + INVITE_MS);
+  const { link } = createInviteLink(db, req, accountId);
   const origin = appOrigin(req);
-  const link = `${origin}/signin?invite=${raw}`;
   const firstName = account.display_name.split(" ")[0];
   const delaySeconds = Math.round(event.stage_delay_ms / 1000);
   const steps = OPERATOR_STEPS.map(step => step.replace("the staging delay", `${delaySeconds} seconds`));

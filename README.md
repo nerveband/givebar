@@ -26,7 +26,7 @@ Live fundraising bar chart and stage suite for nonprofit galas and benefit appea
 
 ## Accounts and roles
 
-Administrators create one account per person in Settings → Operator accounts and either hand over the name and PIN or send an **email invite**. The invite carries a one-time sign-in link (7 days), the person's sign-in name, and the steps for the night. Home → **Copy briefing** gives the same steps plus every link as plain text for a group chat.
+Administrators create one account per person in Settings → Operator accounts, then hand over the name and PIN, copy a one-time **Sign-in link** to text them, or send an **Email invite**. Links work once and expire after 7 days; the email also carries the sign-in name and the steps for the night. Home → **Copy briefing** gives the same steps plus every link as plain text for a group chat.
 
 | | Operator | Administrator |
 | :--- | :---: | :---: |

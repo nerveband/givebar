@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { getEventState, updateEventState, getControlState, getStageState, foldLedger, type EventStateRecord } from "../ledger";
-import { changePin, createInvite, getSession, login, logout, normalizeUsername, OPERATOR_STEPS, redeemInvite, requireRole, type OperatorSession } from "../authz";
+import { changePin, createInvite, createInviteLink, getSession, login, logout, normalizeUsername, OPERATOR_STEPS, redeemInvite, requireRole, type OperatorSession } from "../authz";
 import { FONT_FAMILY_KEYS, isChartOrientation, isFontFamilyKey, isValidColor, isValidQrUrl } from "../settings";
 import type { BackupManager } from "../backup";
 
@@ -361,6 +361,17 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
         }
         audit(db, operator.accountId, "update_account", id);
         return Response.json({ ok: true });
+      }
+      case "create_invite_link": {
+        const denied = adminOnly();
+        if (denied) return denied;
+        try {
+          const issued = createInviteLink(db, req, String(body.id || ""));
+          audit(db, operator.accountId, "create_invite_link", String(body.id || ""));
+          return Response.json({ ok: true, ...issued });
+        } catch (error) {
+          return Response.json({ error: "INVITE_FAILED", message: error instanceof Error ? error.message : "Could not create the link." }, { status: 400 });
+        }
       }
       case "send_invite": {
         const denied = adminOnly();

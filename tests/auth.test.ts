@@ -63,6 +63,28 @@ describe("Sessions", () => {
     expect((await handleControlRequest(control({ action: "update_account", id: self.id, role: "operator" }, admin), db, backups)).status).toBe(400);
   });
 
+  test("a one-time sign-in link is administrator-issued, signs in as that account exactly once, and dies with the account", async () => {
+    const admin = await sessionCookie(db, backups);
+    const operator = await sessionCookie(db, backups, "sara", "operator");
+    const accounts = await (await handleControlRequest(control({ action: "list_accounts" }, admin), db, backups)).json();
+    const sara = accounts.accounts.find((a: { username: string }) => a.username === "sara");
+    expect((await handleControlRequest(control({ action: "create_invite_link", id: sara.id }, operator), db, backups)).status).toBe(403);
+    const issued = await (await handleControlRequest(control({ action: "create_invite_link", id: sara.id }, admin), db, backups)).json();
+    expect(issued.link).toMatch(/^http:\/\/localhost:3000\/signin\?invite=/);
+    const token = new URL(issued.link).searchParams.get("invite")!;
+    const redeemed = await handleControlRequest(control({ action: "redeem_invite", token }), db, backups);
+    expect(redeemed.status).toBe(200);
+    const cookie = redeemed.headers.get("set-cookie")!.split(";")[0];
+    const me = await (await handleControlRequest(control({ action: "auth_check" }, cookie), db, backups)).json();
+    expect(me.username).toBe("sara");
+    expect(me.role).toBe("operator");
+    expect((await handleControlRequest(control({ action: "redeem_invite", token }), db, backups)).status).toBe(400);
+    const second = await (await handleControlRequest(control({ action: "create_invite_link", id: sara.id }, admin), db, backups)).json();
+    await handleControlRequest(control({ action: "update_account", id: sara.id, disabled: true }, admin), db, backups);
+    expect((await handleControlRequest(control({ action: "redeem_invite", token: new URL(second.link).searchParams.get("invite") }), db, backups)).status).toBe(400);
+    expect((await handleControlRequest(control({ action: "create_invite_link", id: sara.id }, admin), db, backups)).status).toBe(400);
+  });
+
   test("a PIN change and a PIN reset both rotate sessions", async () => {
     const admin = await sessionCookie(db, backups);
     const operator = await sessionCookie(db, backups, "sara", "operator");

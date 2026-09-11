@@ -703,6 +703,7 @@
       <td>${account.role === 'admin' ? 'Administrator' : 'Operator'}</td>
       <td>${account.disabled ? 'Disabled' : 'Active'}</td>
       <td class="row-actions">
+        <button type="button" class="btn-secondary btn-row" data-link="${account.id}" data-name="${fmt.escape(account.display_name)}" ${account.disabled ? 'disabled' : ''}>Sign-in link</button>
         <button type="button" class="btn-secondary btn-row" data-invite="${account.id}" data-name="${fmt.escape(account.display_name)}" ${account.disabled ? 'disabled' : ''}>Email invite</button>
         <button type="button" class="btn-secondary btn-row" data-reset-pin="${account.id}" data-name="${fmt.escape(account.display_name)}">Reset PIN</button>
         <button type="button" class="btn-secondary btn-row" data-disable="${account.id}" data-disabled="${account.disabled ? 0 : 1}">${account.disabled ? 'Enable' : 'Disable'}</button>
@@ -713,6 +714,19 @@
     const disable = event.target.closest('[data-disable]');
     const reset = event.target.closest('[data-reset-pin]');
     const invite = event.target.closest('[data-invite]');
+    const link = event.target.closest('[data-link]');
+    if (link) {
+      const result = await GivebarSession.control('create_invite_link', { id: link.dataset.link });
+      if (!result.ok) { window.alert(result.data.message || 'Could not create the link.'); return; }
+      const dialog = document.getElementById('link-dialog');
+      document.getElementById('link-dialog-title').textContent = `Sign-in link for ${link.dataset.name}`;
+      document.getElementById('link-dialog-body').textContent = `Works once, expires ${fmt.time(result.data.expires_at)}. Whoever opens it is signed in as ${result.data.display_name} (sign-in name ${result.data.username}) and can set a PIN. Send it by text or chat; do not post it anywhere public.`;
+      document.getElementById('link-value').value = result.data.link;
+      document.getElementById('btn-copy-link').dataset.copyText = result.data.link;
+      dialog.showModal();
+      document.getElementById('link-value').select();
+      return;
+    }
     if (disable) {
       const disabling = disable.dataset.disabled === '1';
       if (disabling && !window.confirm('Disable this operator? Their session ends immediately and they cannot sign in until re-enabled.')) return;
@@ -759,6 +773,7 @@
     }
   });
   document.getElementById('btn-close-invite').addEventListener('click', () => inviteDialog.close());
+  document.getElementById('btn-close-link').addEventListener('click', () => document.getElementById('link-dialog').close());
 
   function setupOperators() {
     document.getElementById('btn-create-operator').addEventListener('click', async () => {

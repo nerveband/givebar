@@ -870,7 +870,7 @@
               <svg class="accordion-chevron" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
             </button>
             <div class="accordion-body" id="sec-access-body">
-              <p class="form-hint">Create one account per person. Give them the name and PIN in person, or send an email invite: it carries a one-time sign-in link, their sign-in name, and the steps for the night. Disabling an account ends their session immediately.</p>
+              <p class="form-hint">Create one account per person. Then either tell them the name and PIN, copy a one-time <strong>Sign-in link</strong> to text them, or send an <strong>Email invite</strong> with the link and the steps for the night. Links work once and expire after 7 days. Disabling an account ends their session immediately.</p>
               <div class="form-group">
                 <label class="form-label" for="operator-username">Operator name</label>
                 <input id="operator-username" class="form-input-text" autocomplete="username" maxlength="64">
@@ -915,9 +915,18 @@
     </form>
   </dialog>
 
+  <dialog id="link-dialog" class="operator-dialog" aria-labelledby="link-dialog-title">
+    <form method="dialog" novalidate>
+      <div class="donation-dialog-heading"><h2 id="link-dialog-title">Sign-in link</h2><button type="button" id="btn-close-link" class="btn-secondary">Close</button></div>
+      <p id="link-dialog-body"></p>
+      <input id="link-value" readonly>
+      <div class="operator-dialog-actions"><button type="button" id="btn-copy-link" class="btn-primary" data-copy-label="Copy link">Copy link</button></div>
+    </form>
+  </dialog>
+
   <script src="/js/session.js?v=7.0.0"></script>
   <script src="/js/presence.js?v=7.0.0"></script>
-  <script src="/js/settings.js?v=7.0.0"></script>
+  <script src="/js/settings.js?v=7.0.1"></script>
   <script src="/js/fundraising.js?v=7.0.0"></script>
 </body>
 </html>
