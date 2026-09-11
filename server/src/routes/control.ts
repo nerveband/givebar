@@ -267,6 +267,16 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
         audit(db, operator.accountId, "update_settings");
         break;
       }
+      case "resync_chart": {
+        // Before doors, after deleting test entries: put the wall figure back on the real total.
+        const denied = adminOnly();
+        if (denied) return denied;
+        const current = getEventState(db);
+        updateEventState(db, { odometer_floor_cents: 0, stage_reset_seq: current.stage_reset_seq + 1, is_frozen: 0 });
+        getStageState(db);
+        audit(db, operator.accountId, "resync_chart");
+        break;
+      }
       case "purge_rehearsal": {
         const denied = adminOnly();
         if (denied) return denied;

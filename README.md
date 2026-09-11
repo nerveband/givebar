@@ -58,7 +58,7 @@ The Fundraising token lives in a mode-600 file on the server (`GIVEBAR_FUNDRAISI
 | Deleted the wrong gift | Press **Undo** in the banner (30 s) or History → **Restore**. |
 | Two people entered the same gift | The second entry is challenged. If it slipped through, delete one; History keeps the record. |
 | Operator's laptop drops off Wi-Fi | Keep the page open. Gifts recorded offline wait in the browser ("waiting to sync") and send when the network returns, without creating duplicates. The banner reads "Connection lost" until then. |
-| Chart shows something wrong | Manage Donations → **Pause chart**. Fix the ledger. **Resume chart**. |
+| Chart shows something wrong | Manage Donations → **Pause chart**. Fix the ledger. **Resume chart**. Before doors only: Testing → **Re-sync chart to the real total** after deleting test entries. |
 | Someone changed settings mid-appeal | Only administrators can; Settings warns when another session saved first. Settings → Backups → restore the last snapshot if needed. |
 | Serious data mistake | Settings → Backups and restore → **Restore** on the snapshot before the mistake. A pre-restore snapshot is taken first. Accounts and sessions are untouched. |
 | Server restart | Everything is in `data/givebar.sqlite`. Presence rebuilds in 5 seconds; open pages reconnect on their own. |

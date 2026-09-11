@@ -69,6 +69,12 @@
     }
   });
 
+  $('btn-resync-chart').addEventListener('click', async () => {
+    if (!window.confirm('Re-sync the ballroom figure to the real total now? Use this before doors, never during the appeal.')) return;
+    const result = await GivebarSession.control('resync_chart');
+    showFeedback(result.ok ? `Chart re-synced to ${fmt.money(result.data.state.stage_preview.stage_total_cents)}.` : (result.data.message || 'Could not re-sync the chart.'), result.ok ? 'ok' : 'error');
+  });
+
   async function sync() {
     try {
       const response = await GivebarSession.api('/api/state?role=control');

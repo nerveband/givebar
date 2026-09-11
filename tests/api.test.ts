@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { initDatabase, migrateSchema, SCHEMA_VERSION } from "../server/src/db";
-import { foldLedger, getEventState, recordDonation, updateEventState } from "../server/src/ledger";
+import { foldLedger, getEventState, recordDonation, updateEventState, voidDonation } from "../server/src/ledger";
 import { getStageState } from "../server/src/projection";
 import { handleControlRequest } from "../server/src/routes/control";
 import { handleDonationRequest } from "../server/src/routes/donation";
@@ -133,6 +133,20 @@ describe("Rehearsal purge, reset, and backups", () => {
     expect(stage.stage_reset_seq).toBe(1);
     expect(foldLedger(db).active_donation_count).toBe(1);
     expect(backups.list().some(b => b.label === "pre-purge")).toBe(true);
+  });
+
+  test("re-sync puts the wall figure back on the real total after test entries are deleted", async () => {
+    const admin = await sessionCookie(db, backups);
+    updateEventState(db, { stage_delay_ms: 0 });
+    recordDonation(db, { donation_id: "test", donor_name: "Test Entry", amount_cents: 400000 });
+    recordDonation(db, { donation_id: "real", donor_name: "Real", amount_cents: 175000 });
+    expect(getStageState(db).total_raised_cents).toBe(575000);
+    voidDonation(db, "test", "Admin", "test entry");
+    expect(getStageState(db).total_raised_cents).toBe(575000);
+    expect((await handleControlRequest(control({ action: "resync_chart" }, admin), db, backups)).status).toBe(200);
+    const stage = getStageState(db);
+    expect(stage.total_raised_cents).toBe(175000);
+    expect(stage.stage_reset_seq).toBe(1);
   });
 
   test("reset needs the literal confirmation and clears import receipts so online gifts return on the next sync", async () => {

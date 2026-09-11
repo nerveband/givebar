@@ -170,6 +170,11 @@
         </button>
       </section>
 
+      <section class="stage-message-controls" aria-labelledby="resync-title">
+        <div class="donation-dialog-heading"><h2 id="resync-title">Chart figure</h2><button type="button" id="btn-resync-chart" class="btn-secondary">Re-sync chart to the real total</button></div>
+        <p class="form-hint">The ballroom figure never rolls backward on its own. After deleting test entries before doors, use this once so the chart starts from the true total. Do not use it during the live appeal.</p>
+      </section>
+
       <!-- Rehearsal Generator Controls -->
       <section style="margin-bottom: var(--space-6);">
         <h2 style="font-size: var(--text-sm); font-weight: 700; color: #88888e; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 var(--space-3) 0;">
@@ -256,7 +261,7 @@
 
   <script src="/js/session.js?v=7.0.0"></script>
   <script src="/js/presence.js?v=7.0.0"></script>
-  <script src="/js/testing.js?v=7.0.0"></script>
+  <script src="/js/testing.js?v=7.0.1"></script>
   <script>
     const previewFrame = document.getElementById('testing-preview-frame');
     const previewChart = document.getElementById('testing-chart-preview');
