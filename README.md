@@ -1,166 +1,96 @@
 # Givebar
 
-> The open-source live fundraising thermometer and stage presentation suite for high-stakes nonprofit galas and benefit auctions ($100k–$2M+ live appeals).
+Live fundraising bar chart and stage suite for nonprofit galas and benefit appeals. One Bun process, one SQLite file, no external services in the money path.
+
+- **Fullscreen Bar Chart** `/chart` for the projector or LED wall: rolling total, progress bar, recent-gift feed, rotating impact messages, donation QR.
+- **Presenter View** `/presenter` for the podium: current donor with pronunciation, total, next milestone, full gift list.
+- **Manage Donations** `/donations` for operators: add, edit, delete, undo, team notes, stage messages, pause switch, CSV.
+- **Settings** `/settings`, **Testing** `/testing`, **History** `/history`, **Home** `/` with links, presence, and the team briefing.
 
 ---
 
-## Overview
+## How the money is protected
 
-Givebar replaces fragile, multi-tab spreadsheets during live fundraising appeals where hundreds of thousands or millions of dollars are pledged in 30 to 45 minutes.
-
-Everything runs on a single self-contained process backed by embedded SQLite in WAL mode with 1-second live synchronization. No external databases, WebSocket dropouts, or cloud queue dependencies.
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            GIVEBAR LIVE TOPOLOGY                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   VOLUNTEER PLEDGE PADS             EVENT CONTROL ROOM                      │
-│   (Mobile 1-Thumb Entry)            (8s Review Queue & Settings)            │
-│   [ Table Volunteer Phones ] ────>  [ Director & AV Laptop ]                │
-│                                                │                            │
-│                                                ▼ 8s Review Horizon          │
-│   PODIUM SCREEN                     MAIN BALLROOM SCREEN                    │
-│   (Emcee OLED Confidence Monitor)   (1080p Projector / LED Wall HUD)        │
-│   [ Stage Downstage Tablet ]        [ 130px Odometer & Lower Third Ticker ] │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+| Rule | What it means on the night |
+| :--- | :--- |
+| Append-only ledger | Every add, edit, delete, and restore is a new row with the operator's name and the exact time. Nothing is overwritten. History shows all of it. |
+| Staging delay (8 s) | A gift reaches the ballroom screen 8 seconds after it is recorded. Delete or correct it before then and the room never sees it. |
+| Major gift confirmation | Gifts at or above the threshold ($9,500 by default) need a second confirmation so $5,000 never becomes $50,000. |
+| Duplicate guards | The same donor and amount entered twice within 10 minutes is challenged before it counts. Pledge card numbers are unique. Online gifts import once, keyed by their Bloomerang transaction ID. |
+| No-backward chart | Once a figure is on the wall it never rolls back. A later delete is absorbed by the next gifts. |
+| Pause | Operators can hold the wall figure and hide the feed during an emergency, then resume. |
+| Privacy shield | The audience feed carries a display name, amount, and time. Team notes, operator names, card numbers, and the legal names of anonymous donors stay inside the operator pages. |
+| Backups | A consistent snapshot of the whole database is taken every 5 minutes when anything changed, and before any purge, reset, restore, or deploy. Administrators can download any snapshot or restore one. |
 
 ---
 
-## Live Surfaces
+## Accounts and roles
 
-| Surface | Path | Primary Device | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Suite Launcher** | `/` | Any Browser | One-click launchpad for all live-event surfaces. |
-| **Main Ballroom Screen** | `/chart` | Projector / LED wall | Rolling total, horizontal bar or centered thermometer, donation feed, rotating impact messages, and donation QR. |
-| **Manage Donations** | `/donations` | Volunteer phones / director laptop | One donation table with Add donation modal, major-gift confirmation, offline outbox, delete/undo, CSV export, and live stage messaging. |
-| **Podium Screen** | `/presenter` | Podium tablet / teleprompter | Total and live progress bar, donor shoutouts, pronunciation, and milestone context. No table numbers. |
-| **Event Settings & Testing** | `/settings`, `/testing` | Director / AV laptop | Persistent event configuration and rehearsal tools with the same live chart embedded for verification. |
+Administrators create one account per person in Settings → Operator accounts and either hand over the name and PIN or send an **email invite**. The invite carries a one-time sign-in link (7 days), the person's sign-in name, and the steps for the night. Home → **Copy briefing** gives the same steps plus every link as plain text for a group chat.
 
-### Presentation previews
+| | Operator | Administrator |
+| :--- | :---: | :---: |
+| Record, edit, delete, restore gifts; team notes | yes | yes |
+| Stage message, impact rotation, pause/resume chart | yes | yes |
+| CSV export, History, Home presence | yes | yes |
+| Settings, milestones, appearance, QR, ask tiers, matching | | yes |
+| Rehearsal gifts and purge, full reset | | yes |
+| Backups, restore, accounts, invites, Fundraising import setup | | yes |
 
-The operator sidebar opens the chart preview at `/preview` and the presenter
-preview at `/presenter-preview`. Both show the live screen inset, a copyable
-standalone URL, a **Fullscreen** button, and **Open in new tab**.
-
-Fullscreen expands the live iframe without reloading it; leaving fullscreen
-returns to the preview. If the browser denies fullscreen, use the new-tab link.
-Shared room URLs remain `/chart` and `/presenter`, without the operator shell.
-
-### Presence
-
-Home (`/`) includes a **Who's here** section with the active browser count and a
-roster grouped by operator page. Home, Preview, Manage Donations,
-Settings, Testing, and History report presence without adding overlays to their
-interfaces. The fullscreen Chart and Presenter are not tracked.
-
-On first use, enter your name; use **Recording donations as → Change name** on any operator
-page or rename yourself in Presence. New manual gifts and subsequent actions
-record that name. These are self-reported browser identities, not authenticated
-accounts; renaming does not rewrite historical ledger attribution.
-
-Browsers send a heartbeat every 5 seconds; entries expire 15 seconds after their
-last heartbeat. Backgrounded tabs stop reporting after a 30-second grace period.
-Presence is ephemeral and never writes to the donation ledger. A disconnected
-Home marks its cached roster stale rather than claiming everyone is still live.
-
-When a Control Room PIN is configured, unlock an operator page first, then return
-to Home to view the roster. Names and counts are hidden when access is denied.
-
-Manage Donations shows one table with exact Eastern 12-hour timestamps (including
-seconds and EST/EDT), source and operator labels, and donation-detail copying.
-Add donation opens a modal on that page. History retains the actor for each action.
+Sessions last 12 hours. Disabling an account ends its session immediately. Five wrong PINs lock a name for 15 minutes.
 
 ---
 
-## Core Architectural Invariants
+## Online gifts (Bloomerang Fundraising)
 
-1. **Append-Only Event Ledger**: Source of truth is an immutable SQLite stream (`create`, `amend`, `void`, `match_apply`, `match_release`). The verified balance is a deterministic fold over the ledger.
-2. **Unified 8-Second Staging Horizon**: Both ballroom display totals and lower-third chyrons pass through an 8-second review buffer. If an operator clicks **"Hold from Stage"** or a volunteer taps **"Undo"** within 8 seconds, the typo never reaches the ballroom screen or odometer.
-3. **$\ge \$9,500$ Major Gift Guardrail**: Server-enforced verification intercept modal to prevent accidental extra-zero submissions ($50k $\rightarrow$ $500k).
-4. **Physical Pledge Card Duplicate Check**: Enforces unique card serials (`#0412`) in $O(1)$, rejecting duplicates with detailed resolution guidance.
-5. **No-Backward Ballroom Screen Rule**: Ordinary voids or downward corrections hold the ballroom total steady. Explicit rehearsal purge and full reset advance a reset sequence so both the bar and odometer can reset; rehearsal purge preserves real gifts and their matching contributions.
-6. **Strict Privacy Shield**: Anonymous donors display as *"Anonymous Supporter — $X"* on stage; real donor names are completely stripped before reaching the ballroom projection feed.
-7. **Pure Matching Grant Folds**: Matching funds are derived deterministically. Voiding or amending a matched gift emits compensating `match_release` events, keeping sponsor pools 100% auditable.
+Settings → Connections → Bloomerang Fundraising. Set the gala form ID and the date to import from, tick **Automatically import gifts**, and save. The server reconciles the form every 30 seconds; **Sync now** runs the same reconciliation. Only the gift amount counts: donor-covered fee assistance and ticket or store purchases are excluded. Refunds and corrections append ledger events and release matching funds. A gift an operator deleted stays deleted. Never enter online gifts by hand.
+
+The Fundraising token lives in a mode-600 file on the server (`GIVEBAR_FUNDRAISING_TOKEN_FILE`). It is never shown in the app.
 
 ---
 
-## Zero-Code In-App Customization
+## If something goes wrong
 
-Non-technical event directors and gala chairs configure the event at **Settings** (`/settings`). Settings persist in SQLite, not external configuration files.
-
-* **Event Identity**: Event title, subtitle, organization, trust/EIN text, and donation QR destination.
-* **Fundraising Goal**: Comma-formatted dollar inputs; named milestones, dollar ticks with configurable spacing, or no markers. Changes to the goal or milestone list require confirmation.
-* **Appearance**: Independent bar and figure colors, artwork, optional silent looping video, typeface, and orientation. Subtle Gradient has editable colors, direction, and intensity. The same embedded chart previews unsaved changes. Reduced-motion viewers see still artwork instead of video.
-* **Images**: Hosted logo/artwork URLs or PNG/JPEG/WebP uploads up to 2 MB per image. Uploaded images are stored with settings.
-* **Ballroom QR**: Separate tracked donation destination and short displayed URL. Upload a custom SVG/PNG/JPEG/WebP up to 2 MB, keep its transparency or add a white backdrop, and return to the automatic QR at any time. Uploads preserve their own encoded destination; changing the URL cannot rewrite an uploaded graphic. Scan-test the actual chart before the event. The automatic code retains its white quiet zone.
-* **Volunteer Quick-Amounts**: Configurable ask-tier buttons ($10k, $5k, $2.5k, $1k, $500, or custom amounts).
-* **Matching Donor Grants**: Sponsor name, matching pool amount, match ratio (1:1 double, 2:1 triple), and live active toggle.
-* **Passcode Protection**: Optional PIN gates for the Control Room and Volunteer Pads.
-* **Live messages**: Manage Donations → On the ballroom screen sends an immediate announcement or returns to the editable 12-second impact rotation. Settings saves do not overwrite live announcements.
-* **Gala motion assets**: `/assets/gala-anniversary-loop.mp4` is a silent, seamless 8-second light-and-particle animation of the supplied illuminated tenth-anniversary artwork. `/assets/gala-anniversary-background.png` is its still fallback, with baked-in text removed to leave room for live figures. The earlier `/assets/gala-background-loop.mp4` remains available as an alternative decorative-border background.
-* **Impact copy source**: The CAIR-Georgia gala rotation draws on the [2026 booklet](https://share.wavedepth.com/cga10year-booklet/), particularly free legal representation, religious freedom, Know Your Rights education, State Capitol advocacy, and rapid response. It makes no per-dollar allocation claims.
-* **Rehearsal**: Testing puts controls beside a sticky, scaled 1920×1080 instance of the actual chart when space permits; narrow screens stack them. Sample records remain below the workbench. Sample gifts affect the same event, so rehearse before the live appeal.
-
-### Bloomerang Fundraising
-
-Settings → Connections configures one Fundraising form, an import start date,
-and automatic import. The server reconciles that form every 30 seconds; **Sync
-now** runs the same reconciliation. Gifts use stable upstream transaction IDs
-so polling does not duplicate them. Corrections and refunds append ledger events
-and release matching funds. Operator-deleted gifts stay deleted.
-
-Only the gift amount counts: donor-covered fee assistance and non-donation
-ticket/store purchases are excluded. Do not also enter online gifts manually.
-Imported gifts retain the normal staging delay and anonymous-donor privacy.
-
-Provision the token in a private mode-600 file outside the source tree and set
-`GIVEBAR_FUNDRAISING_TOKEN_FILE` to its path. The token never appears in settings
-responses. The optional **CRM** credential check is separate and does not import
-donations. A successful Fundraising sync reports its time, form, and gift count.
+| Situation | What to do |
+| :--- | :--- |
+| Typo just entered | Manage Donations → **Delete** on that row inside 8 seconds. Nobody in the room sees it. |
+| Typo noticed later | **Edit** the row (amount, name, note, anonymous) or **Delete** it. The wall figure holds; the total and the presenter update immediately. |
+| Deleted the wrong gift | Press **Undo** in the banner (30 s) or History → **Restore**. |
+| Two people entered the same gift | The second entry is challenged. If it slipped through, delete one; History keeps the record. |
+| Operator's laptop drops off Wi-Fi | Keep the page open. Gifts recorded offline wait in the browser ("waiting to sync") and send when the network returns, without creating duplicates. The banner reads "Connection lost" until then. |
+| Chart shows something wrong | Manage Donations → **Pause chart**. Fix the ledger. **Resume chart**. |
+| Someone changed settings mid-appeal | Only administrators can; Settings warns when another session saved first. Settings → Backups → restore the last snapshot if needed. |
+| Serious data mistake | Settings → Backups and restore → **Restore** on the snapshot before the mistake. A pre-restore snapshot is taken first. Accounts and sessions are untouched. |
+| Server restart | Everything is in `data/givebar.sqlite`. Presence rebuilds in 5 seconds; open pages reconnect on their own. |
 
 ---
 
-## Quickstart
+## Launch checklist
 
-### Running with Bun (Recommended)
+1. **Accounts**: create every operator, send invites or hand out PINs, disable test accounts. Have each person sign in once before doors.
+2. **Rehearsal**: Testing → inject sample gifts, delete one inside 8 seconds and watch the chart never show it, practise Edit and Undo, check the presenter reads names correctly.
+3. **Purge**: Testing → **Purge Sample Data**. Confirm Home shows the real total (online gifts already imported) and the chart resets.
+4. **Settings**: goal, milestones, event title, QR target and printed URL, ask tiers, major-gift threshold, staging delay. Scan the QR on the real projector.
+5. **Room screens**: open `/chart?fullscreen=1` on the projector machine and `/presenter` on the podium tablet. Both are public URLs; nobody signs in on them.
+6. **Bloomerang**: Settings → Connections shows "Automatic import on" with a recent sync time. Make a $1 test gift online if you want to see it arrive (then delete it).
+7. **Backups**: Settings → Backups → **Snapshot now**, then **Download a fresh copy** and keep it on a laptop.
+8. **During the appeal**: one person watches Manage Donations for "Waiting to appear" and the stale banner; the emcee keeps `/presenter` open; nobody opens Settings or Testing.
+9. **After**: CSV export for finance; a final download of the database.
+
+---
+
+## Running it
 
 ```bash
-# Clone the repository
-git clone https://github.com/nerveband/givebar.git
-cd givebar
-
-# Run development server with live reload
-bun dev
-
-# Run automated test suite
+bun install
+bun dev                      # http://localhost:3000, database at data/givebar.sqlite
 bun test
 ```
 
-### Running with Docker (wavedepth Dokploy)
+Environment: `PORT`, `HOST`, `GIVEBAR_DB_PATH`, `GIVEBAR_FUNDRAISING_TOKEN_FILE`, and for invite emails either `BREVO_API_KEY` or `BREVO_SMTP_USER` + `BREVO_SMTP_KEY`. Backups are written next to the database in `backups/`.
 
-```bash
-# Build and run container
-docker build -t givebar .
-docker run -d -p 3000:3000 -v $(pwd)/data:/app/data --name givebar givebar
-```
+### Production (wavedepth)
 
----
+`scripts/deploy-wavedepth.sh` syncs the checkout to the host, snapshots the live database, builds an image tagged with the commit, swaps the `givebar` container, health-checks it, and rolls back on failure. The database and its snapshots live in `/etc/dokploy/applications/givebar/data`. The first start after this release upgrades a previous-release database in place; anything older must start from a fresh database or a restored snapshot.
 
-## Live Rehearsal & Gala Verification Checklist
-
-Before doors open on gala night:
-1. **Tech rehearsal**: Open `/testing`, generate sample gifts, and watch the embedded `/chart` preview.
-2. **Stage review**: Delete a sample gift within the configured staging horizon and verify it never reaches the ballroom.
-3. **Major gift guardrail**: In `/donations`, open **Add donation**, enter `$50,000`, and verify explicit confirmation is required.
-4. **Duplicate card test**: With card numbers enabled, record `#0101`, then attempt the same number again. Verify the warning preserves the draft.
-5. **Presentation check**: Check both orientations, the presenter bar, QR readability, background loop, and reduced-motion fallback.
-6. **Finance reconciliation**: Export CSV and verify ledger totals. Purge sample data only when rehearsal is finished; never reset real gifts.
-
----
-
-## License
-
-MIT License. Designed for nonprofit galas and benefit auctions worldwide.
+License: MIT.

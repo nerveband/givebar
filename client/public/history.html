@@ -6,10 +6,10 @@
   <title>History — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#070603;color-scheme:dark}</style>
-  <link rel="stylesheet" href="css/tokens.css?v=6.3.0">
-  <link rel="stylesheet" href="css/base.css?v=6.1.0">
-  <link rel="stylesheet" href="css/components.css?v=6.1.0">
-  <link rel="stylesheet" href="css/app.css?v=6.4.0">
+  <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.0.0">
   <style>
     .timeline-wrap {
       position: relative;
@@ -28,6 +28,7 @@
       background: #27282f;
     }
 
+    .history-empty { color: #88888e; font-size: var(--text-sm); padding: var(--space-6) 0; }
     .timeline-item {
       position: relative;
       margin-bottom: var(--space-4);
@@ -202,10 +203,9 @@
     <!-- Main Content Panel -->
     <main class="ops-main">
 
-        <header style="margin-bottom: var(--space-5);">
-        <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0 0 6px 0; color: #f4f5f6; letter-spacing: -0.02em;">
-          History
-        </h1>
+      <header class="page-header">
+        <h1>History</h1>
+        <span id="history-summary" class="form-hint"></span>
       </header>
 
       <!-- Filter Controls Row -->
@@ -222,24 +222,19 @@
           <svg class="search-icon" width="14" height="14" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
             <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/>
           </svg>
-          <input type="search" id="history-search" class="search-input" placeholder="Search donor or user" aria-label="Search history">
+          <input type="search" id="history-search" class="search-input" placeholder="Search donor, operator, or note" aria-label="Search history">
         </div>
       </div>
 
       <!-- Dense Scannable Timeline -->
       <div class="timeline-wrap" id="history-timeline">
-        <!-- Keyed timeline rows render here -->
-        <div style="color: #88888e; font-size: var(--text-sm); padding: var(--space-4) 0;">
-          Loading history timeline...
-        </div>
-      </div>
-
+        <div class="history-empty">Loading history…</div>
       </div>
     </main>
   </div>
 
-  <script src="js/session.js?v=1.0.0"></script>
-  <script src="js/presence.js?v=6.4.0"></script>
-  <script src="js/history.js?v=6.3.0"></script>
+  <script src="/js/session.js?v=7.0.0"></script>
+  <script src="/js/presence.js?v=7.0.0"></script>
+  <script src="/js/history.js?v=7.0.0"></script>
 </body>
 </html>

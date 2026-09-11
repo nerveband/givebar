@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { foldLedger, type LedgerEvent } from "../ledger";
 import { requireRole } from "../authz";
+import type { BackupManager } from "../backup";
 
 function escapeCSV(val: unknown): string {
   if (val === null || val === undefined) return "";
@@ -87,4 +88,23 @@ export function handleExportCSV(req: Request, db: Database): Response {
       "Expires": "0"
     }
   });
+}
+
+/** GET /api/export/backup[?name=] downloads a named snapshot, or a fresh one taken right now. Administrators only. */
+export function handleExportBackup(req: Request, db: Database, backups: BackupManager): Response {
+  const auth = requireRole(db, req, ["admin"]);
+  if (auth instanceof Response) return auth;
+  const requested = new URL(req.url).searchParams.get("name");
+  try {
+    const name = requested || backups.snapshot("download").name;
+    return new Response(Bun.file(backups.path(name)), {
+      headers: {
+        "Content-Type": "application/vnd.sqlite3",
+        "Content-Disposition": `attachment; filename="${name}"`,
+        "Cache-Control": "no-store"
+      }
+    });
+  } catch (error) {
+    return Response.json({ error: "BACKUP_UNAVAILABLE", message: error instanceof Error ? error.message : "Backup unavailable" }, { status: 404 });
+  }
 }

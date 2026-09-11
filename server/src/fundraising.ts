@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { readFileSync } from "fs";
-import { amendDonation, foldLedger, getEventState, recordDonation, voidDonation } from "./ledger";
+import { amendDonation, foldLedger, recordDonation, voidDonation } from "./ledger";
 import { requireRole } from "./authz";
 type SyncSettings = { form_id: string; start_date: string; enabled: number; last_sync_at: number | null; last_error: string; imported_count: number };
 type RemoteGift = { id: string; amount: number; donor: string; anonymous: boolean; method: "card" | "check" | "cash"; date: string };
@@ -123,6 +123,7 @@ export function createFundraisingSync(db: Database, readToken = () => {
       const body = object(await req.json());
       if (body.action === "sync") return Response.json(await sync());
       if (body.action !== "configure") return Response.json({ error: "INVALID_ACTION" }, { status: 400 });
+      if (auth.role !== "admin") return Response.json({ error: "FORBIDDEN", message: "Administrator access required." }, { status: 403 });
       const formId = String(body.form_id || "");
       const start = String(body.start_date || "");
       if (!/^\d+$/.test(formId) || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isFinite(Date.parse(start)) || new Date(start).toISOString().slice(0, 10) !== start || start > new Date().toISOString().slice(0, 10)) return Response.json({ error: "Provide a valid form ID and past or current start date." }, { status: 400 });

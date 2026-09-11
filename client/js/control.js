@@ -1,549 +1,271 @@
 /**
- * Givebar — Manage Donations Controller
- * One donation table, client sorting/filtering,
- * keyed row updates, delete dialog with 30s undo affordance,
- * explicit PIN unlock screen on 401, staleness detector, and honest state isolation.
+ * Givebar Manage Donations.
+ *
+ * One table of every active gift with keyed row updates (focus and selection
+ * survive refreshes), client-side search and sorting, edit and delete with a
+ * 30-second undo, the ballroom pause switch, and the shared team notes.
+ * State arrives on the live channel; the stale banner appears the moment the
+ * page cannot confirm current data.
  */
-
 (function () {
   'use strict';
 
-  // State
-  let currentDonations = [];
-  let totalRaisedCents = 0;
+  const fmt = GivebarSession.format;
+  let donations = [];
+  let state = null;
   let searchQuery = '';
-  let sortColumn = 'time'; // 'donor' | 'amount' | 'time' | 'status'
-  let sortDirection = 'desc'; // 'asc' | 'desc'
-  let pollInterval = null;
-  let sseSource = null;
-  let authState = 'unauthenticated'; // 'unauthenticated' | 'authenticated'
-  let lastSuccessfulUpdateAt = 0;
+  let sortColumn = 'time';
+  let sortDirection = 'desc';
+  let serverOffsetMs = 0;
 
-  // Pending deletion & Undo state
-  let pendingDeleteDonation = null;
-  let lastDeletedDonation = null;
+  let pendingDelete = null;
+  let lastDeleted = null;
   let undoTimer = null;
-  let undoExpiresAt = 0;
 
-  // DOM Elements
-  const summaryTotalRaisedEl = document.getElementById('summary-total-raised');
-  const panelTable = document.getElementById('panel-table');
-  const searchInput = document.getElementById('manage-search');
-  const tbodyEl = document.getElementById('manage-tbody');
-  const emptyStateEl = document.getElementById('empty-state');
-  const emptyStateTitleEl = document.getElementById('empty-state-title');
-  const emptyStateTextEl = document.getElementById('empty-state-text');
-  const emptyStateBtn = document.getElementById('empty-state-btn');
-  const authView = document.getElementById('authenticated-view');
+  const $ = id => document.getElementById(id);
+  const tbody = $('manage-tbody');
+  const panelTable = $('panel-table');
+  const emptyState = $('empty-state');
+  const staleBanner = $('stale-banner');
+  const staleText = $('stale-banner-text');
+  const deleteModal = $('delete-modal');
+  const undoBanner = $('undo-banner');
 
-  // Stale Banner Elements
-  const staleBanner = document.getElementById('stale-banner');
-  const staleBannerText = document.getElementById('stale-banner-text');
-  const btnReconnectPoll = document.getElementById('btn-reconnect-poll');
-
-  // Modal Dialog Elements
-  const deleteModal = document.getElementById('delete-modal');
-  const deleteTitle = document.getElementById('delete-dialog-title');
-  const deleteBody = document.getElementById('delete-dialog-body');
-  const btnCancelDelete = document.getElementById('btn-cancel-delete');
-  const btnConfirmDelete = document.getElementById('btn-confirm-delete');
-
-  // Undo Banner Elements
-  const undoBanner = document.getElementById('undo-banner');
-  const undoMessage = document.getElementById('undo-message');
-  const btnUndoDelete = document.getElementById('btn-undo-delete');
-
-  function init() {
-    setupSearchListener();
-    setupSortHeaders();
-    setupDeleteModal();
-    setupUndoAction();
-    setupStaleBanner();
-    window.addEventListener('givebar:donation-recorded', fetchState);
-    startDataSync();
-  }
-
-
-
-  function setupStaleBanner() {
-    if (btnReconnectPoll) {
-      btnReconnectPoll.addEventListener('click', () => {
-        fetchState();
-      });
+  // --- Live channel ---------------------------------------------------------
+  const channel = GivebarLive.connect({
+    role: 'control',
+    onState: handleState,
+    onServerTime: value => { serverOffsetMs = value - Date.now(); },
+    onLiveness(ok, lastAt) {
+      staleBanner.style.display = ok ? 'none' : 'flex';
+      if (!ok) staleText.textContent = lastAt ? `Connection lost. Showing data from ${new Date(lastAt).toLocaleTimeString()}, retrying.` : 'Connecting to the server.';
     }
+  });
+  $('btn-reconnect-poll').addEventListener('click', channel.refresh);
+  window.addEventListener('givebar:donation-recorded', channel.refresh);
+
+  function handleState(data) {
+    state = data;
+    window.dispatchEvent(new CustomEvent('givebar:control-state', { detail: data }));
+    $('summary-total-raised').textContent = fmt.money(data.folded.total_raised_cents);
+    $('summary-stage-total').textContent = fmt.money(data.stage_preview.stage_total_cents);
+    $('summary-gift-count').textContent = String(data.folded.active_donation_count);
+    donations = data.donations;
+    $('summary-pending-count').textContent = String(donations.filter(d => !d.is_live_on_stage || d.is_held).length);
+    const paused = data.stage_preview.is_frozen;
+    const pauseButton = $('btn-pause-chart');
+    pauseButton.textContent = paused ? 'Resume chart' : 'Pause chart';
+    pauseButton.setAttribute('aria-pressed', String(paused));
+    pauseButton.classList.toggle('btn-danger', paused);
+    $('paused-notice').hidden = !paused;
+    renderNotes(data.team_notes || []);
+    renderTable();
   }
 
-  function setDegradedState(isDegraded) {
-    const isStale = isDegraded || (lastSuccessfulUpdateAt > 0 && Date.now() - lastSuccessfulUpdateAt > 5000);
-
-    if (staleBanner) {
-      if (isStale && authState === 'authenticated') {
-        staleBanner.style.display = 'flex';
-        const timeStr = lastSuccessfulUpdateAt > 0
-          ? new Date(lastSuccessfulUpdateAt).toLocaleTimeString()
-          : 'an earlier session';
-        if (staleBannerText) {
-          staleBannerText.textContent = `Connection lost. Showing cached data from ${timeStr}, retrying.`;
-        }
-        if (summaryTotalRaisedEl && totalRaisedCents > 0) {
-          summaryTotalRaisedEl.textContent = `${formatCurrency(totalRaisedCents)} (Stale)`;
-        }
-      } else if (authState === 'authenticated') {
-        staleBanner.style.display = 'none';
-        if (summaryTotalRaisedEl) {
-          summaryTotalRaisedEl.textContent = formatCurrency(totalRaisedCents);
-        }
-      }
+  // --- Table ----------------------------------------------------------------
+  function statusOf(item) {
+    if (item.is_held) return { key: 'held', label: 'Held' };
+    if (!item.is_live_on_stage) {
+      const remaining = Math.max(0, Math.ceil((item.created_at + (state.event_state.stage_delay_ms || 0) - (Date.now() + serverOffsetMs)) / 1000));
+      return { key: 'pending', label: `On screen in ${remaining}s` };
     }
+    return { key: 'confirmed', label: 'On screen' };
   }
 
-  // --- Realtime / Sync ---
-  function startDataSync() {
-    fetchState();
-    pollInterval = setInterval(fetchState, 1500);
-    setInterval(() => {
-      if (authState === 'authenticated') {
-        setDegradedState(false);
-      }
-    }, 1000);
-    initSSE();
-  }
-
-  function initSSE() {
-    if (sseSource) {
-      try { sseSource.close(); } catch (e) {}
-      sseSource = null;
-    }
-
-    try {
-      if (window.EventSource) {
-        sseSource = new EventSource('/api/state/stream?role=control');
-        sseSource.onmessage = function (event) {
-          try {
-            const data = JSON.parse(event.data);
-            lastSuccessfulUpdateAt = Date.now();
-
-            setDegradedState(false);
-            handleStateUpdate(data);
-          } catch (e) {}
-        };
-        sseSource.onerror = function () {
-          if (sseSource) {
-            sseSource.close();
-            sseSource = null;
-          }
-        };
-      }
-    } catch (e) {}
-  }
-
-  async function fetchState() {
-    try {
-      const res = await GivebarSession.api('/api/state?role=control');
-
-
-      if (!res.ok) {
-        setDegradedState(true);
-        return;
-      }
-
-      const data = await res.json();
-      lastSuccessfulUpdateAt = Date.now();
-
-      setDegradedState(false);
-      handleStateUpdate(data);
-    } catch (err) {
-      console.warn('[Givebar] Failed to fetch state:', err);
-      setDegradedState(true);
-    }
-  }
-
-  function handleStateUpdate(data) {
-    if (!data) return;
-    window.dispatchEvent(new CustomEvent('givebar:control-state', {detail:data}));
-
-    // Total Raised
-    totalRaisedCents = data.folded?.total_raised_cents || 0;
-    if (summaryTotalRaisedEl) {
-      summaryTotalRaisedEl.textContent = formatCurrency(totalRaisedCents);
-    }
-
-    // Process donations list
-    const chyrons = data.staged_chyrons || [];
-    currentDonations = chyrons.map(item => {
-      const isPending = !item.is_live_on_stage || item.is_held;
-      const status = item.is_voided ? 'removed' : (isPending ? 'pending' : 'confirmed');
-      return {
-        id: item.donation_id,
-        donor: item.donor_name || 'Anonymous',
-        displayName: item.display_name || item.donor_name || 'Anonymous',
-        isAnonymous: Boolean(item.is_anonymous),
-        amountCents: item.amount_cents || 0,
-        createdAt: item.created_at || Date.now(),
-        status,
-        isHeld: Boolean(item.is_held),
-        enteredBy: item.entered_by || 'Unknown operator',
-        source: item.source
-      };
-    });
-
-    renderCurrentView();
-  }
-
-  // --- Filtering & Sorting ---
-  function getFilteredAndSorted() {
+  function filteredAndSorted() {
     const q = searchQuery.trim().toLowerCase();
-    let list = currentDonations.filter(d => {
-      if (!q) return true;
-      const donorMatch = d.donor.toLowerCase().includes(q);
-      const displayMatch = d.displayName.toLowerCase().includes(q);
-      return donorMatch || displayMatch;
-    });
-
+    const list = donations.filter(d => !q || [d.donor_name, d.display_name, d.notes, d.entered_by, d.card_number, d.table_number].some(value => value && String(value).toLowerCase().includes(q)));
+    const direction = sortDirection === 'asc' ? 1 : -1;
     list.sort((a, b) => {
-      let comparison = 0;
-      if (sortColumn === 'donor') {
-        comparison = a.donor.localeCompare(b.donor);
-      } else if (sortColumn === 'amount') {
-        comparison = a.amountCents - b.amountCents;
-      } else if (sortColumn === 'time') {
-        comparison = a.createdAt - b.createdAt;
-      } else if (sortColumn === 'status') {
-        comparison = a.status.localeCompare(b.status);
-      }
-      return sortDirection === 'asc' ? comparison : -comparison;
+      if (sortColumn === 'donor') return direction * a.donor_name.localeCompare(b.donor_name);
+      if (sortColumn === 'amount') return direction * (a.amount_cents - b.amount_cents);
+      if (sortColumn === 'status') return direction * statusOf(a).key.localeCompare(statusOf(b).key);
+      return direction * (a.created_at - b.created_at);
     });
-
     return list;
   }
 
-  // --- Render Views (Unambiguous 3-State Separation) ---
-  function renderCurrentView() {
-    // If not authenticated, do not render data or empty states
-    if (authState !== 'authenticated') return;
-
-    const list = getFilteredAndSorted();
-
-    // Authenticated with genuinely zero donations (State 2)
-    if (currentDonations.length === 0) {
-      if (panelTable) panelTable.style.display = 'none';
-      if (emptyStateEl) {
-        emptyStateEl.style.display = 'block';
-        if (emptyStateTitleEl) emptyStateTitleEl.textContent = 'No donations yet';
-        if (emptyStateTextEl) emptyStateTextEl.textContent = 'Gifts appear here as they are recorded.';
-        if (emptyStateBtn) {
-          emptyStateBtn.style.display = 'inline-flex';
-          emptyStateBtn.textContent = '+ Add First Donation';
-          emptyStateBtn.onclick = () => document.getElementById('btn-open-add').click();
-        }
-      }
+  function renderTable() {
+    if (!state) return;
+    const list = filteredAndSorted();
+    const empty = donations.length === 0;
+    panelTable.style.display = empty || list.length === 0 ? 'none' : 'block';
+    emptyState.style.display = empty || list.length === 0 ? 'block' : 'none';
+    if (empty) {
+      $('empty-state-title').textContent = 'No donations yet';
+      $('empty-state-text').textContent = 'Gifts appear here as they are recorded.';
+      $('empty-state-btn').textContent = 'Add first donation';
+      $('empty-state-btn').onclick = () => $('btn-open-add').click();
       return;
     }
-
-    // Authenticated with search filter yielding 0 matches
     if (list.length === 0) {
-      if (panelTable) panelTable.style.display = 'none';
-      if (emptyStateEl) {
-        emptyStateEl.style.display = 'block';
-        if (emptyStateTitleEl) emptyStateTitleEl.textContent = 'No donations match your search';
-        if (emptyStateTextEl) emptyStateTextEl.textContent = `No donations matching "${searchQuery}".`;
-        if (emptyStateBtn) {
-          emptyStateBtn.style.display = 'inline-flex';
-          emptyStateBtn.textContent = 'Clear Search';
-          emptyStateBtn.onclick = () => {
-            if (searchInput) searchInput.value = '';
-            searchQuery = '';
-            renderCurrentView();
-          };
-        }
-      }
+      $('empty-state-title').textContent = 'No donations match your search';
+      $('empty-state-text').textContent = `Nothing matches "${searchQuery}".`;
+      $('empty-state-btn').textContent = 'Clear search';
+      $('empty-state-btn').onclick = () => { $('manage-search').value = ''; searchQuery = ''; renderTable(); };
       return;
     }
 
-    // Authenticated with active donation rows
-    if (emptyStateEl) emptyStateEl.style.display = 'none';
+    const existing = new Map(Array.from(tbody.children).map(tr => [tr.dataset.donationId, tr]));
+    const keep = new Set(list.map(d => d.donation_id));
+    for (const [id, tr] of existing) if (!keep.has(id)) tr.remove();
 
-    if (panelTable) panelTable.style.display = 'block';
-    renderKeyedTable(list);
-  }
-
-  // --- Keyed Table Update (Preserves Focus & Selection) ---
-  function renderKeyedTable(list) {
-    if (!tbodyEl) return;
-
-    const existingRows = new Map();
-    Array.from(tbodyEl.children).forEach(tr => {
-      const id = tr.getAttribute('data-donation-id');
-      if (id) existingRows.set(id, tr);
-    });
-
-    const activeIds = new Set(list.map(d => d.id));
-
-    existingRows.forEach((tr, id) => {
-      if (!activeIds.has(id)) {
-        tr.remove();
-      }
-    });
-
-    let previousNode = null;
-    list.forEach(item => {
-      let tr = existingRows.get(item.id);
-      const isNew = !tr;
-
-      if (isNew) {
+    let previous = null;
+    for (const item of list) {
+      let tr = existing.get(item.donation_id);
+      if (!tr) {
         tr = document.createElement('tr');
-        tr.setAttribute('data-donation-id', item.id);
+        tr.dataset.donationId = item.donation_id;
       }
+      const status = statusOf(item);
+      const anonymous = item.is_anonymous ? '<span class="donation-flag">Anonymous on screen</span>' : '';
+      const note = item.notes ? `<div class="donation-note">${fmt.escape(item.notes)}</div>` : '';
+      const extras = [item.card_number && `Card ${item.card_number}`, item.table_number && `Table ${item.table_number}`, item.donor_phonetic && `Say: ${item.donor_phonetic}`].filter(Boolean).map(fmt.escape).join(' · ');
+      const html = `
+        <td><div class="donation-donor">${fmt.escape(item.donor_name)} ${anonymous}</div>${note}<div class="donation-attribution">${fmt.escape(fmt.source(item.source))} · ${fmt.escape(item.entered_by || 'Unknown operator')}${extras ? ' · ' + extras : ''}</div></td>
+        <td class="text-right amount-cell">${fmt.money(item.amount_cents)}${item.matched_amount_cents ? `<div class="donation-attribution">+ ${fmt.money(item.matched_amount_cents)} match</div>` : ''}</td>
+        <td class="text-center time-cell">${fmt.escape(fmt.time(item.created_at))}</td>
+        <td class="text-center"><span class="status-badge ${status.key}">${status.label}</span></td>
+        <td class="text-right row-actions">
+          <button type="button" class="btn-secondary btn-row" data-edit="${fmt.escape(item.donation_id)}">Edit</button>
+          <button type="button" class="btn-delete-row" data-delete="${fmt.escape(item.donation_id)}">Delete</button>
+        </td>`;
+      if (tr.innerHTML !== html) tr.innerHTML = html;
+      const expectedNext = previous ? previous.nextSibling : tbody.firstChild;
+      if (tr !== expectedNext) tbody.insertBefore(tr, expectedNext);
+      previous = tr;
+    }
+  }
 
-      const relativeTime = formatRelativeTime(item.createdAt);
-      const formattedAmount = formatCurrency(item.amountCents);
-      const statusHtml = getStatusBadgeHtml(item.status);
+  tbody.addEventListener('click', event => {
+    const edit = event.target.closest('[data-edit]');
+    if (edit) {
+      const item = donations.find(d => d.donation_id === edit.dataset.edit);
+      if (item) window.dispatchEvent(new CustomEvent('givebar:edit-donation', { detail: item }));
+      return;
+    }
+    const del = event.target.closest('[data-delete]');
+    if (del) {
+      const item = donations.find(d => d.donation_id === del.dataset.delete);
+      if (item) promptDelete(item);
+    }
+  });
 
-      const innerHtml = `
-        <td style="font-weight:600;color:#f4f5f6">${escapeHTML(item.donor)}<div class="donation-attribution">${escapeHTML(GivebarOperator.source(item.source))} · ${escapeHTML(item.enteredBy)}</div></td>
-        <td class="text-right amount-cell" style="color: #f4f5f6;">${formattedAmount}</td>
-        <td class="text-center time-cell">${relativeTime}</td>
-        <td class="text-center">${statusHtml}</td>
-        <td class="text-right">
-          <button type="button" class="btn-secondary" data-copy-donation="${escapeHTML([item.donor, formattedAmount, relativeTime, GivebarOperator.source(item.source), item.enteredBy].join(' · '))}">Copy</button>
-          <button type="button" class="btn-delete-row" data-action="delete" data-id="${escapeHTML(item.id)}" data-donor="${escapeHTML(item.donor)}" data-amount="${item.amountCents}" aria-label="Delete donation" title="Delete donation">
-            Delete
-          </button>
-        </td>
-      `;
-
-      if (tr.innerHTML !== innerHtml) {
-        tr.innerHTML = innerHtml;
-        const deleteBtn = tr.querySelector('.btn-delete-row');
-        if (deleteBtn) {
-          deleteBtn.addEventListener('click', () => {
-            promptDeleteDonation(item);
-          });
-        }
+  $('manage-search').addEventListener('input', event => { searchQuery = event.target.value; renderTable(); });
+  document.querySelectorAll('.donations-table th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const column = th.dataset.sort;
+      if (sortColumn === column) sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      else { sortColumn = column; sortDirection = column === 'amount' || column === 'time' ? 'desc' : 'asc'; }
+      for (const key of ['donor', 'amount', 'time', 'status']) {
+        const icon = $(`sort-icon-${key}`);
+        icon.textContent = sortColumn === key ? (sortDirection === 'asc' ? '▲' : '▼') : '⇅';
+        icon.style.color = sortColumn === key ? '#d4a359' : '#555660';
       }
-
-      if (isNew) {
-        if (previousNode && previousNode.nextSibling) {
-          tbodyEl.insertBefore(tr, previousNode.nextSibling);
-        } else if (!previousNode && tbodyEl.firstChild) {
-          tbodyEl.insertBefore(tr, tbodyEl.firstChild);
-        } else {
-          tbodyEl.appendChild(tr);
-        }
-      } else {
-        const expectedNext = previousNode ? previousNode.nextSibling : tbodyEl.firstChild;
-        if (tr !== expectedNext) {
-          tbodyEl.insertBefore(tr, expectedNext);
-        }
-      }
-
-      previousNode = tr;
+      renderTable();
     });
+  });
+  setInterval(() => { if (donations.some(d => !d.is_live_on_stage)) renderTable(); }, 1000);
+
+  // --- Pause chart ----------------------------------------------------------
+  $('btn-pause-chart').addEventListener('click', async () => {
+    if (!state) return;
+    const paused = state.stage_preview.is_frozen;
+    if (!paused && !window.confirm('Pause the ballroom screen? The figure holds and new gifts stay hidden until you resume.')) return;
+    const result = await GivebarSession.control(paused ? 'resume_chart' : 'pause_chart');
+    if (!result.ok) window.alert(result.data.message || 'Could not change the chart.');
+    channel.refresh();
+  });
+
+  // --- Delete and undo ------------------------------------------------------
+  function promptDelete(item) {
+    pendingDelete = item;
+    const live = item.is_live_on_stage && !item.is_held;
+    $('delete-dialog-body').textContent = live
+      ? `Delete ${fmt.money(item.amount_cents)} from ${item.donor_name}? It leaves the total and the list. The ballroom figure never rolls backward, so the screen absorbs the difference in later gifts. Restorable from History.`
+      : `Delete ${fmt.money(item.amount_cents)} from ${item.donor_name}? It has not reached the ballroom screen yet, so nobody in the room will see it. Restorable from History.`;
+    deleteModal.style.display = 'flex';
+    $('btn-cancel-delete').focus();
   }
-
-
-  function getStatusBadgeHtml(status) {
-    if (status === 'confirmed') {
-      return '<span class="status-badge confirmed"><svg viewBox="0 0 256 256" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M229.66,69.66l-128,128a8,8,0,0,1-11.32,0l-64-64a8,8,0,0,1,11.32-11.32L96,180.69,218.34,58.34a8,8,0,0,1,11.32,11.32Z"/></svg> Confirmed</span>';
-    } else if (status === 'pending') {
-      return '<span class="status-badge pending" title="Pending" style="color: #d4a359;"><svg class="icon" viewBox="0 0 256 256" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg> Pending</span>';
-    } else if (status === 'removed') {
-      return '<span class="status-badge removed" title="Removed">&#x2715; Removed</span>';
-    }
-    return '';
+  function closeDelete() {
+    deleteModal.style.display = 'none';
+    pendingDelete = null;
   }
-
-  // --- Sorting Controls ---
-  function setupSortHeaders() {
-    const headers = document.querySelectorAll('.donations-table th.sortable');
-    headers.forEach(th => {
-      th.addEventListener('click', () => {
-        const col = th.getAttribute('data-sort');
-        if (!col) return;
-
-        if (sortColumn === col) {
-          sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-        } else {
-          sortColumn = col;
-          sortDirection = col === 'amount' || col === 'time' ? 'desc' : 'asc';
-        }
-
-        updateSortIndicators();
-        renderCurrentView();
-      });
-    });
-    updateSortIndicators();
-  }
-
-  function updateSortIndicators() {
-    ['donor', 'amount', 'time', 'status'].forEach(col => {
-      const icon = document.getElementById(`sort-icon-${col}`);
-      if (!icon) return;
-      if (sortColumn === col) {
-        icon.textContent = sortDirection === 'asc' ? '▲' : '▼';
-        icon.style.color = '#d4a359';
-      } else {
-        icon.textContent = '⇅';
-        icon.style.color = '#555660';
-      }
-    });
-  }
-
-  // --- Tab & Search Controls ---
-
-  function setupSearchListener() {
-    if (searchInput) {
-      searchInput.addEventListener('input', () => {
-        searchQuery = searchInput.value;
-        renderCurrentView();
-      });
+  $('btn-cancel-delete').addEventListener('click', closeDelete);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && deleteModal.style.display !== 'none') closeDelete(); });
+  $('btn-confirm-delete').addEventListener('click', async () => {
+    const item = pendingDelete;
+    closeDelete();
+    if (!item) return;
+    const response = await GivebarSession.api(`/api/donation/${item.donation_id}/void`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Deleted from Manage Donations' }) });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      window.alert(data.message || 'Could not delete the donation.');
+      return;
     }
-  }
-
-  // --- Delete Dialog & Undo Flow ---
-  function setupDeleteModal() {
-    if (btnCancelDelete) {
-      btnCancelDelete.addEventListener('click', closeDeleteModal);
-    }
-
-    if (btnConfirmDelete) {
-      btnConfirmDelete.addEventListener('click', async () => {
-        if (!pendingDeleteDonation) return;
-        const donationToVoid = pendingDeleteDonation;
-        closeDeleteModal();
-        await executeDeleteDonation(donationToVoid);
-      });
-    }
-
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && deleteModal && deleteModal.style.display !== 'none') {
-        closeDeleteModal();
-      }
-    });
-  }
-
-  function promptDeleteDonation(donation) {
-    pendingDeleteDonation = donation;
-    const formattedAmount = formatCurrency(donation.amountCents);
-
-    if (deleteTitle) {
-      deleteTitle.textContent = 'Delete this donation?';
-    }
-    if (deleteBody) {
-      deleteBody.textContent = `Delete ${formattedAmount} from ${donation.donor}? Subtracted from the total and removed from the chart. Restorable from History.`;
-    }
-
-    if (deleteModal) {
-      deleteModal.style.display = 'flex';
-      if (btnCancelDelete) {
-        btnCancelDelete.focus();
-      }
-    }
-  }
-
-  function closeDeleteModal() {
-    if (deleteModal) {
-      deleteModal.style.display = 'none';
-    }
-    pendingDeleteDonation = null;
-  }
-
-  async function executeDeleteDonation(donation) {
-    try {
-      const res = await GivebarSession.api(`/api/donation/${donation.id}/void`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Deleted via Manage Donations' })
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        alert(errData.message || 'Failed to delete donation');
-        return;
-      }
-
-      lastDeletedDonation = donation;
-      showUndoAffordance(donation);
-
-      currentDonations = currentDonations.filter(d => d.id !== donation.id);
-      renderCurrentView();
-
-      fetchState();
-    } catch (err) {
-      console.error('[Givebar] Void error:', err);
-    }
-  }
-
-  // --- Inline Undo Affordance ---
-  function showUndoAffordance(donation) {
-    if (!undoBanner || !undoMessage) return;
-
-    if (undoTimer) {
-      clearTimeout(undoTimer);
-    }
-
-    const formattedAmount = formatCurrency(donation.amountCents);
-    undoExpiresAt = Date.now() + 30000;
-    undoMessage.textContent = `${formattedAmount} from ${donation.donor} deleted.`;
+    lastDeleted = item;
+    clearTimeout(undoTimer);
+    $('undo-message').textContent = `${fmt.money(item.amount_cents)} from ${item.donor_name} deleted.`;
     undoBanner.style.display = 'flex';
+    undoTimer = setTimeout(() => { undoBanner.style.display = 'none'; lastDeleted = null; }, 30000);
+    donations = donations.filter(d => d.donation_id !== item.donation_id);
+    renderTable();
+    channel.refresh();
+  });
+  $('btn-undo-delete').addEventListener('click', async () => {
+    const item = lastDeleted;
+    if (!item) return;
+    clearTimeout(undoTimer);
+    undoBanner.style.display = 'none';
+    lastDeleted = null;
+    const response = await GivebarSession.api(`/api/donation/${item.donation_id}/restore`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Undo from Manage Donations' }) });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      window.alert(data.message || 'Could not restore the donation.');
+    }
+    channel.refresh();
+  });
 
-    undoTimer = setTimeout(() => {
-      undoBanner.style.display = 'none';
-      lastDeletedDonation = null;
-    }, 30000);
-  }
-
-  function setupUndoAction() {
-    if (btnUndoDelete) {
-      btnUndoDelete.addEventListener('click', async () => {
-        if (!lastDeletedDonation) return;
-        const donationToRestore = lastDeletedDonation;
-
-        if (undoTimer) clearTimeout(undoTimer);
-        if (undoBanner) undoBanner.style.display = 'none';
-        lastDeletedDonation = null;
-
-        await executeRestoreDonation(donationToRestore);
-      });
+  // --- Team notes -----------------------------------------------------------
+  let lastNotesKey = '';
+  function renderNotes(notes) {
+    const key = JSON.stringify(notes.map(n => n.id));
+    $('team-notes-count').textContent = String(notes.length);
+    if (key === lastNotesKey) return;
+    lastNotesKey = key;
+    const list = $('team-notes-list');
+    list.textContent = '';
+    if (notes.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'form-hint';
+      empty.textContent = 'No notes yet.';
+      list.appendChild(empty);
+      return;
+    }
+    const me = state.me;
+    for (const note of notes) {
+      const row = document.createElement('div');
+      row.className = 'team-note';
+      const mine = me && (me.role === 'admin' || note.author_id === me.accountId);
+      row.innerHTML = `<div class="team-note-meta"><strong>${fmt.escape(note.author_name)}</strong> · ${fmt.escape(fmt.time(note.created_at))}${mine ? ` <button type="button" class="btn-ghost team-note-delete" data-note="${note.id}">Remove</button>` : ''}</div><div class="team-note-body">${fmt.escape(note.body)}</div>`;
+      list.appendChild(row);
     }
   }
-
-  async function executeRestoreDonation(donation) {
-    try {
-      const res = await GivebarSession.api(`/api/donation/${donation.id}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Restored via Manage Donations' })
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        alert(errData.message || 'Failed to restore donation');
-        return;
-      }
-
-      fetchState();
-    } catch (err) {
-      console.error('[Givebar] Restore error:', err);
-    }
-  }
-
-  // --- Utilities ---
-  function formatCurrency(cents) {
-    return (cents / 100).toLocaleString('en-US', {style:'currency',currency:'USD',minimumFractionDigits:0,maximumFractionDigits:2});
-  }
-
-  function formatRelativeTime(epochMs) { return GivebarOperator.time(epochMs); }
-
-  function escapeHTML(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  document.addEventListener('DOMContentLoaded', init);
+  $('team-notes-list').addEventListener('click', async event => {
+    const button = event.target.closest('[data-note]');
+    if (!button || !window.confirm('Remove this note for everyone?')) return;
+    const result = await GivebarSession.control('delete_team_note', { id: Number(button.dataset.note) });
+    if (!result.ok) window.alert(result.data.message || 'Could not remove the note.');
+    channel.refresh();
+  });
+  $('team-note-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const input = $('team-note-input');
+    const body = input.value.trim();
+    if (!body) { input.focus(); return; }
+    const result = await GivebarSession.control('add_team_note', { body });
+    if (!result.ok) { window.alert(result.data.message || 'Could not post the note.'); return; }
+    input.value = '';
+    channel.refresh();
+  });
 })();

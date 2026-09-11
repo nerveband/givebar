@@ -30,7 +30,7 @@
     busy = true; controls.querySelectorAll('button').forEach(button => { button.disabled = true; });
     status.textContent = 'Updating ballroom screen…';
     try {
-      const response = await GivebarSession.api('/api/control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_settings',...patch})});
+      const response = await GivebarSession.api('/api/control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stage_message',...patch})});
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || data.error || 'The screen was not updated. Try again.');
       if (patch.stage_message !== undefined) messageDirty = false;

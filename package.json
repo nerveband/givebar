@@ -1,7 +1,7 @@
 {
   "name": "givebar",
-  "version": "1.0.0",
-  "description": "The open, bulletproof live fundraising thermometer & stage presentation HUD for high-stakes nonprofit galas and benefit auctions.",
+  "version": "2.0.0",
+  "description": "Live fundraising bar chart and stage presentation suite for nonprofit galas and benefit appeals.",
   "main": "server/src/index.ts",
   "type": "module",
   "scripts": {

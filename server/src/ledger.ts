@@ -1,5 +1,8 @@
 import type { Database } from "bun:sqlite";
 
+export type DonationSource = "manual" | "bloomerang" | "rehearsal";
+export type PaymentMethod = "pledge" | "card" | "check" | "cash" | "match";
+
 export interface LedgerEvent {
   seq: number;
   event_type: "create" | "amend" | "void" | "restore" | "match_apply" | "match_release";
@@ -9,14 +12,14 @@ export interface LedgerEvent {
   donor_name: string;
   display_name: string | null;
   is_anonymous: number;
-  payment_method: "pledge" | "card" | "check" | "cash" | "match";
-  source: "manual" | "bloomerang" | "kindful" | "stripe" | "qr" | "rehearsal";
+  payment_method: PaymentMethod;
+  source: DonationSource;
   source_txn_id: string | null;
   card_number: string | null;
   entered_by: string | null;
   notes: string | null;
-  donor_phonetic?: string | null;
-  table_number?: string | null;
+  donor_phonetic: string | null;
+  table_number: string | null;
   created_at: number;
 }
 
@@ -32,8 +35,8 @@ export interface DonationRecord {
   card_number: string | null;
   entered_by: string | null;
   notes: string | null;
-  donor_phonetic?: string | null;
-  table_number?: string | null;
+  donor_phonetic: string | null;
+  table_number: string | null;
   created_at: number;
   updated_at: number;
   is_voided: boolean;
@@ -44,22 +47,23 @@ export interface EventStateRecord {
   id: number;
   event_name: string;
   event_subtitle: string;
+  event_title: string;
   goal_cents: number;
-  match_pool_cents: number;
   match_total_cents: number;
   match_ratio: number;
   is_match_active: number;
   match_sponsor_title: string;
   is_frozen: number;
-  manual_override_cents: number | null;
   qr_url: string;
+  display_url: string;
   qr_style: string;
   qr_center_icon: string;
   qr_fg_color: string;
   qr_bg_color: string;
-  entry_pin: string;
-  control_pin: string;
+  qr_image_url: string;
+  qr_image_backdrop: number;
   odometer_floor_cents: number;
+  stage_reset_seq: number;
   theme_preset: string;
   brand_hue: number;
   brand_chroma: number;
@@ -67,51 +71,48 @@ export interface EventStateRecord {
   brand_radius_px: number;
   major_gift_threshold_cents: number;
   stage_delay_ms: number;
-  countdown_seconds: number;
-  timer_status: string;
-  timer_ends_at: number | null;
-  thermometer_visual_mode: string;
-  embed_media_url: string;
   trust_badge_text: string;
-  pinned_donation_id: string | null;
   logo_url: string;
   background_style: string;
+  background_image_url: string;
+  background_video_url: string;
+  gradient_start: string;
+  gradient_end: string;
+  gradient_angle: number;
+  gradient_intensity: number;
   bar_color: string;
+  text_color: string;
+  font_family: string;
+  chart_orientation: string;
+  marker_mode: string;
+  marker_step_cents: number;
   show_qr: number;
   show_recent_donations: number;
   show_live_indicator: number;
   show_goal: number;
   stage_message: string;
   stage_message_visible: number;
-  feature_timer: number;
+  impact_messages: string;
   feature_card_number: number;
   feature_table_number: number;
-  bloomerang_api_key: string;
-  bloomerang_last_sync_at: number | null;
-  bloomerang_last_error: string;
-  event_title: string;
-  text_color: string;
-  font_family: string;
-  chart_orientation: string;
-  stage_reset_seq: number;
-  marker_mode: string;
-  marker_step_cents: number;
-  background_image_url: string;
-  gradient_start: string;
-  gradient_end: string;
-  gradient_angle: number;
-  gradient_intensity: number;
-  background_video_url: string;
-  impact_messages: string;
-  qr_image_url: string;
-  qr_image_backdrop: number;
-  display_url: string;
   settings_seq: number;
   updated_at: number;
 }
 
+/** Columns an operator may change through updateEventState; everything else is derived or system-owned. */
+const EVENT_STATE_COLUMNS: (keyof EventStateRecord)[] = [
+  "event_name", "event_subtitle", "event_title", "goal_cents", "match_total_cents", "match_ratio", "is_match_active",
+  "match_sponsor_title", "is_frozen", "qr_url", "display_url", "qr_style", "qr_center_icon", "qr_fg_color", "qr_bg_color",
+  "qr_image_url", "qr_image_backdrop", "odometer_floor_cents", "stage_reset_seq", "theme_preset", "brand_hue", "brand_chroma",
+  "brand_accent_hex", "brand_radius_px", "major_gift_threshold_cents", "stage_delay_ms", "trust_badge_text", "logo_url",
+  "background_style", "background_image_url", "background_video_url", "gradient_start", "gradient_end", "gradient_angle",
+  "gradient_intensity", "bar_color", "text_color", "font_family", "chart_orientation", "marker_mode", "marker_step_cents",
+  "show_qr", "show_recent_donations", "show_live_indicator", "show_goal", "stage_message", "stage_message_visible",
+  "impact_messages", "feature_card_number", "feature_table_number"
+];
+
 export interface FoldOptions {
-  maxCreatedAt?: number;
+  /** Donations (and their matching events) left out of the fold entirely. */
   excludeDonationIds?: Set<string>;
 }
 
@@ -135,8 +136,8 @@ export interface CreateDonationInput {
   donor_name: string;
   display_name?: string;
   is_anonymous?: boolean;
-  payment_method?: "pledge" | "card" | "check" | "cash" | "match";
-  source?: "manual" | "bloomerang" | "kindful" | "stripe" | "qr" | "rehearsal";
+  payment_method?: PaymentMethod;
+  source?: DonationSource;
   source_txn_id?: string;
   card_number?: string;
   entered_by?: string;
@@ -144,45 +145,46 @@ export interface CreateDonationInput {
   donor_phonetic?: string;
   table_number?: string;
   confirmed_major_gift?: boolean;
+  confirmed_duplicate?: boolean;
 }
 
 export class MajorGiftConfirmationRequiredError extends Error {
-  public amount_cents: number;
-  public threshold_cents: number;
-
-  constructor(amountCents: number, thresholdCents: number) {
-    super(`Pledges of $${Math.floor(thresholdCents / 100).toLocaleString("en-US")} or more require explicit confirmation.`);
+  constructor(public amount_cents: number, public threshold_cents: number) {
+    super(`Gifts of $${Math.floor(threshold_cents / 100).toLocaleString("en-US")} or more require explicit confirmation.`);
     this.name = "MajorGiftConfirmationRequiredError";
-    this.amount_cents = amountCents;
-    this.threshold_cents = thresholdCents;
   }
 }
-export class CardSerialCollisionError extends Error {
-  public card_number: string;
-  public prior_donation_id: string;
-  public prior_entered_by: string | null;
-  public prior_created_at: number;
-  public prior_amount_cents: number;
-  public prior_donor_name: string;
 
+
+export class CardSerialCollisionError extends Error {
   constructor(
-    cardNumber: string,
-    priorDonationId: string,
-    priorEnteredBy: string | null,
-    priorCreatedAt: number,
-    priorAmountCents: number = 0,
-    priorDonorName: string = ""
+    public card_number: string,
+    public prior_donation_id: string,
+    public prior_entered_by: string | null,
+    public prior_created_at: number,
+    public prior_amount_cents: number,
+    public prior_donor_name: string
   ) {
-    super(`Physical pledge card #${cardNumber} was already entered by ${priorEnteredBy || "another volunteer"}.`);
+    super(`Physical pledge card #${card_number} was already entered by ${prior_entered_by || "another operator"}.`);
     this.name = "CardSerialCollisionError";
-    this.card_number = cardNumber;
-    this.prior_donation_id = priorDonationId;
-    this.prior_entered_by = priorEnteredBy;
-    this.prior_created_at = priorCreatedAt;
-    this.prior_amount_cents = priorAmountCents;
-    this.prior_donor_name = priorDonorName;
   }
 }
+
+/** Same donor and same amount recorded moments ago: almost always two people entering one gift. */
+export class PossibleDuplicateError extends Error {
+  constructor(
+    public prior_donation_id: string,
+    public prior_donor_name: string,
+    public prior_amount_cents: number,
+    public prior_entered_by: string | null,
+    public prior_created_at: number
+  ) {
+    super(`A gift of the same amount from ${prior_donor_name} was recorded moments ago by ${prior_entered_by || "another operator"}.`);
+    this.name = "PossibleDuplicateError";
+  }
+}
+
+export const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
 
 export function normalizeCard(card?: string | null): string | null {
   if (!card) return null;
@@ -190,67 +192,48 @@ export function normalizeCard(card?: string | null): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
+function normalizeDonor(name: string): string {
+  return name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
 /**
- * Deterministic fold over the immutable event ledger.
- * Pure function: supports time horizons and exclusions for delayed projections.
+ * Deterministic fold over the immutable event ledger. Excluded donations are
+ * removed wholesale (create, amend, void, restore, and matching events), which
+ * is what lets the stage projection hide a gift without ever seeing a stale
+ * version of it.
  */
 export function foldLedger(db: Database, options?: FoldOptions): FoldedLedger {
   const events = db.query<LedgerEvent, []>(`SELECT * FROM ledger ORDER BY seq ASC`).all();
-  const eventState = getEventState(db);
+  const matchTotal = db.query<{ match_total_cents: number }, []>(`SELECT match_total_cents FROM event_state WHERE id = 1`).get()!.match_total_cents;
+  const excluded = options?.excludeDonationIds;
 
   const activeDonations = new Map<string, DonationRecord>();
   const allRecords = new Map<string, DonationRecord>();
   const matchByParent = new Map<string, number>();
-
-  let directRaisedCents = 0;
   let matchAppliedCents = 0;
   let voidCount = 0;
   let latestSeq = 0;
   let lastEventAt = 0;
 
   for (const event of events) {
-    // Respect time horizon if specified
-    if (options?.maxCreatedAt !== undefined && event.created_at > options.maxCreatedAt) {
-      continue;
-    }
-
     latestSeq = event.seq;
     lastEventAt = event.created_at;
+    const parentId = event.donation_id.replace(/^match_/, "");
+    if (excluded?.has(parentId)) continue;
 
-    // 1. Matching Events (Apply / Release)
     if (event.event_type === "match_apply") {
-      const parentId = event.donation_id.replace(/^match_/, "");
-      // Skip match if parent is excluded
-      if (options?.excludeDonationIds?.has(parentId)) {
-        continue;
-      }
       matchAppliedCents += event.amount_cents;
       matchByParent.set(parentId, (matchByParent.get(parentId) || 0) + event.amount_cents);
       continue;
     }
-
     if (event.event_type === "match_release") {
-      const parentId = event.donation_id.replace(/^match_/, "");
-      if (options?.excludeDonationIds?.has(parentId)) {
-        continue;
-      }
       matchAppliedCents = Math.max(0, matchAppliedCents - event.amount_cents);
-      const currentParentMatch = matchByParent.get(parentId) || 0;
-      const updatedParentMatch = Math.max(0, currentParentMatch - event.amount_cents);
-      if (updatedParentMatch === 0) {
-        matchByParent.delete(parentId);
-      } else {
-        matchByParent.set(parentId, updatedParentMatch);
-      }
+      const remaining = Math.max(0, (matchByParent.get(parentId) || 0) - event.amount_cents);
+      if (remaining === 0) matchByParent.delete(parentId);
+      else matchByParent.set(parentId, remaining);
       continue;
     }
 
-    // Skip donation if explicitly excluded
-    if (options?.excludeDonationIds?.has(event.donation_id)) {
-      continue;
-    }
-
-    // 2. Core Donation Events
     if (event.event_type === "create") {
       const record: DonationRecord = {
         donation_id: event.donation_id,
@@ -273,59 +256,50 @@ export function foldLedger(db: Database, options?: FoldOptions): FoldedLedger {
       };
       activeDonations.set(event.donation_id, record);
       allRecords.set(event.donation_id, record);
-    } else if (event.event_type === "amend") {
-      const existing = activeDonations.get(event.donation_id) || allRecords.get(event.donation_id);
-      if (existing && !existing.is_voided) {
-        existing.latest_seq = event.seq;
-        existing.amount_cents = event.amount_cents;
-        existing.donor_name = event.donor_name;
-        existing.display_name = event.display_name || (event.is_anonymous ? "Anonymous Supporter" : event.donor_name);
-        existing.is_anonymous = Boolean(event.is_anonymous);
-        existing.payment_method = event.payment_method;
-        existing.card_number = event.card_number;
-        existing.entered_by = event.entered_by || existing.entered_by;
-        existing.notes = event.notes;
-        existing.donor_phonetic = event.donor_phonetic ?? existing.donor_phonetic;
-        existing.table_number = event.table_number ?? existing.table_number;
-        existing.updated_at = event.created_at;
-        activeDonations.set(event.donation_id, existing);
-      }
+      continue;
+    }
+
+    const existing = allRecords.get(event.donation_id);
+    if (!existing) continue;
+    if (event.event_type === "amend" && !existing.is_voided) {
+      existing.latest_seq = event.seq;
+      existing.amount_cents = event.amount_cents;
+      existing.donor_name = event.donor_name;
+      existing.display_name = event.display_name || (event.is_anonymous ? "Anonymous Supporter" : event.donor_name);
+      existing.is_anonymous = Boolean(event.is_anonymous);
+      existing.payment_method = event.payment_method;
+      existing.card_number = event.card_number;
+      existing.entered_by = event.entered_by || existing.entered_by;
+      existing.notes = event.notes;
+      existing.donor_phonetic = event.donor_phonetic ?? existing.donor_phonetic;
+      existing.table_number = event.table_number ?? existing.table_number;
+      existing.updated_at = event.created_at;
     } else if (event.event_type === "void") {
-      const existing = activeDonations.get(event.donation_id) || allRecords.get(event.donation_id);
-      if (existing) {
-        existing.latest_seq = event.seq;
-        existing.is_voided = true;
-        existing.updated_at = event.created_at;
-        activeDonations.delete(event.donation_id);
-        voidCount++;
-      }
+      existing.latest_seq = event.seq;
+      existing.is_voided = true;
+      existing.updated_at = event.created_at;
+      activeDonations.delete(event.donation_id);
+      voidCount++;
     } else if (event.event_type === "restore") {
-      const existing = allRecords.get(event.donation_id);
-      if (existing) {
-        existing.latest_seq = event.seq;
-        existing.is_voided = false;
-        existing.updated_at = event.created_at;
-        activeDonations.set(event.donation_id, existing);
-        voidCount = Math.max(0, voidCount - 1);
-      }
+      existing.latest_seq = event.seq;
+      existing.is_voided = false;
+      existing.updated_at = event.created_at;
+      activeDonations.set(event.donation_id, existing);
+      voidCount = Math.max(0, voidCount - 1);
     }
   }
 
-  // Calculate direct raised from active donations and attach matched amounts
+  let directRaisedCents = 0;
   for (const record of activeDonations.values()) {
     directRaisedCents += record.amount_cents;
     record.matched_amount_cents = matchByParent.get(record.donation_id) || 0;
   }
 
-  // Pure derived remaining matching pool
-  const derivedPoolRemaining = Math.max(0, eventState.match_total_cents - matchAppliedCents);
-  const totalRaisedCents = directRaisedCents + matchAppliedCents;
-
   return {
     direct_raised_cents: directRaisedCents,
     match_applied_cents: matchAppliedCents,
-    derived_match_pool_cents: derivedPoolRemaining,
-    total_raised_cents: totalRaisedCents,
+    derived_match_pool_cents: Math.max(0, matchTotal - matchAppliedCents),
+    total_raised_cents: directRaisedCents + matchAppliedCents,
     active_donation_count: activeDonations.size,
     void_count: voidCount,
     active_donations: activeDonations,
@@ -336,762 +310,226 @@ export function foldLedger(db: Database, options?: FoldOptions): FoldedLedger {
   };
 }
 
+const INSERT_EVENT = `
+  INSERT INTO ledger (
+    event_type, donation_id, supersedes_seq, amount_cents, donor_name, display_name, is_anonymous,
+    payment_method, source, source_txn_id, card_number, entered_by, notes, donor_phonetic, table_number, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+function insertMatchEvent(db: Database, type: "match_apply" | "match_release", donationId: string, supersedesSeq: number, cents: number, title: string, note: string, now: number): void {
+  db.query(INSERT_EVENT).run(type, `match_${donationId}`, supersedesSeq, cents, title, title, 0, "match", "manual", null, null, "MATCH_ENGINE", note, null, null, now);
+}
+
+/** Applies the sponsor match for one gift against whatever pool remains. */
+function applyMatch(db: Database, donationId: string, supersedesSeq: number, amountCents: number, note: string, now: number): void {
+  const state = getEventState(db);
+  if (state.is_match_active !== 1) return;
+  const pool = foldLedger(db).derived_match_pool_cents;
+  const applied = Math.min(Math.floor(amountCents * state.match_ratio), pool);
+  if (applied > 0) insertMatchEvent(db, "match_apply", donationId, supersedesSeq, applied, state.match_sponsor_title || "Matching Grant", note, now);
+}
+
+function assertCardAvailable(db: Database, normalizedCard: string | null, donationId: string): void {
+  if (!normalizedCard) return;
+  const active = db.query<{ donation_id: string; entered_by: string | null; created_at: number; amount_cents: number; donor_name: string }, [string]>(
+    `SELECT donation_id, entered_by, created_at, amount_cents, donor_name FROM active_card WHERE card_number = ?`
+  ).get(normalizedCard);
+  if (active && active.donation_id !== donationId) {
+    throw new CardSerialCollisionError(normalizedCard, active.donation_id, active.entered_by, active.created_at, active.amount_cents, active.donor_name);
+  }
+}
+
+function touchState(db: Database, now: number): void {
+  db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
+}
+
 /**
- * Record a new donation into the append-only ledger with idempotency,
- * O(1) active card collision prevention, and automatic matching grant calculation.
+ * Record a new donation. Idempotent on donation_id and on (source, source_txn_id),
+ * so a client retrying a lost response can never create a second gift.
  */
 export function recordDonation(db: Database, input: CreateDonationInput): { seq: number; donation_id: string; is_duplicate: boolean } {
-  // 1. Check idempotency by source and source_txn_id
   if (input.source && input.source_txn_id) {
-    const existingTxn = db.query<LedgerEvent, [string, string]>(
-      `SELECT * FROM ledger WHERE source = ? AND source_txn_id = ? LIMIT 1`
-    ).get(input.source, input.source_txn_id);
-
-    if (existingTxn) {
-      return { seq: existingTxn.seq, donation_id: existingTxn.donation_id, is_duplicate: true };
-    }
+    const existing = db.query<{ seq: number; donation_id: string }, [string, string]>(`SELECT seq, donation_id FROM ledger WHERE source = ? AND source_txn_id = ? LIMIT 1`).get(input.source, input.source_txn_id);
+    if (existing) return { seq: existing.seq, donation_id: existing.donation_id, is_duplicate: true };
   }
+  const existingId = db.query<{ seq: number }, [string]>(`SELECT seq FROM ledger WHERE donation_id = ? LIMIT 1`).get(input.donation_id);
+  if (existingId) return { seq: existingId.seq, donation_id: input.donation_id, is_duplicate: true };
 
-  // Check idempotency by donation_id
-  const existingId = db.query<LedgerEvent, [string]>(
-    `SELECT * FROM ledger WHERE donation_id = ? LIMIT 1`
-  ).get(input.donation_id);
-
-  if (existingId) {
-    return { seq: existingId.seq, donation_id: existingId.donation_id, is_duplicate: true };
-  }
-
-  // 2. Validate amount & donor name
-  if (typeof input.amount_cents !== "number" || !Number.isInteger(input.amount_cents) || input.amount_cents <= 0) {
+  if (!Number.isInteger(input.amount_cents) || input.amount_cents <= 0) {
     throw new Error(`Invalid donation amount: ${input.amount_cents}. Must be a positive integer in cents.`);
   }
-  if (!input.donor_name || typeof input.donor_name !== "string" || !input.donor_name.trim()) {
-    throw new Error("Donor name is required.");
-  }
-  const eventState = getEventState(db);
-  const threshold = eventState.major_gift_threshold_cents || 950000;
-  if (input.amount_cents >= threshold && input.confirmed_major_gift !== true) {
-    throw new MajorGiftConfirmationRequiredError(input.amount_cents, threshold);
-  }
-  // 3. O(1) Physical Card Collision Detection
-  const normalizedCard = normalizeCard(input.card_number);
-  if (normalizedCard) {
-    const activeCard = db.query<{ card_number: string; donation_id: string; entered_by: string; created_at: number; amount_cents: number; donor_name: string }, [string]>(
-      `SELECT * FROM active_card WHERE card_number = ? LIMIT 1`
-    ).get(normalizedCard);
+  if (typeof input.donor_name !== "string" || !input.donor_name.trim()) throw new Error("Donor name is required.");
 
-    if (activeCard && activeCard.donation_id !== input.donation_id) {
-      throw new CardSerialCollisionError(
-        normalizedCard,
-        activeCard.donation_id,
-        activeCard.entered_by,
-        activeCard.created_at,
-        activeCard.amount_cents,
-        activeCard.donor_name
-      );
+  const state = getEventState(db);
+  if (input.amount_cents >= state.major_gift_threshold_cents && input.confirmed_major_gift !== true) {
+    throw new MajorGiftConfirmationRequiredError(input.amount_cents, state.major_gift_threshold_cents);
+  }
+  const normalizedCard = normalizeCard(input.card_number);
+  assertCardAvailable(db, normalizedCard, input.donation_id);
+
+  const rawDonorName = input.donor_name.trim();
+  const source = input.source || "manual";
+  if (source === "manual" && input.confirmed_duplicate !== true) {
+    const key = normalizeDonor(rawDonorName);
+    const now = Date.now();
+    for (const record of foldLedger(db).active_donations.values()) {
+      if (record.amount_cents === input.amount_cents && now - record.created_at <= DUPLICATE_WINDOW_MS && normalizeDonor(record.donor_name) === key) {
+        throw new PossibleDuplicateError(record.donation_id, record.donor_name, record.amount_cents, record.entered_by, record.created_at);
+      }
     }
   }
 
-  // 4. Sanitize public display name
   const isAnonymous = input.is_anonymous ? 1 : 0;
-  const rawDonorName = input.donor_name.trim();
-  const displayName = isAnonymous
-    ? "Anonymous Supporter"
-    : (input.display_name?.trim() || rawDonorName);
-
+  const displayName = isAnonymous ? "Anonymous Supporter" : (input.display_name?.trim() || rawDonorName);
   const now = Date.now();
   let insertedSeq = 0;
 
   db.transaction(() => {
-    const insertStmt = db.prepare(`
-      INSERT INTO ledger (
-        event_type, donation_id, supersedes_seq, amount_cents,
-        donor_name, display_name, is_anonymous, payment_method,
-        source, source_txn_id, card_number, entered_by, notes,
-        donor_phonetic, table_number, created_at
-      ) VALUES (
-        'create', ?, NULL, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?
-      )
-    `);
-
-    const result = insertStmt.run(
-      input.donation_id,
-      input.amount_cents,
-      rawDonorName,
-      displayName,
-      isAnonymous,
-      input.payment_method || "pledge",
-      input.source || "manual",
-      input.source_txn_id || null,
-      normalizedCard ? `#${normalizedCard}` : null,
-      input.entered_by || null,
-      input.notes || null,
-      input.donor_phonetic || null,
-      input.table_number || null,
-      now
-    );
-
-    insertedSeq = Number(result.lastInsertRowid);
-
-    // Register active card in lookup table
+    insertedSeq = Number(db.query(INSERT_EVENT).run(
+      "create", input.donation_id, null, input.amount_cents, rawDonorName, displayName, isAnonymous,
+      input.payment_method || "pledge", source, input.source_txn_id || null, normalizedCard ? `#${normalizedCard}` : null,
+      input.entered_by || null, input.notes?.trim() || null, input.donor_phonetic?.trim() || null, input.table_number?.trim() || null, now
+    ).lastInsertRowid);
     if (normalizedCard) {
-      db.query(`
-        INSERT OR REPLACE INTO active_card (card_number, donation_id, entered_by, amount_cents, donor_name, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(normalizedCard, input.donation_id, input.entered_by || null, input.amount_cents, rawDonorName, now);
+      db.query(`INSERT OR REPLACE INTO active_card (card_number, donation_id, entered_by, amount_cents, donor_name, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(normalizedCard, input.donation_id, input.entered_by || null, input.amount_cents, rawDonorName, now);
     }
-
-    // 5. Handle matching grant if active (Pure fold calculation)
-    const eventState = getEventState(db);
-    const folded = foldLedger(db);
-
-    if (eventState.is_match_active === 1 && folded.derived_match_pool_cents > 0 && input.amount_cents > 0) {
-      const matchPotential = Math.floor(input.amount_cents * eventState.match_ratio);
-      const matchApplied = Math.min(matchPotential, folded.derived_match_pool_cents);
-
-      if (matchApplied > 0) {
-        db.query(`
-          INSERT INTO ledger (
-            event_type, donation_id, supersedes_seq, amount_cents,
-            donor_name, display_name, is_anonymous, payment_method,
-            source, source_txn_id, card_number, entered_by, notes, created_at
-          ) VALUES (
-            'match_apply', ?, ?, ?,
-            ?, ?, 0, 'match',
-            'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
-          )
-        `).run(
-          `match_${input.donation_id}`,
-          insertedSeq,
-          matchApplied,
-          eventState.match_sponsor_title || "Matching Grant",
-          eventState.match_sponsor_title || "Matching Grant",
-          `Match applied for pledge ${input.donation_id}`,
-          now
-        );
-      }
-    }
-
-    // Advance odometer floor if stage delay is 0 and total increased
-    const updatedFold = foldLedger(db);
-    if (eventState.stage_delay_ms === 0 && updatedFold.total_raised_cents > eventState.odometer_floor_cents && !eventState.is_frozen) {
-      db.query(`UPDATE event_state SET odometer_floor_cents = ?, updated_at = ? WHERE id = 1`).run(updatedFold.total_raised_cents, now);
-    } else {
-      db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
-    }
+    applyMatch(db, input.donation_id, insertedSeq, input.amount_cents, `Match applied for pledge ${input.donation_id}`, now);
+    touchState(db, now);
   })();
 
   return { seq: insertedSeq, donation_id: input.donation_id, is_duplicate: false };
 }
 
-/**
- * Amend an existing donation in the ledger.
- * Recomputes matching grants and updates active card table.
- */
+/** Amend an active donation. Matching is released and re-applied when the amount changes. */
 export function amendDonation(db: Database, donationId: string, input: Partial<CreateDonationInput>): number {
   const folded = foldLedger(db);
   const existing = folded.active_donations.get(donationId);
-  if (!existing || existing.is_voided) {
-    throw new Error(`Cannot amend donation ${donationId}: donation does not exist or is voided.`);
-  }
+  if (!existing) throw new Error(`Cannot amend donation ${donationId}: donation does not exist or is voided.`);
 
-  const now = Date.now();
   const isAnonymous = input.is_anonymous !== undefined ? (input.is_anonymous ? 1 : 0) : (existing.is_anonymous ? 1 : 0);
   const donorName = (input.donor_name !== undefined ? input.donor_name : existing.donor_name).trim();
+  if (!donorName) throw new Error("Donor name is required.");
   const displayName = isAnonymous
     ? "Anonymous Supporter"
-    : (input.display_name?.trim() || (existing.display_name === "Anonymous Supporter" ? donorName : existing.display_name));
+    : (input.display_name?.trim() || (existing.display_name === "Anonymous Supporter" || input.donor_name !== undefined ? donorName : existing.display_name));
   const newAmount = input.amount_cents !== undefined ? input.amount_cents : existing.amount_cents;
-  if (typeof newAmount !== "number" || !Number.isInteger(newAmount) || newAmount <= 0) {
-    throw new Error(`Invalid amended amount: ${newAmount}. Must be a positive integer in cents.`);
-  }
-  const eventState = getEventState(db);
-  const threshold = eventState.major_gift_threshold_cents || 950000;
-  if (input.amount_cents !== undefined && input.amount_cents >= threshold && input.confirmed_major_gift !== true) {
-    throw new MajorGiftConfirmationRequiredError(input.amount_cents, threshold);
+  if (!Number.isInteger(newAmount) || newAmount <= 0) throw new Error(`Invalid amended amount: ${newAmount}. Must be a positive integer in cents.`);
+
+  const state = getEventState(db);
+  if (input.amount_cents !== undefined && input.amount_cents !== existing.amount_cents && input.amount_cents >= state.major_gift_threshold_cents && input.confirmed_major_gift !== true) {
+    throw new MajorGiftConfirmationRequiredError(input.amount_cents, state.major_gift_threshold_cents);
   }
 
-  const newNormalizedCard = input.card_number !== undefined ? normalizeCard(input.card_number) : normalizeCard(existing.card_number);
-  // Check card collision if card number changed
-  if (newNormalizedCard && newNormalizedCard !== normalizeCard(existing.card_number)) {
-    const activeCard = db.query<{ card_number: string; donation_id: string; entered_by: string; created_at: number; amount_cents: number; donor_name: string }, [string]>(
-      `SELECT * FROM active_card WHERE card_number = ? LIMIT 1`
-    ).get(newNormalizedCard);
+  const oldCard = normalizeCard(existing.card_number);
+  const newCard = input.card_number !== undefined ? normalizeCard(input.card_number) : oldCard;
+  if (newCard && newCard !== oldCard) assertCardAvailable(db, newCard, donationId);
 
-    if (activeCard && activeCard.donation_id !== donationId) {
-      throw new CardSerialCollisionError(
-        newNormalizedCard,
-        activeCard.donation_id,
-        activeCard.entered_by,
-        activeCard.created_at,
-        activeCard.amount_cents,
-        activeCard.donor_name
-      );
-    }
-  }
-
+  const now = Date.now();
   let insertedSeq = 0;
-
   db.transaction(() => {
-    // 1. Insert amend event (Correct argument ordering!)
-    const result = db.query(`
-      INSERT INTO ledger (
-        event_type, donation_id, supersedes_seq, amount_cents,
-        donor_name, display_name, is_anonymous, payment_method,
-        source, source_txn_id, card_number, entered_by, notes,
-        donor_phonetic, table_number, created_at
-      ) VALUES (
-        'amend', ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?
-      )
-    `).run(
-      donationId,
-      existing.latest_seq,
-      newAmount,
-      donorName,
-      displayName,
-      isAnonymous,
-      input.payment_method || existing.payment_method,
-      existing.source,
-      null, // source_txn_id is null for manual amendments
-      newNormalizedCard ? `#${newNormalizedCard}` : null,
+    insertedSeq = Number(db.query(INSERT_EVENT).run(
+      "amend", donationId, existing.latest_seq, newAmount, donorName, displayName, isAnonymous,
+      input.payment_method || existing.payment_method, existing.source, null, newCard ? `#${newCard}` : null,
       input.entered_by || existing.entered_by,
-      input.notes !== undefined ? input.notes : existing.notes,
-      input.donor_phonetic !== undefined ? input.donor_phonetic : existing.donor_phonetic || null,
-      input.table_number !== undefined ? input.table_number : existing.table_number || null,
+      input.notes !== undefined ? (input.notes?.trim() || null) : existing.notes,
+      input.donor_phonetic !== undefined ? (input.donor_phonetic?.trim() || null) : existing.donor_phonetic,
+      input.table_number !== undefined ? (input.table_number?.trim() || null) : existing.table_number,
       now
-    );
+    ).lastInsertRowid);
 
-    insertedSeq = Number(result.lastInsertRowid);
-
-    // 2. Update active card index
-    const oldNormalizedCard = normalizeCard(existing.card_number);
-    if (oldNormalizedCard && oldNormalizedCard !== newNormalizedCard) {
-      db.query(`DELETE FROM active_card WHERE card_number = ?`).run(oldNormalizedCard);
-    }
-    if (newNormalizedCard) {
-      db.query(`
-        INSERT OR REPLACE INTO active_card (card_number, donation_id, entered_by, amount_cents, donor_name, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(newNormalizedCard, donationId, input.entered_by || existing.entered_by, newAmount, donorName, now);
+    if (oldCard && oldCard !== newCard) db.query(`DELETE FROM active_card WHERE card_number = ?`).run(oldCard);
+    if (newCard) {
+      db.query(`INSERT OR REPLACE INTO active_card (card_number, donation_id, entered_by, amount_cents, donor_name, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(newCard, donationId, input.entered_by || existing.entered_by, newAmount, donorName, now);
     }
 
-    // 3. Recalculate matching grant ONLY if amount changed
-    const existingMatch = folded.match_by_parent.get(donationId) || 0;
     if (newAmount !== existing.amount_cents) {
-      if (existingMatch > 0) {
-        db.query(`
-          INSERT INTO ledger (
-            event_type, donation_id, supersedes_seq, amount_cents,
-            donor_name, display_name, is_anonymous, payment_method,
-            source, source_txn_id, card_number, entered_by, notes, created_at
-          ) VALUES (
-            'match_release', ?, ?, ?,
-            'Matching Grant', 'Matching Grant', 0, 'match',
-            'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
-          )
-        `).run(
-          `match_${donationId}`,
-          insertedSeq,
-          existingMatch,
-          `Match released on amendment for pledge ${donationId}`,
-          now
-        );
-      }
-
-      const eventState = getEventState(db);
-      const refreshedFold = foldLedger(db);
-      if (eventState.is_match_active === 1 && refreshedFold.derived_match_pool_cents > 0 && newAmount > 0) {
-        const matchPotential = Math.floor(newAmount * eventState.match_ratio);
-        const matchApplied = Math.min(matchPotential, refreshedFold.derived_match_pool_cents);
-
-        if (matchApplied > 0) {
-          db.query(`
-            INSERT INTO ledger (
-              event_type, donation_id, supersedes_seq, amount_cents,
-              donor_name, display_name, is_anonymous, payment_method,
-              source, source_txn_id, card_number, entered_by, notes, created_at
-            ) VALUES (
-              'match_apply', ?, ?, ?,
-              ?, ?, 0, 'match',
-              'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
-            )
-          `).run(
-            `match_${donationId}`,
-            insertedSeq,
-            matchApplied,
-            eventState.match_sponsor_title || "Matching Grant",
-            eventState.match_sponsor_title || "Matching Grant",
-            `Match reapplied on amendment for pledge ${donationId}`,
-            now
-          );
-        }
-      }
+      const existingMatch = folded.match_by_parent.get(donationId) || 0;
+      if (existingMatch > 0) insertMatchEvent(db, "match_release", donationId, insertedSeq, existingMatch, "Matching Grant", `Match released on amendment for pledge ${donationId}`, now);
+      applyMatch(db, donationId, insertedSeq, newAmount, `Match reapplied on amendment for pledge ${donationId}`, now);
     }
-
-    // Advance floor if stage delay is 0 and total increased
-    const eventState = getEventState(db);
-    const postAmendFold = foldLedger(db);
-    if (eventState.stage_delay_ms === 0 && postAmendFold.total_raised_cents > eventState.odometer_floor_cents && !eventState.is_frozen) {
-      db.query(`UPDATE event_state SET odometer_floor_cents = ?, updated_at = ? WHERE id = 1`).run(postAmendFold.total_raised_cents, now);
-    } else {
-      db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
-    }
+    touchState(db, now);
   })();
-
   return insertedSeq;
 }
 
-/**
- * Void a donation in the ledger.
- * Emits compensating match_release event and frees up active card serial.
- */
+/** Void an active donation, freeing its card serial and releasing any applied match. */
 export function voidDonation(db: Database, donationId: string, enteredBy?: string, reason?: string): number {
   const folded = foldLedger(db);
   const existing = folded.active_donations.get(donationId);
-  if (!existing || existing.is_voided) {
-    throw new Error(`Cannot void donation ${donationId}: donation does not exist or is already voided.`);
-  }
+  if (!existing) throw new Error(`Cannot void donation ${donationId}: donation does not exist or is already voided.`);
 
   const now = Date.now();
   let insertedSeq = 0;
-
   db.transaction(() => {
-    const result = db.query(`
-      INSERT INTO ledger (
-        event_type, donation_id, supersedes_seq, amount_cents,
-        donor_name, display_name, is_anonymous, payment_method,
-        source, source_txn_id, card_number, entered_by, notes, created_at
-      ) VALUES (
-        'void', ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?
-      )
-    `).run(
-      donationId,
-      existing.latest_seq,
-      existing.amount_cents,
-      existing.donor_name,
-      existing.display_name,
-      existing.is_anonymous ? 1 : 0,
-      existing.payment_method,
-      existing.source,
-      null,
-      existing.card_number,
-      enteredBy || existing.entered_by,
-      reason || "Voided by operator",
-      now
-    );
-
-    insertedSeq = Number(result.lastInsertRowid);
-
-    // Free up active card so it can be reused
-    const normalizedCard = normalizeCard(existing.card_number);
-    if (normalizedCard) {
-      db.query(`DELETE FROM active_card WHERE card_number = ?`).run(normalizedCard);
-    }
-
-    // Release matching grant if any was applied
+    insertedSeq = Number(db.query(INSERT_EVENT).run(
+      "void", donationId, existing.latest_seq, existing.amount_cents, existing.donor_name, existing.display_name, existing.is_anonymous ? 1 : 0,
+      existing.payment_method, existing.source, null, existing.card_number, enteredBy || existing.entered_by, reason || "Voided by operator",
+      existing.donor_phonetic, existing.table_number, now
+    ).lastInsertRowid);
+    const card = normalizeCard(existing.card_number);
+    if (card) db.query(`DELETE FROM active_card WHERE card_number = ?`).run(card);
     const appliedMatch = folded.match_by_parent.get(donationId) || 0;
-    if (appliedMatch > 0) {
-      db.query(`
-        INSERT INTO ledger (
-          event_type, donation_id, supersedes_seq, amount_cents,
-          donor_name, display_name, is_anonymous, payment_method,
-          source, source_txn_id, card_number, entered_by, notes, created_at
-        ) VALUES (
-          'match_release', ?, ?, ?,
-          'Matching Grant', 'Matching Grant', 0, 'match',
-          'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
-        )
-      `).run(
-        `match_${donationId}`,
-        insertedSeq,
-        appliedMatch,
-        `Match released on void of pledge ${donationId}`,
-        now
-      );
-    }
-
-    db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
+    if (appliedMatch > 0) insertMatchEvent(db, "match_release", donationId, insertedSeq, appliedMatch, "Matching Grant", `Match released on void of pledge ${donationId}`, now);
+    touchState(db, now);
   })();
-
   return insertedSeq;
 }
 
-/**
- * Restore a previously voided donation in the ledger.
- * Records 'restore' event and re-enforces matching grant if applicable.
- */
+/** Restore a voided donation and re-apply matching against the remaining pool. */
 export function restoreDonation(db: Database, donationId: string, enteredBy?: string, reason?: string): number {
   const folded = foldLedger(db);
   const existing = folded.all_records.get(donationId);
-  if (!existing || !existing.is_voided) {
-    throw new Error(`Cannot restore donation ${donationId}: donation does not exist or is not voided.`);
-  }
-
-  const normalizedCard = normalizeCard(existing.card_number);
-  if (normalizedCard) {
-    const activeCard = db.query<{ card_number: string; donation_id: string; entered_by: string; created_at: number; amount_cents: number; donor_name: string }, [string]>(
-      `SELECT * FROM active_card WHERE card_number = ? LIMIT 1`
-    ).get(normalizedCard);
-    if (activeCard && activeCard.donation_id !== donationId) {
-      throw new CardSerialCollisionError(
-        normalizedCard,
-        activeCard.donation_id,
-        activeCard.entered_by,
-        activeCard.created_at,
-        activeCard.amount_cents,
-        activeCard.donor_name
-      );
-    }
-  }
+  if (!existing || !existing.is_voided) throw new Error(`Cannot restore donation ${donationId}: donation does not exist or is not voided.`);
+  const card = normalizeCard(existing.card_number);
+  assertCardAvailable(db, card, donationId);
 
   const now = Date.now();
   let insertedSeq = 0;
-
   db.transaction(() => {
-    const result = db.query(`
-      INSERT INTO ledger (
-        event_type, donation_id, supersedes_seq, amount_cents,
-        donor_name, display_name, is_anonymous, payment_method,
-        source, source_txn_id, card_number, entered_by, notes,
-        donor_phonetic, table_number, created_at
-      ) VALUES (
-        'restore', ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?
-      )
-    `).run(
-      donationId,
-      existing.latest_seq,
-      existing.amount_cents,
-      existing.donor_name,
-      existing.display_name,
-      existing.is_anonymous ? 1 : 0,
-      existing.payment_method,
-      existing.source,
-      null,
-      existing.card_number,
-      enteredBy || existing.entered_by,
-      reason || "Restored donation",
-      existing.donor_phonetic || null,
-      existing.table_number || null,
-      now
-    );
-
-    insertedSeq = Number(result.lastInsertRowid);
-
-    if (normalizedCard) {
-      db.query(`
-        INSERT OR REPLACE INTO active_card (card_number, donation_id, entered_by, amount_cents, donor_name, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(normalizedCard, donationId, enteredBy || existing.entered_by, existing.amount_cents, existing.donor_name, now);
+    insertedSeq = Number(db.query(INSERT_EVENT).run(
+      "restore", donationId, existing.latest_seq, existing.amount_cents, existing.donor_name, existing.display_name, existing.is_anonymous ? 1 : 0,
+      existing.payment_method, existing.source, null, existing.card_number, enteredBy || existing.entered_by, reason || "Restored donation",
+      existing.donor_phonetic, existing.table_number, now
+    ).lastInsertRowid);
+    if (card) {
+      db.query(`INSERT OR REPLACE INTO active_card (card_number, donation_id, entered_by, amount_cents, donor_name, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(card, donationId, enteredBy || existing.entered_by, existing.amount_cents, existing.donor_name, now);
     }
-
-    const eventState = getEventState(db);
-    if (eventState.is_match_active && folded.derived_match_pool_cents > 0) {
-      const matchPotential = Math.round(existing.amount_cents * eventState.match_ratio);
-      const matchAllocated = Math.min(matchPotential, folded.derived_match_pool_cents);
-      if (matchAllocated > 0) {
-        db.query(`
-          INSERT INTO ledger (
-            event_type, donation_id, supersedes_seq, amount_cents,
-            donor_name, display_name, is_anonymous, payment_method,
-            source, source_txn_id, card_number, entered_by, notes, created_at
-          ) VALUES (
-            'match_apply', ?, ?, ?,
-            'Matching Grant', 'Matching Grant', 0, 'match',
-            'manual', NULL, NULL, 'MATCH_ENGINE', ?, ?
-          )
-        `).run(
-          `match_${donationId}`,
-          insertedSeq,
-          matchAllocated,
-          `Match applied on restore of pledge ${donationId}`,
-          now
-        );
-      }
-    }
-
-    db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
+    applyMatch(db, donationId, insertedSeq, existing.amount_cents, `Match applied on restore of pledge ${donationId}`, now);
+    touchState(db, now);
   })();
-
   return insertedSeq;
 }
 
-/**
- * Hold a donation from stage projection (1-click hold).
- */
+/** Hold a donation off the stage without touching the ledger. */
 export function holdDonation(db: Database, donationId: string, heldBy?: string, reason?: string): void {
   const now = Date.now();
-  db.query(`
-    INSERT OR REPLACE INTO held_donations (donation_id, held_at, held_by, reason)
-    VALUES (?, ?, ?, ?)
-  `).run(donationId, now, heldBy || "AV Director", reason || "Held from stage");
-  db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(now);
+  db.query(`INSERT OR REPLACE INTO held_donations (donation_id, held_at, held_by, reason) VALUES (?, ?, ?, ?)`).run(donationId, now, heldBy || "Operator", reason || "Held from stage");
+  touchState(db, now);
 }
 
-/**
- * Release a held donation back onto the stage.
- */
 export function releaseHeldDonation(db: Database, donationId: string): void {
   db.query(`DELETE FROM held_donations WHERE donation_id = ?`).run(donationId);
-  db.query(`UPDATE event_state SET updated_at = ? WHERE id = 1`).run(Date.now());
+  touchState(db, Date.now());
 }
 
-/**
- * Get current event state with derived match pool.
- */
 export function getEventState(db: Database): EventStateRecord {
   const row = db.query<EventStateRecord, []>(`SELECT * FROM event_state WHERE id = 1`).get();
-  if (!row) {
-    throw new Error("Event state record not found in database.");
-  }
-
-  // Derive remaining matching pool from the ledger
-  const matchRow = db.query<{ total_applied: number; total_released: number }, []>(`
-    SELECT 
-      COALESCE(SUM(CASE WHEN event_type = 'match_apply' THEN amount_cents ELSE 0 END), 0) as total_applied,
-      COALESCE(SUM(CASE WHEN event_type = 'match_release' THEN amount_cents ELSE 0 END), 0) as total_released
-    FROM ledger
-  `).get();
-  const netMatch = matchRow ? Math.max(0, matchRow.total_applied - matchRow.total_released) : 0;
-  row.match_pool_cents = Math.max(0, row.match_total_cents - netMatch);
-
+  if (!row) throw new Error("Event state record not found in database.");
   return row;
 }
 
-/**
- * Update event state settings.
- */
+/** Applies a settings patch and bumps settings_seq so other sessions can detect the change. */
 export function updateEventState(db: Database, patch: Partial<EventStateRecord>): EventStateRecord {
   const current = getEventState(db);
   const now = Date.now();
-  const nextSeq = (current.settings_seq || 1) + 1;
-
-  const updated: EventStateRecord = {
-    ...current,
-    ...patch,
-    settings_seq: nextSeq,
-    updated_at: now
-  };
-
-  db.query(`
-    UPDATE event_state
-    SET event_name = ?,
-        event_subtitle = ?,
-        goal_cents = ?,
-        match_pool_cents = ?,
-        match_total_cents = ?,
-        match_ratio = ?,
-        is_match_active = ?,
-        match_sponsor_title = ?,
-        is_frozen = ?,
-        manual_override_cents = ?,
-        qr_url = ?,
-        qr_style = ?,
-        qr_center_icon = ?,
-        qr_fg_color = ?,
-        qr_bg_color = ?,
-        entry_pin = ?,
-        control_pin = ?,
-        odometer_floor_cents = ?,
-        theme_preset = ?,
-        brand_hue = ?,
-        brand_chroma = ?,
-        brand_accent_hex = ?,
-        brand_radius_px = ?,
-        major_gift_threshold_cents = ?,
-        stage_delay_ms = ?,
-        countdown_seconds = ?,
-        timer_status = ?,
-        timer_ends_at = ?,
-        thermometer_visual_mode = ?,
-        embed_media_url = ?,
-        trust_badge_text = ?,
-        pinned_donation_id = ?,
-        logo_url = ?,
-        background_style = ?,
-        bar_color = ?,
-        show_qr = ?,
-        show_recent_donations = ?,
-        show_live_indicator = ?,
-        show_goal = ?,
-        stage_message = ?,
-        stage_message_visible = ?,
-        feature_timer = ?,
-        feature_card_number = ?,
-        feature_table_number = ?,
-        bloomerang_api_key = ?,
-        bloomerang_last_sync_at = ?,
-        bloomerang_last_error = ?,
-        event_title = ?,
-        text_color = ?,
-        font_family = ?,
-        chart_orientation = ?,
-        stage_reset_seq = ?,
-        marker_mode = ?,
-        marker_step_cents = ?,
-        background_image_url = ?,
-        gradient_start = ?,
-        gradient_end = ?,
-        gradient_angle = ?,
-        gradient_intensity = ?,
-        background_video_url = ?,
-        impact_messages = ?,
-        qr_image_url = ?,
-        qr_image_backdrop = ?,
-        display_url = ?,
-        settings_seq = ?,
-        updated_at = ?
-    WHERE id = 1
-  `).run(
-    updated.event_name,
-    updated.event_subtitle,
-    updated.goal_cents,
-    updated.match_pool_cents,
-    updated.match_total_cents,
-    updated.match_ratio,
-    updated.is_match_active,
-    updated.match_sponsor_title,
-    updated.is_frozen,
-    updated.manual_override_cents,
-    updated.qr_url || "",
-    updated.qr_style || "dots",
-    updated.qr_center_icon || "star",
-    updated.qr_fg_color || "",
-    updated.qr_bg_color || "#FFFFFF",
-    updated.entry_pin,
-    updated.control_pin,
-    updated.odometer_floor_cents,
-    updated.theme_preset,
-    updated.brand_hue,
-    updated.brand_chroma,
-    updated.brand_accent_hex,
-    updated.brand_radius_px,
-    updated.major_gift_threshold_cents,
-    updated.stage_delay_ms,
-    updated.countdown_seconds ?? 300,
-    updated.timer_status || "stopped",
-    updated.timer_ends_at ?? null,
-    updated.thermometer_visual_mode || "classic",
-    updated.embed_media_url || "",
-    updated.trust_badge_text || "501(c)(3) Tax-Deductible Contribution",
-    updated.pinned_donation_id ?? null,
-    updated.logo_url || "",
-    updated.background_style || "plain",
-    updated.bar_color || "",
-    updated.show_qr ?? 1,
-    updated.show_recent_donations ?? 1,
-    updated.show_live_indicator ?? 1,
-    updated.show_goal ?? 1,
-    updated.stage_message || "",
-    updated.stage_message_visible ?? 0,
-    updated.feature_timer ?? 0,
-    updated.feature_card_number ?? 0,
-    updated.feature_table_number ?? 0,
-    updated.bloomerang_api_key || "",
-    updated.bloomerang_last_sync_at ?? null,
-    updated.bloomerang_last_error || "",
-    updated.event_title || "",
-    updated.text_color || "",
-    updated.font_family || "system",
-    updated.chart_orientation || "horizontal",
-    updated.stage_reset_seq ?? 0,
-    updated.marker_mode || "milestones",
-    updated.marker_step_cents || 10000000,
-    updated.background_image_url || "",
-    updated.gradient_start,
-    updated.gradient_end,
-    updated.gradient_angle,
-    updated.gradient_intensity,
-    updated.background_video_url,
-    updated.impact_messages,
-    updated.qr_image_url,
-    updated.qr_image_backdrop,
-    updated.display_url || "",
-    updated.settings_seq,
-    now
-  );
-
-  return updated;
+  const columns = EVENT_STATE_COLUMNS.filter(column => patch[column] !== undefined);
+  const assignments = [...columns.map(column => `${column} = ?`), "settings_seq = ?", "updated_at = ?"].join(", ");
+  const values = [...columns.map(column => patch[column] as string | number), current.settings_seq + 1, now];
+  db.query(`UPDATE event_state SET ${assignments} WHERE id = 1`).run(...values);
+  return getEventState(db);
 }
 
-export function startTimer(db: Database, seconds?: number): EventStateRecord {
-  const current = getEventState(db);
-  const sec = seconds !== undefined ? seconds : (current.countdown_seconds || 300);
-  const endsAt = Date.now() + (sec * 1000);
-  return updateEventState(db, {
-    timer_status: "running",
-    countdown_seconds: sec,
-    timer_ends_at: endsAt
-  });
-}
-
-export function pauseTimer(db: Database): EventStateRecord {
-  const current = getEventState(db);
-  if (current.timer_status !== "running" || !current.timer_ends_at) {
-    return current;
-  }
-  const remaining = Math.max(0, Math.ceil((current.timer_ends_at - Date.now()) / 1000));
-  return updateEventState(db, {
-    timer_status: "paused",
-    countdown_seconds: remaining,
-    timer_ends_at: null
-  });
-}
-
-export function resetTimer(db: Database, seconds?: number): EventStateRecord {
-  const sec = seconds !== undefined ? seconds : 300;
-  return updateEventState(db, {
-    timer_status: "stopped",
-    countdown_seconds: sec,
-    timer_ends_at: null
-  });
-}
-
-export function addTimerSeconds(db: Database, addSeconds: number): EventStateRecord {
-  const current = getEventState(db);
-  if (current.timer_status === "running" && current.timer_ends_at) {
-    const newEndsAt = current.timer_ends_at + (addSeconds * 1000);
-    const newSec = Math.max(0, Math.ceil((newEndsAt - Date.now()) / 1000));
-    return updateEventState(db, {
-      countdown_seconds: newSec,
-      timer_ends_at: newEndsAt
-    });
-  } else {
-    const newSec = Math.max(0, (current.countdown_seconds || 300) + addSeconds);
-    return updateEventState(db, {
-      countdown_seconds: newSec
-    });
-  }
-}
-
-export function pinDonation(db: Database, donationId: string): EventStateRecord {
-  const current = getEventState(db);
-  const newPin = current.pinned_donation_id === donationId ? null : donationId;
-  return updateEventState(db, { pinned_donation_id: newPin });
-}
-
-export function toggleDonationAnonymity(db: Database, donationId: string): void {
-  const folded = foldLedger(db);
-  const existing = folded.active_donations.get(donationId);
-  if (!existing || existing.is_voided) return;
-  const newAnon = !existing.is_anonymous;
-  amendDonation(db, donationId, {
-    is_anonymous: newAnon,
-    display_name: newAnon ? "Anonymous Supporter" : existing.donor_name
-  });
-}
-
-// Re-export projections and backwards compatibility aliases
-export const yankChyron = holdDonation;
-export const unyankChyron = releaseHeldDonation;
-export { getStageState, getEmceeState, getControlState, getVolunteerState } from "./projection";
+export { getStageState, getEmceeState, getControlState, getEntryState } from "./projection";

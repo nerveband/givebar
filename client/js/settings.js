@@ -81,16 +81,8 @@
   const matchTitleInput = document.getElementById('setting-match-title');
   const matchPoolInput = document.getElementById('setting-match-pool');
 
-  // Connections Inputs
-  const bloomerangKeyInput = document.getElementById('setting-bloomerang-key');
-  const btnToggleKeyView = document.getElementById('btn-toggle-key-view');
-  const btnTestConnection = document.getElementById('btn-test-connection');
-  const connStatusDisplay = document.getElementById('conn-status-display');
-  const connSyncInfo = document.getElementById('conn-sync-info');
-  const connErrorInfo = document.getElementById('conn-error-info');
 
   // Features Inputs
-  const toggleFeatureTimer = document.getElementById('toggle-feature-timer');
   const toggleFeatureCard = document.getElementById('toggle-feature-card');
   const toggleFeatureTable = document.getElementById('toggle-feature-table');
 
@@ -98,12 +90,11 @@
     setupAccordion();
     setupMilestonesEditor();
     setupAskTiersEditor();
-    setupKeyViewToggle();
-    setupTestConnection();
     setupSaveHandlers();
     setupReloadConflict();
     setupLivePreviews();
     setupOperators();
+    setupBackups();
     loadSettings();
   }
 
@@ -426,48 +417,11 @@
     if (matchTitleInput) matchTitleInput.value = es.match_sponsor_title || '';
     if (matchPoolInput) matchPoolInput.value = ((es.match_total_cents || 0) / 100).toLocaleString('en-US');
 
-    // 6. Connections
-    if (bloomerangKeyInput) {
-      bloomerangKeyInput.value = data.has_bloomerang_api_key
-        ? (data.bloomerang_key_masked || '••••••••••••••')
-        : '';
-    }
-    updateConnectionStatus(data.has_bloomerang_api_key, es.bloomerang_last_sync_at, es.bloomerang_last_error);
 
     // 7. Features
-    if (toggleFeatureTimer) toggleFeatureTimer.checked = Boolean(es.feature_timer);
     if (toggleFeatureCard) toggleFeatureCard.checked = Boolean(es.feature_card_number);
     if (toggleFeatureTable) toggleFeatureTable.checked = Boolean(es.feature_table_number);
 
-  }
-
-  function updateConnectionStatus(hasKey, lastSyncAt, lastError) {
-    if (connStatusDisplay) {
-      if (hasKey) {
-        connStatusDisplay.innerHTML = '<span style="color: #d4a359;">&#x2713; Connected</span>';
-      } else {
-        connStatusDisplay.textContent = 'Not connected';
-        connStatusDisplay.style.color = '#88888e';
-      }
-    }
-
-    if (connSyncInfo) {
-      if (lastSyncAt) {
-        connSyncInfo.textContent = `Last successful sync: ${new Date(lastSyncAt).toLocaleString()}`;
-        connSyncInfo.style.display = 'block';
-      } else {
-        connSyncInfo.style.display = 'none';
-      }
-    }
-
-    if (connErrorInfo) {
-      if (lastError) {
-        connErrorInfo.textContent = `Error: ${lastError}`;
-        connErrorInfo.style.display = 'block';
-      } else {
-        connErrorInfo.style.display = 'none';
-      }
-    }
   }
 
   // --- Milestones Editor ---
@@ -592,53 +546,6 @@
   }
 
   // --- Password Reveal ---
-  function setupKeyViewToggle() {
-    if (!btnToggleKeyView || !bloomerangKeyInput) return;
-    btnToggleKeyView.addEventListener('click', () => {
-      const isPassword = bloomerangKeyInput.type === 'password';
-      bloomerangKeyInput.type = isPassword ? 'text' : 'password';
-      btnToggleKeyView.textContent = isPassword ? 'Hide' : 'Show';
-    });
-  }
-
-  // --- Test Connection ---
-  function setupTestConnection() {
-    if (!btnTestConnection) return;
-    btnTestConnection.addEventListener('click', async () => {
-      clearBanners();
-      btnTestConnection.textContent = 'Testing...';
-
-        const enteredKey = bloomerangKeyInput?.value?.trim() || '';
-      try {
-        const res = await GivebarSession.api('/api/control', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            action: 'test_bloomerang',
-            api_key: enteredKey.startsWith('••••') ? undefined : enteredKey,
-            pin
-          })
-        });
-
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.connected) {
-          updateConnectionStatus(true, data.last_sync_at, '');
-          showSuccess(`Connected to ${data.organization || 'Bloomerang'}. Credentials verified; this does not import donations.`);
-        } else {
-          updateConnectionStatus(false, null, data.error || 'Connection failed');
-          showError(`Connection failed: ${data.error || 'Invalid API key or network error'}`);
-        }
-      } catch (err) {
-        showError('Network error testing Bloomerang connection.');
-      } finally {
-        btnTestConnection.textContent = 'Test Connection';
-      }
-    });
-  }
-
   // --- Save Handlers ---
   function setupSaveHandlers() {
     if (btnSaveTop) btnSaveTop.addEventListener('click', handleSaveSettings);
@@ -734,32 +641,21 @@
       match_total_cents: matchPoolDollars * 100,
 
       // Features
-      feature_timer: Boolean(toggleFeatureTimer?.checked),
       feature_card_number: Boolean(toggleFeatureCard?.checked),
       feature_table_number: Boolean(toggleFeatureTable?.checked)
     };
 
-    // Bloomerang key: only send a freshly typed value, never the mask.
-    const bloomKey = bloomerangKeyInput?.value?.trim();
-    if (bloomKey && !bloomKey.startsWith('••••')) {
-      payload.bloomerang_api_key = bloomKey;
-    }
 
     setSaveBusy(true);
     try {
       const res = await GivebarSession.api('/api/control', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      if (res.status === 401) {
-        clearStoredControlPin();
-        setAuthUIState('unauthenticated');
-        showError('Unauthorized: the Control Room PIN was rejected.');
+      if (res.status === 403) {
+        showError('Only an administrator can save settings.');
         return;
       }
 
@@ -790,74 +686,138 @@
       setSaveBusy(false);
     }
   }
+  // --- Operator accounts ---
+  const fmt = GivebarSession.format;
+  const inviteDialog = document.getElementById('invite-dialog');
+
   async function loadOperators() {
     const tbody = document.getElementById('operator-tbody');
-    if (!tbody) return;
-    const res = await GivebarSession.api('/api/control', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'list_accounts' })
-    });
-    if (res.status === 403) {
-      tbody.innerHTML = '<tr><td colspan="5">Only administrators can manage operators.</td></tr>';
+    const result = await GivebarSession.control('list_accounts');
+    if (!result.ok) {
+      tbody.innerHTML = `<tr><td colspan="5">${fmt.escape(result.data.message || 'Could not load operators.')}</td></tr>`;
       return;
     }
-    if (!res.ok) return;
-    const data = await res.json();
-    tbody.innerHTML = data.accounts.map((account) => `<tr><td>${escapeHTML(account.username)}</td><td>${escapeHTML(account.display_name)}</td><td>${escapeHTML(account.role)}</td><td>${account.disabled ? 'Disabled' : 'Active'}</td><td><button type="button" data-disable="${account.id}" data-disabled="${account.disabled ? 0 : 1}">${account.disabled ? 'Enable' : 'Disable'}</button> <button type="button" data-invite="${account.id}">Copy invite link</button></td></tr>`).join('');
-    tbody.querySelectorAll('[data-disable]').forEach((button) => {
-      button.addEventListener('click', async () => {
-        await GivebarSession.api('/api/control', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'update_account', id: button.dataset.disable, disabled: button.dataset.disabled === '1' })
-        });
-        await loadOperators();
-      });
-    });
-    tbody.querySelectorAll('[data-invite]').forEach((button) => {
-      button.addEventListener('click', async () => {
-        const email = window.prompt('Operator email for the one-time invite link:');
-        if (!email) return;
-        const res = await GivebarSession.api('/api/control', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'send_invite', id: button.dataset.invite, email })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          window.alert(data.message || 'Could not send invite.');
-          return;
-        }
-        await navigator.clipboard.writeText(data.link).catch(() => {});
-        window.alert(`Invite sent from info@wavedepth.com. Link copied:\n${data.link}`);
-      });
-    });
+    tbody.innerHTML = result.data.accounts.map(account => `<tr>
+      <td>${fmt.escape(account.username)}</td>
+      <td>${fmt.escape(account.display_name)}</td>
+      <td>${account.role === 'admin' ? 'Administrator' : 'Operator'}</td>
+      <td>${account.disabled ? 'Disabled' : 'Active'}</td>
+      <td class="row-actions">
+        <button type="button" class="btn-secondary btn-row" data-invite="${account.id}" data-name="${fmt.escape(account.display_name)}" ${account.disabled ? 'disabled' : ''}>Email invite</button>
+        <button type="button" class="btn-secondary btn-row" data-reset-pin="${account.id}" data-name="${fmt.escape(account.display_name)}">Reset PIN</button>
+        <button type="button" class="btn-secondary btn-row" data-disable="${account.id}" data-disabled="${account.disabled ? 0 : 1}">${account.disabled ? 'Enable' : 'Disable'}</button>
+      </td></tr>`).join('');
   }
+
+  document.getElementById('operator-tbody').addEventListener('click', async event => {
+    const disable = event.target.closest('[data-disable]');
+    const reset = event.target.closest('[data-reset-pin]');
+    const invite = event.target.closest('[data-invite]');
+    if (disable) {
+      const disabling = disable.dataset.disabled === '1';
+      if (disabling && !window.confirm('Disable this operator? Their session ends immediately and they cannot sign in until re-enabled.')) return;
+      const result = await GivebarSession.control('update_account', { id: disable.dataset.disable, disabled: disabling });
+      if (!result.ok) window.alert(result.data.message || 'Could not update the operator.');
+      await loadOperators();
+      return;
+    }
+    if (reset) {
+      const pin = window.prompt(`New PIN for ${reset.dataset.name} (4-12 characters). Their current session ends and they sign in again with this PIN.`);
+      if (pin === null) return;
+      const result = await GivebarSession.control('update_account', { id: reset.dataset.resetPin, pin });
+      window.alert(result.ok ? `PIN updated for ${reset.dataset.name}. Tell them the new PIN in person or by phone.` : (result.data.message || 'Could not update the PIN.'));
+      return;
+    }
+    if (invite) {
+      document.getElementById('invite-account-id').value = invite.dataset.invite;
+      document.getElementById('invite-dialog-title').textContent = `Email invite to ${invite.dataset.name}`;
+      document.getElementById('invite-email').value = '';
+      document.getElementById('invite-result').hidden = true;
+      document.getElementById('invite-error').textContent = '';
+      inviteDialog.showModal();
+      document.getElementById('invite-email').focus();
+    }
+  });
+
+  document.getElementById('invite-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const error = document.getElementById('invite-error');
+    const button = document.getElementById('btn-send-invite');
+    error.textContent = '';
+    button.disabled = true;
+    button.textContent = 'Sending…';
+    try {
+      const result = await GivebarSession.control('send_invite', { id: document.getElementById('invite-account-id').value, email: document.getElementById('invite-email').value });
+      if (!result.ok) { error.textContent = result.data.message || 'Could not send the invite.'; return; }
+      const box = document.getElementById('invite-result');
+      box.hidden = false;
+      document.getElementById('invite-link').value = result.data.link;
+      document.getElementById('btn-copy-invite').dataset.copyText = result.data.link;
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Send invite email';
+    }
+  });
+  document.getElementById('btn-close-invite').addEventListener('click', () => inviteDialog.close());
+
   function setupOperators() {
-    const button = document.getElementById('btn-create-operator');
-    if (!button) return;
-    button.addEventListener('click', async () => {
+    document.getElementById('btn-create-operator').addEventListener('click', async () => {
       const error = document.getElementById('operator-error');
       error.textContent = '';
-      const payload = {
-        action: 'create_account',
+      const result = await GivebarSession.control('create_account', {
         username: document.getElementById('operator-username').value,
         displayName: document.getElementById('operator-display').value,
         pin: document.getElementById('operator-pin').value,
         role: document.getElementById('operator-role').value
-      };
-      const res = await GivebarSession.api('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await res.json();
-      if (!res.ok) {
-        error.textContent = data.message || 'Could not create operator.';
-        return;
-      }
+      });
+      if (!result.ok) { error.textContent = result.data.message || 'Could not create operator.'; return; }
+      document.getElementById('operator-username').value = '';
+      document.getElementById('operator-display').value = '';
       document.getElementById('operator-pin').value = '';
       await loadOperators();
     });
     void loadOperators();
   }
+
+  // --- Backups ---
+  async function loadBackups() {
+    const list = document.getElementById('backup-list');
+    const result = await GivebarSession.control('list_backups');
+    if (!result.ok) { list.innerHTML = `<p class="form-hint">${fmt.escape(result.data.message || 'Backups unavailable.')}</p>`; return; }
+    const backups = result.data.backups;
+    document.getElementById('backup-summary').textContent = backups.length
+      ? `${backups.length} snapshots on the server. Latest: ${fmt.time(backups[0].created_at)} (${backups[0].label}). Automatic snapshots run every 5 minutes whenever anything changed.`
+      : 'No snapshots yet. Automatic snapshots run every 5 minutes whenever anything changed.';
+    list.innerHTML = backups.slice(0, 40).map(item => `<div class="backup-row">
+      <span>${fmt.escape(fmt.time(item.created_at))}</span>
+      <span class="backup-meta">${fmt.escape(item.label)} · ${Math.round(item.bytes / 1024)} KB</span>
+      <span class="backup-actions">
+        <a class="btn-secondary" href="/api/export/backup?name=${encodeURIComponent(item.name)}">Download</a>
+        <button type="button" class="btn-secondary" data-restore="${fmt.escape(item.name)}" data-when="${fmt.escape(fmt.time(item.created_at))}">Restore</button>
+      </span></div>`).join('');
+  }
+
+  function setupBackups() {
+    document.getElementById('btn-backup-now').addEventListener('click', async () => {
+      const result = await GivebarSession.control('create_backup');
+      if (!result.ok) window.alert(result.data.message || 'Backup failed.');
+      await loadBackups();
+    });
+    document.getElementById('backup-list').addEventListener('click', async event => {
+      const button = event.target.closest('[data-restore]');
+      if (!button) return;
+      const typed = window.prompt(`Restore the snapshot from ${button.dataset.when}?\n\nEvery gift, setting, and team note goes back to that moment. Anything recorded since is removed from the ledger (a pre-restore snapshot is taken first, so nothing is lost for good). Operator accounts and sessions stay as they are.\n\nType RESTORE to continue.`);
+      if (typed !== 'RESTORE') return;
+      button.disabled = true;
+      const result = await GivebarSession.control('restore_backup', { name: button.dataset.restore, confirm: 'RESTORE' });
+      if (!result.ok) { window.alert(result.data.message || 'Restore failed.'); button.disabled = false; return; }
+      window.alert(`Restored. A pre-restore snapshot was saved as ${result.data.pre_restore.name}.`);
+      await loadSettings();
+      await loadBackups();
+    });
+    void loadBackups();
+  }
+
 
   function setSaveBusy(busy) {
     [btnSaveTop, btnSaveBottom].forEach(btn => {

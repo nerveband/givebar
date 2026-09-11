@@ -9,10 +9,10 @@
   <link rel="preload" href="/assets/fonts/brandon-medium.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-black.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/tokens.css?v=6.3.0">
-  <link rel="stylesheet" href="css/base.css?v=6.1.0">
-  <link rel="stylesheet" href="css/components.css?v=6.1.0">
-  <link rel="stylesheet" href="css/app.css?v=6.4.0">
+  <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.0.0">
   <style>
     /* =========================================================================
        Fullscreen Bar Chart (Direction B — Presentation Contrast)
@@ -199,8 +199,7 @@
     .live-indicator[data-state="stale"] { color: var(--stage-ink-dim); }
 
     .matching-banner,
-    .paused-banner,
-    .stage-degraded {
+    .paused-banner {
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -223,13 +222,6 @@
       border: 1px solid #ef4444;
       color: #fca5a5;
     }
-
-    .stage-degraded {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      color: var(--stage-ink-dim);
-    }
-
     [hidden] { display: none !important; }
 
     /* =========================================================================
@@ -924,7 +916,6 @@
 
         <div id="stage-freeze-banner" class="paused-banner" hidden>Paused</div>
 
-        <div id="stage-degraded-banner" class="stage-degraded" hidden>Locked</div>
 
         <div id="stage-live-indicator" class="live-indicator" data-state="live">
           <span class="pulse-dot"></span>
@@ -991,7 +982,8 @@
 
   </main>
 
-  <script src="js/odometer.js?v=6.0.0"></script>
-  <script src="js/stage.js?v=6.5.0"></script>
+  <script src="/js/live.js?v=7.0.0"></script>
+  <script src="/js/odometer.js?v=7.0.0"></script>
+  <script src="/js/stage.js?v=7.0.0"></script>
 </body>
 </html>

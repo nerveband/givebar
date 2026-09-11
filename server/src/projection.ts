@@ -1,13 +1,11 @@
 import type { Database } from "bun:sqlite";
-import { foldLedger, getEventState, type DonationRecord, type LedgerEvent, type EventStateRecord } from "./ledger";
+import { foldLedger, getEventState, type EventStateRecord, type FoldedLedger } from "./ledger";
 import { deriveDisplayUrl, FONT_FAMILY_KEYS, CHART_ORIENTATIONS } from "./settings";
 
 export interface PublicChyron {
   donation_id: string;
   display_name: string;
   amount_cents: number;
-  notes?: string | null;
-  is_pinned?: boolean;
   created_at: number;
 }
 
@@ -27,6 +25,14 @@ export interface AskTierItem {
   label: string;
 }
 
+export interface TeamNote {
+  id: number;
+  author_id: string;
+  author_name: string;
+  body: string;
+  created_at: number;
+}
+
 export interface ThemeTokens {
   preset: string;
   hue: number;
@@ -39,412 +45,237 @@ export interface ThemeTokens {
   qr_bg_color: string;
 }
 
-interface MilestoneRow {
-  id: number;
-  sort_order: number;
-  percent_of_goal: number | null;
-  cents: number | null;
-  label: string;
-  celebrate: number;
-}
-
-interface AskTierRow {
-  id: number;
-  sort_order: number;
-  cents: number;
-  label: string;
-}
-
-/**
- * Strict Privacy Shield for configuration payloads: PINs and vendor API keys
- * never leave the server, and the retired `qr_donate_url` / `milestones_json`
- * columns are dropped so no client can bind to them again.
- */
-export function sanitizeEventState(state: EventStateRecord): Record<string, unknown> {
-  const {
-    control_pin: _controlPin,
-    entry_pin: _entryPin,
-    bloomerang_api_key: _apiKey,
-    qr_donate_url: _retiredQrUrl,
-    milestones_json: _retiredMilestones,
-    ...rest
-  } = state as EventStateRecord & { qr_donate_url?: string; milestones_json?: string };
-
-  return {
-    ...rest,
-    display_url_effective: deriveDisplayUrl(state.qr_url, state.display_url)
-  };
+/** Event settings as every client sees them, plus the derived printed URL. */
+export function publicEventState(state: EventStateRecord): EventStateRecord & { display_url_effective: string } {
+  return { ...state, display_url_effective: deriveDisplayUrl(state.qr_url, state.display_url) };
 }
 
 export function getThemeTokens(state: EventStateRecord): ThemeTokens {
   return {
     preset: state.theme_preset || "champagne",
-    hue: state.brand_hue ?? 85,
-    chroma: state.brand_chroma ?? 0.12,
-    accent_hex: state.brand_accent_hex || "",
-    radius_px: state.brand_radius_px ?? 12,
+    hue: state.brand_hue,
+    chroma: state.brand_chroma,
+    accent_hex: state.brand_accent_hex,
+    radius_px: state.brand_radius_px,
     qr_style: state.qr_style || "dots",
     qr_center_icon: state.qr_center_icon || "star",
-    qr_fg_color: state.qr_fg_color || "",
+    qr_fg_color: state.qr_fg_color,
     qr_bg_color: state.qr_bg_color || "#FFFFFF"
   };
 }
 
-/**
- * The `milestone` child table is the single source of truth. Rows may store an
- * absolute target in cents or a percent of the live goal; percent rows are
- * resolved against the current goal so goal edits move milestone math instantly.
- */
+/** Percent milestones resolve against the live goal so goal edits move them instantly. */
 export function getMilestones(db: Database, goalCents: number): MilestoneItem[] {
-  const rows = db.query<MilestoneRow, []>(`SELECT * FROM milestone ORDER BY sort_order ASC`).all();
-  return rows.map((r, i) => {
-    let cents = r.cents;
-    if (!cents && r.percent_of_goal) {
-      cents = Math.round((goalCents * r.percent_of_goal) / 100);
-    }
-    return {
-      id: r.id || i + 1,
-      sort_order: r.sort_order || i + 1,
-      percent_of_goal: r.percent_of_goal ?? null,
-      cents: cents || 0,
-      label: r.label,
-      celebrate: Boolean(r.celebrate)
-    };
-  });
+  return db.query<{ id: number; sort_order: number; percent_of_goal: number | null; cents: number | null; label: string; celebrate: number }, []>(`SELECT * FROM milestone ORDER BY sort_order ASC`).all()
+    .map(row => ({
+      id: row.id,
+      sort_order: row.sort_order,
+      percent_of_goal: row.percent_of_goal,
+      cents: row.cents || (row.percent_of_goal ? Math.round((goalCents * row.percent_of_goal) / 100) : 0),
+      label: row.label,
+      celebrate: Boolean(row.celebrate)
+    }));
 }
 
 export function getAskTiers(db: Database): AskTierItem[] {
-  const rows = db.query<AskTierRow, []>(`SELECT * FROM ask_tier ORDER BY sort_order ASC`).all();
-  return rows.map((r, i) => ({
-    id: r.id || i + 1,
-    sort_order: r.sort_order || i + 1,
-    cents: r.cents,
-    label: r.label || `$${Math.floor(r.cents / 100).toLocaleString("en-US")}`
-  }));
+  return db.query<AskTierItem, []>(`SELECT id, sort_order, cents, label FROM ask_tier ORDER BY sort_order ASC`).all();
+}
+
+export function getTeamNotes(db: Database): TeamNote[] {
+  return db.query<TeamNote, []>(`SELECT id, author_id, author_name, body, created_at FROM team_note ORDER BY id DESC LIMIT 100`).all();
+}
+
+function heldIds(db: Database): Set<string> {
+  return new Set(db.query<{ donation_id: string }, []>(`SELECT donation_id FROM held_donations`).all().map(row => row.donation_id));
 }
 
 /**
- * Stage Projection (/stage)
- * PURE READ: Zero DB mutations on GET.
- * Implements 8-Second Chyron Review Queue & Staged Projection.
+ * Staging: a gift becomes visible stage_delay_ms after it was recorded. Until then it is
+ * excluded from the staged fold entirely, so a void or amendment made inside the window
+ * is honoured the moment the gift would have appeared. Once on stage, the floor ratchet
+ * keeps the total from ever rolling backward; a pause freezes both figure and feed.
  */
-export function getStageState(db: Database, sinceSeq: number = 0) {
-  const eventState = getEventState(db);
+function stagedView(db: Database, state: EventStateRecord, fullFold: FoldedLedger, now: number) {
+  const horizon = now - state.stage_delay_ms;
+  const hidden = heldIds(db);
+  for (const record of fullFold.all_records.values()) {
+    if (record.created_at > horizon) hidden.add(record.donation_id);
+  }
+  const stagedTotal = hidden.size ? foldLedger(db, { excludeDonationIds: hidden }).total_raised_cents : fullFold.total_raised_cents;
+  // The figure on the wall: the ratcheted floor, which a pause holds in place. Any
+  // observer advances the ratchet, so the floor is current even when no chart is open.
+  const stageTotal = state.is_frozen ? state.odometer_floor_cents : Math.max(state.odometer_floor_cents, stagedTotal);
+  if (stageTotal > state.odometer_floor_cents) db.query(`UPDATE event_state SET odometer_floor_cents = ? WHERE id = 1`).run(stageTotal);
+  return { hidden, stagedTotal, stageTotal };
+}
+
+/** Audience chart projection (/chart). Public: no donor legal names, notes, or operator data. */
+export function getStageState(db: Database) {
+  const state = getEventState(db);
   const now = Date.now();
-  const stageDelayMs = eventState.stage_delay_ms ?? 0;
-  const horizon = now - stageDelayMs;
-
-  // Held donation IDs
-  const heldRows = db.query<{ donation_id: string }, []>(`SELECT donation_id FROM held_donations`).all();
-  const heldSet = new Set(heldRows.map(r => r.donation_id));
-
-  // Authoritative full fold
   const fullFold = foldLedger(db);
+  const { hidden, stageTotal } = stagedView(db, state, fullFold, now);
 
-  // Staged fold if delay is enabled
-  const stagedFold = stageDelayMs > 0
-    ? foldLedger(db, { maxCreatedAt: horizon, excludeDonationIds: heldSet })
-    : fullFold;
-
-  // Determine stage total
-  const stagedCalculated = stagedFold.total_raised_cents;
-  // Floor ratchet applies dynamically to staged total
-  const stageTotal = Math.max(stagedCalculated, eventState.odometer_floor_cents);
-  if (stagedCalculated > eventState.odometer_floor_cents && !eventState.is_frozen) {
-    db.query(`UPDATE event_state SET odometer_floor_cents = ? WHERE id = 1`).run(stagedCalculated);
-  }
-
-  // Milestones
-  const milestones = getMilestones(db, eventState.goal_cents);
-
-  // Delayed chyrons stream (unified with stage_delay_ms horizon, not held, privacy-shielded)
-  const chyronBufferMs = stageDelayMs > 0 ? stageDelayMs : 0;
-  const chyrons: PublicChyron[] = [];
-  const sortedStaged = Array.from(fullFold.active_donations.values())
-    .filter(d => !d.is_voided && !heldSet.has(d.donation_id))
-    .sort((a, b) => b.created_at - a.created_at);
-
-  for (const d of sortedStaged) {
-    if (stageDelayMs === 0 || now - d.created_at >= chyronBufferMs) {
-      chyrons.push({
-        donation_id: d.donation_id,
-        display_name: d.is_anonymous ? "Anonymous Supporter" : d.display_name,
-        amount_cents: d.amount_cents,
-        notes: d.is_anonymous ? null : d.notes,
-        created_at: d.created_at
-      });
-    }
-  }
-
-  const percent = eventState.goal_cents > 0
-    ? Math.min(100, Math.round((stageTotal / eventState.goal_cents) * 1000) / 10)
-    : 0;
-
-  // Check pinned donation
-  let pinnedDonation = null;
-  if (eventState.pinned_donation_id) {
-    const pinned = fullFold.active_donations.get(eventState.pinned_donation_id);
-    if (pinned && !pinned.is_voided) {
-      pinnedDonation = {
-        donation_id: pinned.donation_id,
-        display_name: pinned.is_anonymous ? "Anonymous Supporter" : pinned.display_name,
-        amount_cents: pinned.amount_cents,
-        notes: pinned.is_anonymous ? null : (pinned.notes || null),
-        created_at: pinned.created_at
-      };
-    }
-  }
+  const chyrons: PublicChyron[] = state.is_frozen ? [] : Array.from(fullFold.active_donations.values())
+    .filter(record => !hidden.has(record.donation_id))
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 30)
+    .map(record => ({
+      donation_id: record.donation_id,
+      display_name: record.is_anonymous ? "Anonymous Supporter" : record.display_name,
+      amount_cents: record.amount_cents,
+      created_at: record.created_at
+    }));
 
   return {
     seq: fullFold.latest_seq,
-    event_name: eventState.event_name,
-    event_subtitle: eventState.event_subtitle,
+    event_name: state.event_name,
+    event_subtitle: state.event_subtitle,
+    event_title: state.event_title,
     total_raised_cents: stageTotal,
     true_total_raised_cents: fullFold.total_raised_cents,
-    verified_total_cents: fullFold.total_raised_cents,
-    goal_cents: eventState.goal_cents,
-    percent,
-    is_match_active: Boolean(eventState.is_match_active),
-    match_sponsor_title: eventState.match_sponsor_title,
+    goal_cents: state.goal_cents,
+    percent: state.goal_cents > 0 ? Math.min(100, Math.round((stageTotal / state.goal_cents) * 1000) / 10) : 0,
+    is_match_active: Boolean(state.is_match_active),
+    match_sponsor_title: state.match_sponsor_title,
     match_pool_cents: fullFold.derived_match_pool_cents,
-    match_total_cents: eventState.match_total_cents,
-    is_frozen: Boolean(eventState.is_frozen),
-    countdown_seconds: eventState.countdown_seconds ?? 300,
-    timer_status: eventState.timer_status || "stopped",
-    timer_ends_at: eventState.timer_ends_at ?? null,
-    thermometer_visual_mode: eventState.thermometer_visual_mode || "classic",
-    embed_media_url: eventState.embed_media_url || "",
-    trust_badge_text: eventState.trust_badge_text || "501(c)(3) Tax-Deductible Contribution",
-    pinned_donation_id: eventState.pinned_donation_id ?? null,
-    pinned_donation: pinnedDonation,
-    qr_url: eventState.qr_url || "",
-    display_url: eventState.display_url || "",
-    display_url_effective: deriveDisplayUrl(eventState.qr_url, eventState.display_url),
-    qr_style: eventState.qr_style || "dots",
-    qr_center_icon: eventState.qr_center_icon || "star",
-    qr_fg_color: eventState.qr_fg_color || "",
-    qr_bg_color: eventState.qr_bg_color || "#FFFFFF",
-    theme: getThemeTokens(eventState),
-    settings_seq: eventState.settings_seq || 1,
-    has_control_pin: Boolean(eventState.control_pin && eventState.control_pin.trim() !== ""),
-    logo_url: eventState.logo_url || "",
-    background_style: eventState.background_style || "plain",
-    bar_color: eventState.bar_color || "",
-    event_title: eventState.event_title || "",
-    text_color: eventState.text_color || "",
-    font_family: eventState.font_family || "system",
-    chart_orientation: eventState.chart_orientation || "horizontal",
-    stage_reset_seq: eventState.stage_reset_seq,
-    marker_mode: eventState.marker_mode,
-    marker_step_cents: eventState.marker_step_cents,
-    background_image_url: eventState.background_image_url,
-    gradient_start: eventState.gradient_start,
-    gradient_end: eventState.gradient_end,
-    gradient_angle: eventState.gradient_angle,
-    gradient_intensity: eventState.gradient_intensity,
-    background_video_url: eventState.background_video_url,
-    impact_messages: JSON.parse(eventState.impact_messages),
-    qr_image_url: eventState.qr_image_url,
-    qr_image_backdrop: Boolean(eventState.qr_image_backdrop),
-    show_qr: Boolean(eventState.show_qr ?? 1),
-    show_recent_donations: Boolean(eventState.show_recent_donations ?? 1),
-    show_live_indicator: Boolean(eventState.show_live_indicator ?? 1),
-    show_goal: Boolean(eventState.show_goal ?? 1),
-    stage_message: eventState.stage_message || "",
-    stage_message_visible: Boolean(eventState.stage_message_visible ?? 0),
-    feature_timer: Boolean(eventState.feature_timer ?? 0),
-    milestones,
-    chyrons: chyrons.slice(0, 30),
+    match_total_cents: state.match_total_cents,
+    is_frozen: Boolean(state.is_frozen),
+    stage_delay_ms: state.stage_delay_ms,
+    trust_badge_text: state.trust_badge_text,
+    qr_url: state.qr_url,
+    display_url: state.display_url,
+    display_url_effective: deriveDisplayUrl(state.qr_url, state.display_url),
+    qr_style: state.qr_style,
+    qr_center_icon: state.qr_center_icon,
+    qr_fg_color: state.qr_fg_color,
+    qr_bg_color: state.qr_bg_color,
+    qr_image_url: state.qr_image_url,
+    qr_image_backdrop: Boolean(state.qr_image_backdrop),
+    theme: getThemeTokens(state),
+    settings_seq: state.settings_seq,
+    logo_url: state.logo_url,
+    background_style: state.background_style,
+    background_image_url: state.background_image_url,
+    background_video_url: state.background_video_url,
+    gradient_start: state.gradient_start,
+    gradient_end: state.gradient_end,
+    gradient_angle: state.gradient_angle,
+    gradient_intensity: state.gradient_intensity,
+    bar_color: state.bar_color,
+    text_color: state.text_color,
+    font_family: state.font_family,
+    chart_orientation: state.chart_orientation,
+    stage_reset_seq: state.stage_reset_seq,
+    marker_mode: state.marker_mode,
+    marker_step_cents: state.marker_step_cents,
+    impact_messages: JSON.parse(state.impact_messages) as string[],
+    show_qr: Boolean(state.show_qr),
+    show_recent_donations: Boolean(state.show_recent_donations),
+    show_live_indicator: Boolean(state.show_live_indicator),
+    show_goal: Boolean(state.show_goal),
+    stage_message: state.stage_message,
+    stage_message_visible: Boolean(state.stage_message_visible),
+    milestones: getMilestones(db, state.goal_cents),
+    chyrons,
     server_time: now
   };
 }
 
 /**
- * Emcee Podium Screen Projection (/emcee)
- * High-contrast OLED confidence monitor with 3-second glance shoutout cards.
+ * Presenter projection (/presenter). The podium sees donor names, pronunciation, and
+ * table numbers for shoutouts; it never sees team notes or which operator entered a gift.
  */
 export function getEmceeState(db: Database) {
-  const eventState = getEventState(db);
+  const state = getEventState(db);
   const fullFold = foldLedger(db);
   const now = Date.now();
-
+  const held = heldIds(db);
   const totalRaised = fullFold.total_raised_cents;
 
-  const milestones = getMilestones(db, eventState.goal_cents);
-  milestones.sort((a, b) => a.cents - b.cents);
-
-  let nextMilestone: { target_cents: number; remaining_cents: number; label: string } | null = null;
-  for (const m of milestones) {
-    if (m.cents > totalRaised) {
-      nextMilestone = {
-        target_cents: m.cents,
-        remaining_cents: m.cents - totalRaised,
-        label: m.label
-      };
-      break;
-    }
-  }
-
-  const heldRows = db.query<{ donation_id: string }, []>(`SELECT donation_id FROM held_donations`).all();
-  const heldSet = new Set(heldRows.map(r => r.donation_id));
-
-  // Top 5 largest gifts for vocal shoutouts (excludes held items, includes table number & phonetic guide)
-  const topGifts = Array.from(fullFold.active_donations.values())
-    .filter(d => !heldSet.has(d.donation_id) && !d.is_voided)
-    .sort((a, b) => b.amount_cents - a.amount_cents)
-    .slice(0, 5)
-    .map(d => ({
-      donation_id: d.donation_id,
-      display_name: d.is_anonymous ? "Anonymous Supporter" : d.donor_name,
-      amount_cents: d.amount_cents,
-      is_anonymous: Boolean(d.is_anonymous),
-      donor_phonetic: d.is_anonymous ? null : (d.donor_phonetic || null),
-      table_number: d.is_anonymous ? null : (d.table_number || null),
-      notes: d.is_anonymous ? null : (d.notes || null),
-      entered_by: d.is_anonymous ? null : (d.entered_by || null)
-    }));
-
-  // Recent 10 gifts for stream pacing (excludes held items)
-  const recentGifts = Array.from(fullFold.active_donations.values())
-    .filter(d => !heldSet.has(d.donation_id) && !d.is_voided)
-    .sort((a, b) => b.created_at - a.created_at)
-    .slice(0, 10)
-    .map(d => ({
-      donation_id: d.donation_id,
-      display_name: d.is_anonymous ? "Anonymous Supporter" : d.donor_name,
-      amount_cents: d.amount_cents,
-      is_anonymous: Boolean(d.is_anonymous),
-      donor_phonetic: d.is_anonymous ? null : (d.donor_phonetic || null),
-      table_number: d.is_anonymous ? null : (d.table_number || null),
-      notes: d.is_anonymous ? null : (d.notes || null),
-      created_at: d.created_at,
-      seconds_ago: Math.max(0, Math.floor((now - d.created_at) / 1000))
-    }));
-
-  // Full presenter history: every active gift, newest first, same privacy shield.
-  const allGifts = Array.from(fullFold.active_donations.values())
-    .filter(d => !heldSet.has(d.donation_id) && !d.is_voided)
-    .sort((a, b) => b.created_at - a.created_at)
-    .slice(0, 500)
-    .map(d => ({
-      donation_id: d.donation_id,
-      display_name: d.is_anonymous ? "Anonymous Supporter" : d.donor_name,
-      amount_cents: d.amount_cents,
-      is_anonymous: Boolean(d.is_anonymous),
-      donor_phonetic: d.is_anonymous ? null : (d.donor_phonetic || null),
-      created_at: d.created_at
-    }));
-
-  const percent = eventState.goal_cents > 0
-    ? Math.min(100, Math.round((totalRaised / eventState.goal_cents) * 1000) / 10)
-    : 0;
+  const milestones = getMilestones(db, state.goal_cents).sort((a, b) => a.cents - b.cents);
+  const upcoming = milestones.find(milestone => milestone.cents > totalRaised);
+  const visible = Array.from(fullFold.active_donations.values()).filter(record => !held.has(record.donation_id));
+  const shoutout = (record: (typeof visible)[number]) => ({
+    donation_id: record.donation_id,
+    display_name: record.is_anonymous ? "Anonymous Supporter" : record.donor_name,
+    amount_cents: record.amount_cents,
+    is_anonymous: record.is_anonymous,
+    donor_phonetic: record.is_anonymous ? null : record.donor_phonetic,
+    table_number: record.is_anonymous ? null : record.table_number,
+    created_at: record.created_at
+  });
+  const newestFirst = [...visible].sort((a, b) => b.created_at - a.created_at);
 
   return {
     seq: fullFold.latest_seq,
-    event_name: eventState.event_name,
-    event_subtitle: eventState.event_subtitle,
-    event_title: eventState.event_title || "",
+    event_name: state.event_name,
+    event_subtitle: state.event_subtitle,
+    event_title: state.event_title,
     total_raised_cents: totalRaised,
     direct_raised_cents: fullFold.direct_raised_cents,
     match_applied_cents: fullFold.match_applied_cents,
-    goal_cents: eventState.goal_cents,
-    percent,
+    goal_cents: state.goal_cents,
+    percent: state.goal_cents > 0 ? Math.min(100, Math.round((totalRaised / state.goal_cents) * 1000) / 10) : 0,
     active_donation_count: fullFold.active_donation_count,
-    next_milestone: nextMilestone,
-    is_match_active: Boolean(eventState.is_match_active),
+    next_milestone: upcoming ? { target_cents: upcoming.cents, remaining_cents: upcoming.cents - totalRaised, label: upcoming.label } : null,
+    is_match_active: Boolean(state.is_match_active),
     match_pool_cents: fullFold.derived_match_pool_cents,
-    match_total_cents: eventState.match_total_cents,
-    match_sponsor_title: eventState.match_sponsor_title,
-    theme: getThemeTokens(eventState),
-    settings_seq: eventState.settings_seq || 1,
-    top_gifts: topGifts,
-    recent_gifts: recentGifts,
-    all_gifts: allGifts,
-    is_frozen: Boolean(eventState.is_frozen),
-    countdown_seconds: eventState.countdown_seconds ?? 300,
-    timer_status: eventState.timer_status || "stopped",
-    timer_ends_at: eventState.timer_ends_at ?? null,
-    trust_badge_text: eventState.trust_badge_text || "501(c)(3) Tax-Deductible Contribution",
+    match_total_cents: state.match_total_cents,
+    match_sponsor_title: state.match_sponsor_title,
+    theme: getThemeTokens(state),
+    settings_seq: state.settings_seq,
+    font_family: state.font_family,
+    top_gifts: [...visible].sort((a, b) => b.amount_cents - a.amount_cents).slice(0, 5).map(shoutout),
+    recent_gifts: newestFirst.slice(0, 10).map(shoutout),
+    all_gifts: newestFirst.slice(0, 500).map(shoutout),
+    is_frozen: Boolean(state.is_frozen),
+    trust_badge_text: state.trust_badge_text,
     server_time: now
   };
 }
 
-/**
- * Event Control Room Projection (/control)
- * Full operational visibility: 8s Review Queue with hold cues, live reconciliation drift banner, and audit log.
- */
+/** Operator projection (/donations, /settings, /testing). Full detail, session-gated. */
 export function getControlState(db: Database) {
-  const eventState = getEventState(db);
+  const state = getEventState(db);
   const fullFold = foldLedger(db);
   const now = Date.now();
-  const chyronBufferMs = 8000;
+  const heldRows = db.query<{ donation_id: string; held_at: number; held_by: string; reason: string }, []>(`SELECT * FROM held_donations`).all();
+  const heldById = new Map(heldRows.map(row => [row.donation_id, row]));
 
-  const heldRows = db.query<{ donation_id: string; held_at: number; held_by: string; reason: string }, []>(
-    `SELECT * FROM held_donations`
-  ).all();
-  const heldMap = new Map(heldRows.map(r => [r.donation_id, r]));
-
-  const stageDisplayTotal = Math.max(
-    fullFold.total_raised_cents,
-    eventState.odometer_floor_cents
-  );
-
-  // Staging queue: Donations from the last 90 seconds
-  const stagedChyrons = Array.from(fullFold.active_donations.values())
+  const donations = Array.from(fullFold.active_donations.values())
     .sort((a, b) => b.created_at - a.created_at)
-    .slice(0, 50)
-    .map(d => {
-      const elapsedMs = now - d.created_at;
-      const isLiveOnStage = elapsedMs >= chyronBufferMs;
-      const remainingDelaySec = isLiveOnStage ? 0 : Math.ceil((chyronBufferMs - elapsedMs) / 1000);
-      const heldInfo = heldMap.get(d.donation_id);
+    .map(record => ({
+      donation_id: record.donation_id,
+      donor_name: record.donor_name,
+      display_name: record.display_name,
+      donor_phonetic: record.donor_phonetic,
+      table_number: record.table_number,
+      amount_cents: record.amount_cents,
+      matched_amount_cents: record.matched_amount_cents,
+      is_anonymous: record.is_anonymous,
+      payment_method: record.payment_method,
+      source: record.source,
+      card_number: record.card_number,
+      entered_by: record.entered_by,
+      notes: record.notes,
+      created_at: record.created_at,
+      updated_at: record.updated_at,
+      is_live_on_stage: now - record.created_at >= state.stage_delay_ms,
+      is_held: heldById.has(record.donation_id),
+      held_info: heldById.get(record.donation_id) || null
+    }));
 
-      return {
-        donation_id: d.donation_id,
-        donor_name: d.donor_name,
-        display_name: d.display_name,
-        donor_phonetic: d.donor_phonetic || null,
-        table_number: d.table_number || null,
-        amount_cents: d.amount_cents,
-        is_anonymous: d.is_anonymous,
-        payment_method: d.payment_method,
-        source: d.source,
-        card_number: d.card_number,
-        entered_by: d.entered_by,
-        notes: d.notes,
-        created_at: d.created_at,
-        elapsed_sec: Math.floor(elapsedMs / 1000),
-        remaining_delay_sec: remainingDelaySec,
-        is_live_on_stage: isLiveOnStage,
-        is_held: Boolean(heldInfo),
-        is_yanked: Boolean(heldInfo),
-        held_info: heldInfo || null,
-        yank_info: heldInfo || null
-      };
-    });
-
-  // Recent 50 ledger events
-  const recentEvents = db.query<LedgerEvent, []>(
-    `SELECT * FROM ledger ORDER BY seq DESC LIMIT 50`
-  ).all();
-
-  const sanitizedState = sanitizeEventState(eventState);
-  const hasBloomerangKey = Boolean(eventState.bloomerang_api_key && eventState.bloomerang_api_key.trim() !== "");
-  const bloomerangKeyMasked = hasBloomerangKey ? "••••••••••••••" : "";
   return {
     seq: fullFold.latest_seq,
-    event_state: sanitizedState,
-    has_control_pin: Boolean(eventState.control_pin && eventState.control_pin.trim() !== ""),
-    has_entry_pin: Boolean(eventState.entry_pin && eventState.entry_pin.trim() !== ""),
-    has_bloomerang_api_key: hasBloomerangKey,
-    bloomerang_key_masked: bloomerangKeyMasked,
-    display_url_effective: deriveDisplayUrl(eventState.qr_url, eventState.display_url),
+    event_state: publicEventState(state),
     font_family_options: FONT_FAMILY_KEYS,
     chart_orientation_options: CHART_ORIENTATIONS,
-    theme: getThemeTokens(eventState),
-    settings_seq: eventState.settings_seq || 1,
-    milestones: getMilestones(db, eventState.goal_cents),
+    theme: getThemeTokens(state),
+    settings_seq: state.settings_seq,
+    milestones: getMilestones(db, state.goal_cents),
     ask_tiers: getAskTiers(db),
+    team_notes: getTeamNotes(db),
     folded: {
       total_raised_cents: fullFold.total_raised_cents,
       direct_raised_cents: fullFold.direct_raised_cents,
@@ -454,51 +285,26 @@ export function getControlState(db: Database) {
       void_count: fullFold.void_count
     },
     stage_preview: {
-      stage_total_cents: stageDisplayTotal,
+      stage_total_cents: stagedView(db, state, fullFold, now).stageTotal,
       verified_total_cents: fullFold.total_raised_cents,
-      odometer_floor_cents: eventState.odometer_floor_cents,
-      is_frozen: Boolean(eventState.is_frozen)
+      odometer_floor_cents: state.odometer_floor_cents,
+      is_frozen: Boolean(state.is_frozen)
     },
-    staged_chyrons: stagedChyrons,
-    recent_events: recentEvents,
+    donations,
     server_time: now
   };
 }
 
-/**
- * Volunteer Pledge Pad Projection (/entry)
- * Returns ask tiers, personal audit log, and sanitized connection state.
- */
-export function getVolunteerState(db: Database, displayName?: string) {
-  const eventState = getEventState(db);
-  const fullFold = foldLedger(db);
-  const now = Date.now();
-
-  let personalLog: DonationRecord[] = [];
-  if (displayName) {
-    personalLog = Array.from(fullFold.all_records.values())
-      .filter(d => d.entered_by === displayName)
-      .sort((a, b) => b.created_at - a.created_at)
-      .slice(0, 20);
-  }
-
+/** Add Donation form configuration. */
+export function getEntryState(db: Database) {
+  const state = getEventState(db);
   return {
-    seq: fullFold.latest_seq,
-    theme: getThemeTokens(eventState),
-    feature_card_number: Boolean(eventState.feature_card_number ?? 0),
-    feature_table_number: Boolean(eventState.feature_table_number ?? 0),
-    feature_timer: Boolean(eventState.feature_timer ?? 0),
-    event_title: eventState.event_title || "",
-    event_name: eventState.event_name,
-    event_subtitle: eventState.event_subtitle,
-    total_raised_cents: fullFold.total_raised_cents,
-    goal_cents: eventState.goal_cents,
-    major_gift_threshold_cents: eventState.major_gift_threshold_cents || 950000,
-    font_family: eventState.font_family || "system",
-    text_color: eventState.text_color || "",
-    settings_seq: eventState.settings_seq || 1,
+    feature_card_number: Boolean(state.feature_card_number),
+    feature_table_number: Boolean(state.feature_table_number),
+    major_gift_threshold_cents: state.major_gift_threshold_cents,
+    stage_delay_ms: state.stage_delay_ms,
+    settings_seq: state.settings_seq,
     ask_tiers: getAskTiers(db),
-    personal_log: personalLog,
-    server_time: now
+    server_time: Date.now()
   };
 }

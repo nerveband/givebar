@@ -6,10 +6,10 @@
   <title>Home — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#070603;color-scheme:dark}</style>
-  <link rel="stylesheet" href="css/tokens.css?v=6.3.0">
-  <link rel="stylesheet" href="css/base.css?v=6.1.0">
-  <link rel="stylesheet" href="css/components.css?v=6.1.0">
-  <link rel="stylesheet" href="css/app.css?v=6.4.0">
+  <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.0.0">
   <style>
     /* Home landing surface — lives inside the same operational shell as every
        other operator page. Presentation Contrast: near-black surfaces, amber
@@ -410,8 +410,20 @@
         <div class="hub-section-head">
           <h2 class="hub-section-title" id="presence-title">Who’s here</h2>
         </div>
-        <p>Connected operator browsers, grouped by page. Names are self-reported. Chart and Presenter are private, untracked screens.</p>
+        <p>Signed-in operators, grouped by page. Chart and Presenter are room screens and are not tracked.</p>
         <div id="presence"></div>
+      </section>
+
+      <section class="hub-section" aria-labelledby="briefing-title" id="briefing-section" hidden>
+        <div class="hub-section-head">
+          <h2 class="hub-section-title" id="briefing-title">Team briefing</h2>
+          <button type="button" class="btn-secondary" id="btn-copy-briefing" data-copy-label="Copy briefing">Copy briefing</button>
+        </div>
+        <p>Everything an operator needs, as plain text you can paste into a group chat or email. Invite emails from Settings carry the same steps with a personal sign-in link.</p>
+        <div class="briefing-box">
+          <div id="briefing-links"></div>
+          <ol id="briefing-steps"></ol>
+        </div>
       </section>
 
       <!-- LINK COPY HUB -->
@@ -507,7 +519,7 @@
               <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M120,40a8,8,0,0,0-8,8V80H40a8,8,0,0,0,0,16h72v32a8,8,0,0,0,16,0V48A8,8,0,0,0,120,40Zm96,48H152a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16ZM40,168h64a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16Zm176-24H184V112a8,8,0,0,0-16,0v80a8,8,0,0,0,16,0V160h32a8,8,0,0,0,0-16Z"/></svg>
               Settings
             </div>
-            <div class="link-purpose">Event, branding, links, PINs.</div>
+            <div class="link-purpose">Event, branding, links, backups, operator accounts. Administrators only.</div>
           </div>
           <div>
             <div class="link-url-wrap">
@@ -573,7 +585,8 @@
     </main>
   </div>
 
-  <script src="js/presence.js?v=6.4.0"></script>
+  <script src="/js/session.js?v=7.0.0"></script>
+  <script src="/js/presence.js?v=7.0.0"></script>
   <script>
     (function () {
       'use strict';
@@ -651,62 +664,79 @@
       }
 
       // --- At-a-glance figures (never fabricate a zero) ---
-      function formatCurrency(cents) {
-        return '$' + Math.floor((cents || 0) / 100).toLocaleString('en-US');
-      }
+      const fmt = GivebarSession.format;
+      let signedIn = false;
 
       function showGlanceNotice(msg) {
         const notice = document.getElementById('glance-notice');
-        const grid = document.getElementById('glance-grid');
-        if (grid) grid.style.display = 'none';
-        if (notice) {
-          notice.textContent = msg;
-          notice.style.display = 'block';
-        }
+        document.getElementById('glance-grid').style.display = 'none';
+        notice.textContent = msg;
+        notice.style.display = 'block';
       }
 
       async function loadGlance() {
         try {
-          const res = await fetch('/api/state?role=stage', { headers: { 'Cache-Control': 'no-cache' } });
+          const res = await fetch('/api/state?role=' + (signedIn ? 'control' : 'stage'), { credentials: 'same-origin', headers: { 'Cache-Control': 'no-cache' } });
           if (!res.ok) {
             showGlanceNotice('Could not read live figures. Links still work.');
             return;
           }
           const data = await res.json();
-          GiveBarPresence.update(data.presence);
-          const total = data.total_raised_cents || 0;
-          const goal = data.goal_cents || 0;
-          const gifts = data.active_donation_count || 0;
-
-          const title = (data.event_title || '').trim();
-          const titleEl = document.getElementById('home-event-title');
-          if (titleEl && title) titleEl.textContent = title;
-
-          const liveTag = document.getElementById('home-live-tag');
-          if (liveTag) liveTag.style.display = 'inline-flex';
-
-          const notice = document.getElementById('glance-notice');
-          if (notice) notice.style.display = 'none';
-          const grid = document.getElementById('glance-grid');
-          if (grid) grid.style.display = 'grid';
-
-          document.getElementById('glance-total').textContent = formatCurrency(total);
-          document.getElementById('glance-goal').textContent = goal > 0 ? formatCurrency(goal) : 'Not set';
-          document.getElementById('glance-progress').textContent = goal > 0
-            ? Math.round((total / goal) * 100) + '%'
-            : '—';
-          document.getElementById('glance-gifts').textContent = gifts.toLocaleString('en-US');
+          const total = signedIn ? data.folded.total_raised_cents : data.true_total_raised_cents;
+          const goal = signedIn ? data.event_state.goal_cents : data.goal_cents;
+          const gifts = signedIn ? data.folded.active_donation_count : null;
+          const title = (signedIn ? data.event_state.event_title : data.event_title || '').trim();
+          if (title) document.getElementById('home-event-title').textContent = title;
+          document.getElementById('home-live-tag').style.display = 'inline-flex';
+          document.getElementById('glance-notice').style.display = 'none';
+          document.getElementById('glance-grid').style.display = 'grid';
+          document.getElementById('glance-total').textContent = fmt.money(total);
+          document.getElementById('glance-goal').textContent = goal > 0 ? fmt.money(goal) : 'Not set';
+          document.getElementById('glance-progress').textContent = goal > 0 ? Math.round((total / goal) * 100) + '%' : '—';
+          document.getElementById('glance-gifts').textContent = gifts === null ? 'Sign in' : gifts.toLocaleString('en-US');
         } catch (err) {
           showGlanceNotice('Cannot reach the server. Links still work.');
         }
       }
 
-      function init() {
+      async function loadBriefing() {
+        const result = await GivebarSession.control('briefing');
+        if (!result.ok) return;
+        const brief = result.data;
+        const section = document.getElementById('briefing-section');
+        section.hidden = false;
+        const links = [['Sign in', brief.links.signin], ['Manage Donations', brief.links.donations], ['Fullscreen Bar Chart (projector)', brief.links.chart], ['Presenter View (podium)', brief.links.presenter]];
+        document.getElementById('briefing-links').innerHTML = links.map(([label, url]) => `<div><strong>${fmt.escape(label)}:</strong> <a href="${fmt.escape(url)}">${fmt.escape(url)}</a></div>`).join('');
+        document.getElementById('briefing-steps').innerHTML = brief.steps.map(step => `<li>${fmt.escape(step)}</li>`).join('');
+        const operators = brief.operators.map(op => `${op.display_name} (sign-in name: ${op.username}${op.role === 'admin' ? ', administrator' : ''})`);
+        const text = [
+          `${brief.event_name}: Givebar operator briefing`,
+          '',
+          ...links.map(([label, url]) => `${label}: ${url}`),
+          '',
+          'Sign in with the name and PIN you were given (or the personal link in your invite email).',
+          '',
+          'What to do on the night:',
+          ...brief.steps.map((step, index) => `${index + 1}. ${step}`),
+          '',
+          `Large-gift confirmation starts at ${fmt.money(brief.major_gift_threshold_cents)}. Gifts reach the ballroom screen ${brief.stage_delay_seconds} seconds after they are recorded.`,
+          '',
+          'Team accounts:',
+          ...operators.map(line => `- ${line}`)
+        ].join('\n');
+        document.getElementById('btn-copy-briefing').dataset.copyText = text;
+      }
+
+      async function init() {
         fillLinks();
         setupCopyButtons();
-        GiveBarPresence.render(document.getElementById('presence'));
+        GivebarPresence.mount(document.getElementById('presence'));
+        const me = await GivebarSession.whoami();
+        signedIn = Boolean(me.authenticated);
+        if (!signedIn) document.getElementById('presence').closest('.hub-section').querySelector('p').textContent = 'Sign in to see who is connected.';
         loadGlance();
         setInterval(loadGlance, 5000);
+        if (signedIn) loadBriefing();
       }
 
       document.addEventListener('DOMContentLoaded', init);

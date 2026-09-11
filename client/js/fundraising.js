@@ -28,7 +28,7 @@
         enabled.checked = !!data.enabled;
         initialized = true;
       }
-      const lastSync = data.last_sync_at ? GivebarOperator.time(data.last_sync_at) : 'Never';
+      const lastSync = data.last_sync_at ? GivebarSession.format.time(data.last_sync_at) : 'Never';
       connected = !!data.token_configured;
       const badge = document.getElementById('fundraising-badge');
       badge.textContent = data.last_error ? 'Needs attention' : !connected ? 'Not configured' : data.enabled ? 'Automatic import on' : 'Import paused';

@@ -1,38 +1,46 @@
 # Givebar — Agent & Contributor Contract
 
 ## Overview & Mission
-Givebar is a live fundraising thermometer and stage presentation suite for high-stakes nonprofit galas and benefit appeals ($100k–$2M+).
+Givebar is a live fundraising bar chart and stage presentation suite for high-stakes nonprofit galas and benefit appeals ($100k–$2M+).
 
 ---
 
 ## 1. Architectural & Financial Invariants
-1. **Append-Only Event Ledger**: Source of truth is an immutable SQLite event stream (`create`, `amend`, `void`, `match_apply`, `match_release`). Total is a deterministic fold.
-2. **Unified 8-Second Staging Delay**: Both ballroom odometer totals and lower-third chyrons pass through an 8-second staging horizon. Holding or undoing a pledge within 8 seconds prevents it from ever reaching the ballroom screen.
-3. **$\ge \$9,500$ Major Gift Guardrail**: Server-enforced verification intercept modal (`confirmed_major_gift: true`) to prevent extra-zero errors ($50k $\to$ $500k).
-4. **$O(1)$ Physical Card Duplicate Detection**: Unique card numbers (`#0412`) checked against `active_card` table, returning 409 Conflict with metadata without wiping volunteer form input.
-5. **No-Backward Ballroom Screen Rule**: Downward voids or corrections hold the ballroom screen total steady, absorbing the difference into future gifts rather than rolling backward on stage.
-6. **Strict Privacy Shield**: Anonymous donors display as *"Anonymous Supporter — $X"* on stage; real donor names are completely stripped before reaching the ballroom projection feed.
-7. **Pure Matching Grant Fold**: Matching funds are derived deterministically. Voiding or amending a matched gift emits compensating `match_release` events, keeping sponsor pools 100% auditable.
+1. **Append-Only Event Ledger**: Source of truth is an immutable SQLite event stream (`create`, `amend`, `void`, `restore`, `match_apply`, `match_release`). Total is a deterministic fold (`foldLedger`). Only rehearsal purge and the admin reset delete ledger rows, and both snapshot the database first.
+2. **Staging Delay**: A gift is excluded from the audience chart until `stage_delay_ms` (8 s) after it was recorded. Exclusion is by donation, so a delete or correction made inside the window is honoured the moment the gift would have appeared. `getStageState` and `getControlState` share `stagedView` for this.
+3. **Major Gift Guardrail**: The server rejects gifts at or above `major_gift_threshold_cents` with 428 unless `confirmed_major_gift: true`; amended amounts crossing the threshold need it too.
+4. **Duplicate Guards**: Physical card serials are unique among active gifts (409 `CARD_COLLISION`). A manual gift with the same normalised donor name and amount as an active gift recorded within 10 minutes is a 409 `POSSIBLE_DUPLICATE` unless `confirmed_duplicate: true`. Imports never trip the second guard; they are idempotent on `(source, source_txn_id)`.
+5. **No-Backward Chart Rule**: `odometer_floor_cents` ratchets up whenever any projection computes the wall figure; deletes and downward corrections hold the audience total steady. Pause (`is_frozen`) holds the figure and hides the feed.
+6. **Strict Privacy Shield**: The chart feed carries display name, amount, and time only. Team notes, operator names, legal names of anonymous donors, card numbers, and pronunciation never leave the operator role. The presenter sees names, pronunciation, and table numbers, never notes or operators.
+7. **Pure Matching Grant Fold**: Matching funds are derived deterministically; voids and amendments emit compensating `match_release` events.
 
 ---
 
-## 2. Design System & Icon Standards
-1. **Phosphor Icons Exclusively**: Never use emojis in UI buttons, badges, tables, or modals. Use vector Phosphor icons (`@phosphor-icons/web` and `client/js/icons.js`).
-2. **OKLCH Token Architecture**: Base colors, surfaces, and inks defined using OKLCH with a 4-variable brand layer (`--brand-hue`, `--brand-chroma`, `--brand-accent`, `--brand-radius`).
-3. **Apple-Grade Glassmorphism**: Frosted translucent glass surfaces (`backdrop-filter: blur(20px)`, `1px solid rgba(255,255,255,0.08)` hairline border lighting).
-4. **Mobile Ergonomics**: All volunteer pad inputs and presets anchored in the **bottom 60% thumb zone** with $\ge 56\text{px}$ touch targets.
-5. **Tabular Numeral Alignment**: Odometer and financial metrics must use `font-variant-numeric: tabular-nums` to eliminate layout jitter during fast rolls.
+## 2. Access Model
+* Named operator accounts only (`operator_account`, roles `admin` and `operator`), HttpOnly session cookies, single-use email invites. No shared PINs.
+* Operators: record, edit, delete, and restore gifts; stage messages; pause/resume the chart; team notes; CSV.
+* Administrators additionally: Settings, Testing (rehearsal gifts and purge), reset, backups and restore, accounts and invites, Fundraising import configuration.
+* Presence identity comes from the session; heartbeats require a session.
 
 ---
 
-## 3. Zero-Code In-App Settings Rules
-* Non-developers configure gala titles, goals, live theme swatches, quick-amount buttons, and matching grants directly in the **Event Setup** tab in `/control`.
-* Never introduce external JSON configuration files or textareas for core event settings. All settings persist directly to SQLite child tables (`milestone`, `ask_tier`) and propagate live via 1-second state sync.
+## 3. Design System
+1. **Phosphor icon paths, never emoji** in UI buttons, badges, tables, or modals.
+2. **OKLCH token architecture** with a brand layer (`--brand-hue`, `--brand-chroma`, `--brand-accent`, `--brand-radius`).
+3. **≥ 44 px touch targets** on operator surfaces; **56 px** in the donation dialog.
+4. **Tabular numerals** on the odometer and every financial figure.
 
 ---
 
-## 4. Deployment & Infrastructure
-* **Production Deployment**: Hosted on `wavedepth` (`root@172.245.248.17`) running Dokploy on `panel.wavedepth.com` with Traefik reverse proxy and persistent SQLite volume mounted at `/app/data`.
-* **Single Canonical Tree**: The application serves directly from `client/` and `server/` via Bun. Never reintroduce mock backends or static preview duplicates.
-* **Scoped verification**: After changes, run the relevant `bun test` coverage once; before an authorized commit, run `bun test`. Judge observable ledger, financial, privacy, and staging behavior, not a fixed test count. Documentation-only work does not require the application suite.
-* **Approval boundary**: Source edits do not authorize production deployment or changes to live financial data. Preserve the persistent SQLite volume.
+## 4. Zero-Code In-App Settings Rules
+* Non-developers configure titles, goals, milestones, appearance, quick amounts, matching grants, Fundraising import, backups, and accounts in **Settings** (`/settings`).
+* Never introduce external JSON configuration files for event settings. Settings persist in SQLite (`event_state`, `milestone`, `ask_tier`, `fundraising_sync`) and propagate live.
+
+---
+
+## 5. Deployment & Infrastructure
+* **Production**: the manually run `givebar` container on the wavedepth host (`root@172.245.248.17`), bind-mounted `/etc/dokploy/applications/givebar/data` at `/app/data`, reached through Traefik at `givebar.wavedepth.com`. Deploy with `scripts/deploy-wavedepth.sh`.
+* **Schema**: fresh databases are created at `SCHEMA_VERSION`; the only in-place upgrade is from the previous release (13). Anything older restores from a backup or starts fresh.
+* **Backups**: `VACUUM INTO` snapshots in `data/backups` every 5 minutes when anything changed, plus pre-purge, pre-reset, pre-restore, and pre-deploy snapshots. Never copy `givebar.sqlite` by hand while the server runs.
+* **Verification**: after changes run `bun test` once; judge observable ledger, privacy, staging, and role behaviour. Documentation-only work needs no test run.
+* **Approval boundary**: source edits do not authorise deployment or changes to live financial data.

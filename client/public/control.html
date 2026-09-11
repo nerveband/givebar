@@ -6,165 +6,13 @@
   <title>Manage Donations — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#070603;color-scheme:dark}</style>
-  <link rel="stylesheet" href="css/tokens.css?v=6.3.0">
-  <link rel="stylesheet" href="css/base.css?v=6.1.0">
-  <link rel="stylesheet" href="css/components.css?v=6.1.0">
-  <link rel="stylesheet" href="css/app.css?v=6.4.0">
-  <style>
-    /* --- Surface link hub. The panel is out of flow, so revealing it never
-       moves page content. Identical markup, position, and behaviour on
-       /preview, /donations, and /add; built by client/js/linkhub.js. --- */
-    .linkhub {
-      position: relative;
-    }
-
-    .lh-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      min-height: 36px;
-      padding: 0 12px;
-      background: #17181c;
-      border: 1px solid #2a2c34;
-      border-radius: 4px;
-      color: #d8dade;
-      font-family: var(--font-sans);
-      font-size: var(--text-xs);
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .lh-toggle:hover,
-    .lh-toggle[aria-expanded="true"] {
-      border-color: #d4a359;
-      color: #ffffff;
-    }
-
-    .lh-icon {
-      width: 14px;
-      height: 14px;
-      flex-shrink: 0;
-    }
-
-    .lh-panel {
-      position: absolute;
-      top: calc(100% + 6px);
-      right: 0;
-      z-index: 60;
-      width: 340px;
-      max-width: calc(100vw - 24px);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      padding: 12px;
-      text-align: left;
-      background: #101116;
-      border: 1px solid #2a2c34;
-      border-radius: 6px;
-      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
-    }
-
-    .lh-panel[hidden] {
-      display: none;
-    }
-
-    .lh-row {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .lh-row[data-current="true"] {
-      margin-left: -12px;
-      padding-left: 10px;
-      border-left: 2px solid #d4a359;
-    }
-
-    .lh-name {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: var(--text-xs);
-      font-weight: 700;
-      color: #f4f5f6;
-    }
-
-    .lh-url-wrap {
-      display: flex;
-      gap: 6px;
-    }
-
-    .lh-url {
-      flex: 1;
-      min-width: 0;
-      background: #0a0b0e;
-      border: 1px solid #2a2c34;
-      border-radius: 4px;
-      color: #d8dade;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 6px 8px;
-      outline: none;
-    }
-
-    .lh-url:focus {
-      border-color: #d4a359;
-    }
-
-    .lh-copy {
-      flex-shrink: 0;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      min-height: 30px;
-      padding: 0 10px;
-      background: #202126;
-      border: 1px solid #383a44;
-      border-radius: 4px;
-      color: #f4f5f6;
-      font-family: var(--font-sans);
-      font-size: 11px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .lh-copy:hover {
-      border-color: #d4a359;
-    }
-
-    .lh-copy.copied {
-      border-color: #2f6b45;
-      background: #16211a;
-      color: #86efac;
-    }
-
-    .lh-copy.failed {
-      border-color: #ef4444;
-      background: #241414;
-      color: #fca5a5;
-    }
-
-    .lh-status {
-      font-size: 11px;
-      font-weight: 700;
-      color: #86efac;
-    }
-
-    .lh-status:empty {
-      display: none;
-    }
-
-    .lh-note {
-      margin: 0;
-      font-size: 11px;
-      color: #d4a359;
-    }
-  </style>
+  <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.0.0">
 </head>
 <body>
-
   <div class="ops-shell">
-    <!-- Left Navigation Sidebar -->
     <aside class="ops-sidebar">
       <div class="ops-brand">
         <div class="ops-brand-title">Givebar</div>
@@ -181,154 +29,147 @@
       </nav>
     </aside>
 
-    <!-- Main Content Panel -->
     <main class="ops-main">
-
-      <!-- Degraded / Stale Notice Bar -->
       <div id="stale-banner" class="stale-notice-bar" role="status">
         <span id="stale-banner-text">Connection lost. Showing cached data, retrying.</span>
         <button type="button" id="btn-reconnect-poll" class="btn-ghost" style="padding: 2px 8px; font-size: 11px; color: #d4a359;">Refresh</button>
       </div>
 
-      <!-- Authenticated Content (States 2 & 3) -->
-        <header style="margin-bottom: var(--space-6); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);">
-          <h1 style="font-size: var(--text-2xl); font-weight: 800; margin: 0; color: #f4f5f6; letter-spacing: -0.02em;">
-            Manage Donations
-          </h1>
-          <div style="display: flex; align-items: center; gap: var(--space-3);">
-            <div class="linkhub" data-linkhub data-linkhub-current="/donations">
-              <button type="button" class="lh-toggle" data-linkhub-toggle aria-expanded="false" aria-controls="linkhub-panel" aria-label="Surface links">
-                <svg class="lh-icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,9.95a56,56,0,0,1-79.22-79.22l24.12-24.12A56,56,0,0,1,152,100.1a8,8,0,0,1-13,9.3,40,40,0,0,0-57.05-2.72L57.7,130.8a40,40,0,0,0,56.58,56.58l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.31,11.31l9.95-9.94a40,40,0,0,1,56.58,56.58L172.18,140.4a40,40,0,0,1-57.06-2.71,8,8,0,0,0-13,9.3,56,56,0,0,0,84.66,3.72l24.12-24.12A56.08,56.08,0,0,0,207.62,48.38Z"/></svg>
-                <span class="lh-toggle-text">Links</span>
-              </button>
-            </div>
-            <a id="link-export-csv" href="api/export/csv" class="btn-secondary" style="min-height: 38px; font-size: var(--text-xs); padding: var(--space-2) var(--space-4);">
-              Download CSV
-            </a>
-            <button type="button" id="btn-open-add" class="btn-primary">Add donation</button>
+      <header class="page-header">
+        <h1>Manage Donations</h1>
+        <div class="page-header-actions">
+          <div class="linkhub" data-linkhub data-linkhub-current="/donations">
+            <button type="button" class="lh-toggle" data-linkhub-toggle aria-expanded="false" aria-controls="linkhub-panel" aria-label="Surface links">
+              <svg class="lh-icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,9.95a56,56,0,0,1-79.22-79.22l24.12-24.12A56,56,0,0,1,152,100.1a8,8,0,0,1-13,9.3,40,40,0,0,0-57.05-2.72L57.7,130.8a40,40,0,0,0,56.58,56.58l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.31,11.31l9.95-9.94a40,40,0,0,1,56.58,56.58L172.18,140.4a40,40,0,0,1-57.06-2.71,8,8,0,0,0-13,9.3,56,56,0,0,0,84.66,3.72l24.12-24.12A56.08,56.08,0,0,0,207.62,48.38Z"/></svg>
+              <span class="lh-toggle-text">Links</span>
+            </button>
           </div>
-        </header>
-
-        <!-- Summary Strip -->
-        <section class="summary-strip" aria-label="Summary Strip">
-          <div class="summary-strip-label">Total Raised</div>
-          <div class="summary-strip-val" id="summary-total-raised">—</div>
-        </section>
-        <p id="add-donation-status" role="status" hidden></p>
-        <div id="outbox-status" role="status" hidden><span id="outbox-count">0</span> gifts waiting to sync. Keep this browser open. <button type="button" id="btn-retry-outbox" class="btn-secondary">Retry now</button></div>
-        <section class="stage-message-controls" aria-labelledby="stage-message-title">
-          <div class="donation-dialog-heading"><h2 id="stage-message-title">On the ballroom screen</h2><a href="/preview" class="btn-secondary">View screen</a></div>
-          <p class="form-hint">Send a live announcement, or let short impact messages rotate every 12 seconds.</p>
-          <label class="form-label" for="live-stage-message">Stage message</label>
-          <input id="live-stage-message" class="form-input-text" maxlength="160" placeholder="Your announcement for the room">
-          <div class="stage-message-actions"><button type="button" id="publish-stage-message" class="btn-primary">Show message now</button><button type="button" id="hide-stage-message" class="btn-secondary">Return to impact messages</button></div>
-          <p id="stage-message-status" role="status"></p>
-          <details><summary>Edit rotating impact messages</summary>
-            <p class="form-hint">Keep each point short enough to read from across the ballroom. Remove every point to leave the message area blank.</p>
-            <div id="impact-message-list"></div>
-            <div class="stage-message-actions"><button type="button" id="add-impact-message" class="btn-secondary">Add point</button><button type="button" id="save-impact-messages" class="btn-primary">Save rotation</button></div>
-          </details>
-        </section>
-
-        <!-- Inline Undo Affordance -->
-        <div id="undo-banner" class="undo-bar" style="display: none;" role="status" aria-live="polite">
-          <span id="undo-message">Donation removed.</span>
-          <button type="button" id="btn-undo-delete" class="undo-btn">Undo</button>
+          <a id="link-export-csv" href="/api/export/csv" class="btn-secondary">Download CSV</a>
+          <button type="button" id="btn-pause-chart" class="btn-secondary" aria-pressed="false">Pause chart</button>
+          <button type="button" id="btn-open-add" class="btn-primary">Add donation</button>
         </div>
+      </header>
 
-        <!-- Controls Row: Tabs & Search -->
-        <div class="controls-bar">
+      <section class="summary-grid" aria-label="Totals">
+        <div class="summary-cell"><div class="summary-strip-label">Total raised</div><div class="summary-strip-val" id="summary-total-raised">—</div></div>
+        <div class="summary-cell"><div class="summary-strip-label">On the screen</div><div class="summary-strip-val muted" id="summary-stage-total">—</div></div>
+        <div class="summary-cell"><div class="summary-strip-label">Gifts</div><div class="summary-strip-val muted" id="summary-gift-count">—</div></div>
+        <div class="summary-cell"><div class="summary-strip-label">Waiting to appear</div><div class="summary-strip-val muted" id="summary-pending-count">—</div></div>
+      </section>
+      <p id="paused-notice" class="paused-notice" role="status" hidden>The ballroom screen is paused. The figure is held and new gifts are not shown until you resume.</p>
+      <p id="add-donation-status" role="status" hidden></p>
+      <div id="outbox-status" role="status" hidden><span id="outbox-count">0</span> gifts waiting to sync. Keep this browser open. <button type="button" id="btn-retry-outbox" class="btn-secondary">Retry now</button> <button type="button" id="btn-discard-outbox" class="btn-ghost">Discard waiting gifts</button></div>
 
-          <div class="search-wrap">
-            <svg class="search-icon" width="14" height="14" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
-              <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/>
-            </svg>
-            <input type="search" id="manage-search" class="search-input" placeholder="Search" aria-label="Search donor name">
-          </div>
-        </div>
+      <section class="stage-message-controls" aria-labelledby="stage-message-title">
+        <div class="donation-dialog-heading"><h2 id="stage-message-title">On the ballroom screen</h2><a href="/preview" class="btn-secondary">View screen</a></div>
+        <p class="form-hint">Send a live announcement, or let short impact messages rotate every 12 seconds.</p>
+        <label class="form-label" for="live-stage-message">Stage message</label>
+        <input id="live-stage-message" class="form-input-text" maxlength="160" placeholder="Your announcement for the room">
+        <div class="stage-message-actions"><button type="button" id="publish-stage-message" class="btn-primary">Show message now</button><button type="button" id="hide-stage-message" class="btn-secondary">Return to impact messages</button></div>
+        <p id="stage-message-status" role="status"></p>
+        <details><summary>Edit rotating impact messages</summary>
+          <p class="form-hint">Keep each point short enough to read from across the ballroom. Remove every point to leave the message area blank.</p>
+          <div id="impact-message-list"></div>
+          <div class="stage-message-actions"><button type="button" id="add-impact-message" class="btn-secondary">Add point</button><button type="button" id="save-impact-messages" class="btn-primary">Save rotation</button></div>
+        </details>
+      </section>
 
-        <!-- Table View -->
-        <div id="panel-table" role="region" aria-label="Donations">
-          <table class="donations-table">
-            <thead>
-              <tr>
-                <th data-sort="donor" class="sortable" style="width: 35%;">
-                  Donor <span id="sort-icon-donor" class="sort-indicator">⇅</span>
-                </th>
-                <th data-sort="amount" class="sortable text-right" style="width: 20%;">
-                  Amount <span id="sort-icon-amount" class="sort-indicator">⇅</span>
-                </th>
-                <th data-sort="time" class="sortable text-center" style="width: 20%;">
-                  Time <span id="sort-icon-time" class="sort-indicator">⇅</span>
-                </th>
-                <th data-sort="status" class="sortable text-center" style="width: 15%;">
-                  Status <span id="sort-icon-status" class="sort-indicator">⇅</span>
-                </th>
-                <th class="text-right" style="width: 10%;">
-                  <span class="sr-only">Delete</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody id="manage-tbody">
-              <!-- Keyed rows render here -->
-            </tbody>
-          </table>
-        </div>
+      <section class="team-notes" aria-labelledby="team-notes-title">
+        <details id="team-notes-details">
+          <summary><span id="team-notes-title">Team notes</span> <span id="team-notes-count" class="team-notes-count">0</span></summary>
+          <p class="form-hint">Shared with every signed-in operator. Use it for handoffs, pledge-card questions, and anything the finance team should see later.</p>
+          <div id="team-notes-list" class="team-notes-list"></div>
+          <form id="team-note-form" class="team-note-form">
+            <label class="form-label" for="team-note-input">New note</label>
+            <textarea id="team-note-input" class="form-input-text" rows="2" maxlength="1000" placeholder="Example: Table 12 pledge card unreadable, checking with the host"></textarea>
+            <div class="stage-message-actions"><button type="submit" class="btn-primary">Post note</button></div>
+          </form>
+        </details>
+      </section>
 
+      <div id="undo-banner" class="undo-bar" style="display: none;" role="status" aria-live="polite">
+        <span id="undo-message">Donation removed.</span>
+        <button type="button" id="btn-undo-delete" class="undo-btn">Undo</button>
+      </div>
 
-        <!-- Empty State (Authenticated with 0 donations) -->
-        <div id="empty-state" class="empty-state-box" style="display: none;">
-          <div class="empty-state-title" id="empty-state-title">No donations yet</div>
-          <p class="empty-state-text" id="empty-state-text">Gifts appear here as they are recorded.</p>
-          <button type="button" id="empty-state-btn" class="btn-primary">Add first donation</button>
+      <div class="controls-bar">
+        <div class="search-wrap">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>
+          <input type="search" id="manage-search" class="search-input" placeholder="Search donor, note, or operator" aria-label="Search donations">
         </div>
       </div>
 
+      <div id="panel-table" role="region" aria-label="Donations">
+        <table class="donations-table">
+          <thead>
+            <tr>
+              <th data-sort="donor" class="sortable" style="width: 40%;">Donor <span id="sort-icon-donor" class="sort-indicator">⇅</span></th>
+              <th data-sort="amount" class="sortable text-right" style="width: 15%;">Amount <span id="sort-icon-amount" class="sort-indicator">⇅</span></th>
+              <th data-sort="time" class="sortable text-center" style="width: 20%;">Time <span id="sort-icon-time" class="sort-indicator">▼</span></th>
+              <th data-sort="status" class="sortable text-center" style="width: 12%;">Status <span id="sort-icon-status" class="sort-indicator">⇅</span></th>
+              <th class="text-right" style="width: 13%;"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="manage-tbody"></tbody>
+        </table>
+      </div>
+
+      <div id="empty-state" class="empty-state-box" style="display: none;">
+        <div class="empty-state-title" id="empty-state-title">No donations yet</div>
+        <p class="empty-state-text" id="empty-state-text">Gifts appear here as they are recorded.</p>
+        <button type="button" id="empty-state-btn" class="btn-primary">Add first donation</button>
+      </div>
     </main>
   </div>
 
   <dialog id="add-donation-dialog" class="operator-dialog donation-dialog" aria-labelledby="add-dialog-title">
     <form id="add-donation-form" novalidate>
       <div class="donation-dialog-heading"><h2 id="add-dialog-title">Add donation</h2><button type="button" id="btn-close-add" class="btn-secondary">Close</button></div>
-      <p>Record a pledge or offline gift. Online gifts are imported automatically—do not enter them again.</p>
+      <p id="add-dialog-intro">Record a pledge or offline gift. Online gifts are imported automatically; do not enter them again.</p>
       <label for="donor-name-input">Donor name (required)</label>
       <input id="donor-name-input" autocomplete="off" required>
       <label for="amount-numeric-input">Amount in dollars (required)</label>
-      <input id="amount-numeric-input" inputmode="decimal" value="500" required>
+      <input id="amount-numeric-input" inputmode="decimal" required>
       <div id="preset-grid" class="choice-options" role="group" aria-label="Quick amounts"></div>
       <label class="donation-check"><input id="donation-anonymous" type="checkbox">Anonymous on public screens</label>
       <p class="form-hint">The team keeps the donor name. The audience sees “Anonymous Supporter.”</p>
+      <label for="donation-notes-input">Note for the team <span>(optional, never shown to the audience)</span></label>
+      <textarea id="donation-notes-input" rows="2" maxlength="1000" placeholder="Table number, pledge terms, who to thank"></textarea>
       <details><summary>Pronunciation and optional details</summary>
         <label for="donor-phonetic-input">Name pronunciation</label><input id="donor-phonetic-input" autocomplete="off">
         <div id="field-card-number-wrap" hidden><label for="card-number-input">Card number</label><input id="card-number-input" inputmode="numeric"></div>
         <div id="field-table-number-wrap" hidden><label for="table-number-input">Table number</label><input id="table-number-input"></div>
       </details>
       <p id="add-error-banner" role="alert" hidden></p>
-      <div id="major-gift-confirmation" hidden>
+      <div id="major-gift-confirmation" class="confirm-box" hidden>
         <h3>Confirm large donation</h3><p id="guardrail-body"></p>
         <label class="donation-check"><input id="major-gift-confirmed" type="checkbox">I checked the amount and donor name.</label>
+      </div>
+      <div id="duplicate-confirmation" class="confirm-box" hidden>
+        <h3>This looks like a repeat</h3><p id="duplicate-body"></p>
+        <label class="donation-check"><input id="duplicate-confirmed" type="checkbox">This is a separate gift. Record it anyway.</label>
       </div>
       <button id="btn-submit-add" type="submit" class="btn-primary">Record donation</button>
     </form>
   </dialog>
 
-  <!-- Accessible Delete Confirmation Modal Dialog -->
   <div id="delete-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-body">
     <div class="modal-dialog">
       <h2 id="delete-dialog-title" class="modal-title">Delete this donation?</h2>
-      <p id="delete-dialog-body" class="modal-body">Subtracted from the total and removed from the chart. Restorable from History.</p>
+      <p id="delete-dialog-body" class="modal-body"></p>
       <div class="modal-actions">
         <button type="button" id="btn-cancel-delete" class="btn-secondary">Cancel</button>
-        <button type="button" id="btn-confirm-delete" class="btn-danger">Delete Donation</button>
+        <button type="button" id="btn-confirm-delete" class="btn-danger">Delete donation</button>
       </div>
     </div>
   </div>
 
-  <script src="js/session.js?v=1.0.0"></script>
-  <script src="js/presence.js?v=6.4.0"></script>
-  <script src="js/control.js?v=6.4.0"></script>
-  <script src="js/entry.js?v=6.4.0"></script>
-  <script src="js/linkhub.js?v=6.4.0"></script>
-  <script src="js/stage-messages.js?v=6.4.0"></script>
+  <script src="/js/session.js?v=7.0.0"></script>
+  <script src="/js/live.js?v=7.0.0"></script>
+  <script src="/js/presence.js?v=7.0.0"></script>
+  <script src="/js/control.js?v=7.0.0"></script>
+  <script src="/js/entry.js?v=7.0.0"></script>
+  <script src="/js/linkhub.js?v=7.0.0"></script>
+  <script src="/js/stage-messages.js?v=7.0.0"></script>
 </body>
 </html>

@@ -38,12 +38,11 @@ const SAMPLE_TIERS = [
 ];
 
 
+/** Sample gifts for rehearsal. Administrators only: a stray click during the live appeal must not be possible. */
 export async function handleRehearsalRequest(req: Request, db: Database): Promise<Response> {
-  const auth = requireRole(db, req, ["admin", "operator"]);
+  const auth = requireRole(db, req, ["admin"]);
   if (auth instanceof Response) return auth;
-  if (req.method.toUpperCase() !== "POST") {
-    return Response.json({ error: "METHOD_NOT_ALLOWED", message: "POST required" }, { status: 405 });
-  }
+  if (req.method !== "POST") return Response.json({ error: "METHOD_NOT_ALLOWED", message: "POST required" }, { status: 405 });
 
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
@@ -69,17 +68,17 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
       }
 
       case "typo": {
-        // Explicitly inject a typo gift to test the 8s Yank queue
+        // A deliberately wrong gift for practising Delete inside the staging delay.
         const typoDonation = {
           donation_id: crypto.randomUUID(),
-          amount_cents: 500000, // $5,000
-          donor_name: "TEST TYPO NAME - PLEASE HOLD FROM STAGE",
-          display_name: "TEST TYPO NAME - PLEASE HOLD FROM STAGE",
+          amount_cents: 500000,
+          donor_name: "TEST TYPO NAME - DELETE ME",
+          display_name: "TEST TYPO NAME - DELETE ME",
           is_anonymous: false,
           payment_method: "pledge" as const,
           source: "rehearsal" as const,
-          entered_by: "REHEARSAL_BOT",
-          notes: "Table 99 - Test typo for 8s stage review buffer",
+          entered_by: `${auth.displayName} (rehearsal)`,
+          notes: "Practice typo: delete this row before it reaches the screen",
           confirmed_major_gift: true
         };
         const result = recordDonation(db, typoDonation);
@@ -113,7 +112,7 @@ export async function handleRehearsalRequest(req: Request, db: Database): Promis
           is_anonymous: false,
           payment_method: "pledge" as const,
           source: "rehearsal" as const,
-          entered_by: "REHEARSAL_BOT",
+          entered_by: `${auth.displayName} (rehearsal)`,
           notes: "Milestone celebration trigger test",
           confirmed_major_gift: true
         };
@@ -135,8 +134,6 @@ function generateRandomDonation() {
   const donorName = SAMPLE_DONORS[Math.floor(Math.random() * SAMPLE_DONORS.length)];
   const isAnon = donorName === "Anonymous Supporter" || Math.random() < 0.12;
   const amountCents = SAMPLE_TIERS[Math.floor(Math.random() * SAMPLE_TIERS.length)];
-  const tableNum = Math.floor(Math.random() * 35) + 1;
-
   return {
     donation_id: crypto.randomUUID(),
     amount_cents: amountCents,
@@ -145,8 +142,9 @@ function generateRandomDonation() {
     is_anonymous: isAnon,
     payment_method: (Math.random() < 0.7 ? "pledge" : (Math.random() < 0.5 ? "card" : "check")) as "pledge" | "card" | "check",
     source: "rehearsal" as const,
-    entered_by: `User_${Math.floor(Math.random() * 3) + 1}`,
-    notes: `Table ${tableNum}`,
-    confirmed_major_gift: true
+    entered_by: "Rehearsal generator",
+    table_number: String(Math.floor(Math.random() * 35) + 1),
+    confirmed_major_gift: true,
+    confirmed_duplicate: true
   };
 }

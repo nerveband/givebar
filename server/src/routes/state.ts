@@ -1,111 +1,78 @@
 import type { Database } from "bun:sqlite";
-import { getStageState, getEmceeState, getControlState, getVolunteerState, getEventState, foldLedger } from "../ledger";
-import { sanitizeEventState } from "../projection";
-import { getPresenceView } from "../presence";
+import { getStageState, getEmceeState, getControlState, getEntryState } from "../projection";
 import { getSession } from "../authz";
 
-export function getStatePayload(role: string, db: Database, sinceSeq = 0, req?: Request): { status: number; payload: unknown } {
-  const session = req ? getSession(req, db) : null;
-  const operator = session && (session.role === "admin" || session.role === "operator") ? session : null;
-  switch (role) {
-    case "stage":
-      return { status: 200, payload: getStageState(db, sinceSeq) };
-    case "emcee":
-      return { status: 200, payload: getEmceeState(db) };
-    case "control": {
-      if (!operator) {
-        return { status: 401, payload: { error: "UNAUTHORIZED", message: "Operator sign-in required" } };
-      }
-      return { status: 200, payload: { ...getControlState(db), presence: getPresenceView(), me: { username: operator.username, displayName: operator.displayName, role: operator.role } } };
-    }
-    case "entry":
-      if (!operator) {
-        return { status: 401, payload: { error: "UNAUTHORIZED", message: "Operator sign-in required" } };
-      }
-      return { status: 200, payload: getVolunteerState(db, operator.accountId) };
-    default: {
-      const fullState = getEventState(db);
-      const hasBloomerangKey = Boolean(fullState.bloomerang_api_key && fullState.bloomerang_api_key.trim() !== "");
-      const presence = operator ? getPresenceView() : undefined;
-      return {
-        status: 200,
-        payload: {
-          stage: getStageState(db, sinceSeq),
-          event: {
-            ...sanitizeEventState(fullState),
-            has_operator_accounts: db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM operator_account WHERE disabled = 0`).get()?.count !== 0,
-            has_bloomerang_api_key: hasBloomerangKey,
-            bloomerang_key_masked: hasBloomerangKey ? "••••••••••••••" : ""
-          },
-          folded: foldLedger(db),
-          ...(presence ? { presence } : {})
-        }
-      };
-    }
-  }
+const NO_STORE = {
+  "Content-Type": "application/json",
+  "Cache-Control": "no-store, no-cache, must-revalidate",
+  "Pragma": "no-cache",
+  "Expires": "0"
+};
+
+/** Chart and presenter are public room screens; operator projections require a session. */
+export function getStatePayload(role: string, db: Database, req: Request): { status: number; payload: unknown } {
+  if (role === "stage") return { status: 200, payload: getStageState(db) };
+  if (role === "emcee") return { status: 200, payload: getEmceeState(db) };
+  if (role !== "control" && role !== "entry") return { status: 400, payload: { error: "INVALID_ROLE", message: "role must be stage, emcee, control, or entry" } };
+  const session = getSession(req, db);
+  if (!session) return { status: 401, payload: { error: "UNAUTHORIZED", message: "Operator sign-in required" } };
+  if (role === "entry") return { status: 200, payload: getEntryState(db) };
+  return { status: 200, payload: { ...getControlState(db), me: { accountId: session.accountId, username: session.username, displayName: session.displayName, role: session.role } } };
 }
 
 export function handleStateRequest(req: Request, db: Database): Response {
-  const url = new URL(req.url);
-  const role = url.searchParams.get("role") || "stage";
-  const sinceSeq = parseInt(url.searchParams.get("since") || "0", 10);
-
-  const { status, payload } = getStatePayload(role, db, sinceSeq, req);
-
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      "Pragma": "no-cache",
-      "Expires": "0"
-    }
-  });
+  const role = new URL(req.url).searchParams.get("role") || "stage";
+  const { status, payload } = getStatePayload(role, db, req);
+  return new Response(JSON.stringify(payload), { status, headers: NO_STORE });
 }
 
-export function handleStateStreamRequest(req: Request, db: Database): Response {
-  const url = new URL(req.url);
-  const role = url.searchParams.get("role") || "stage";
-  let timerId: Timer | number | null = null;
+const STREAM_TICK_MS = 500;
+const STREAM_PING_TICKS = 4;
 
-  let lastSentHash = "";
+/**
+ * Server-sent state. A frame goes out only when the projection changed
+ * (server_time excluded from the comparison); a lightweight ping event keeps
+ * clients able to tell "quiet" from "disconnected".
+ */
+export function handleStateStreamRequest(req: Request, db: Database): Response {
+  const role = new URL(req.url).searchParams.get("role") || "stage";
+  const encoder = new TextEncoder();
+  let timer: Timer | undefined;
+  let lastKey = "";
+  let ticks = 0;
 
   const stream = new ReadableStream({
     start(controller) {
-      const encoder = new TextEncoder();
-
-      const sendUpdate = () => {
+      const stop = () => {
+        clearInterval(timer);
+        try { controller.close(); } catch { /* already closed */ }
+      };
+      const tick = () => {
         try {
-          const { status, payload } = getStatePayload(role, db, 0, req);
+          const { status, payload } = getStatePayload(role, db, req);
           if (status !== 200) {
             controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify(payload)}\n\n`));
-            controller.close();
-            if (timerId) clearInterval(timerId);
+            stop();
             return;
           }
-
-          const serialized = JSON.stringify(payload);
-          if (serialized !== lastSentHash) {
-            lastSentHash = serialized;
-            controller.enqueue(encoder.encode(`data: ${serialized}\n\n`));
-          } else {
-            // Heartbeat comment to keep HTTP connection fresh
-            controller.enqueue(encoder.encode(`: ping\n\n`));
+          const { server_time, ...comparable } = payload as { server_time: number };
+          const key = JSON.stringify(comparable);
+          ticks++;
+          if (key !== lastKey) {
+            lastKey = key;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+          } else if (ticks % STREAM_PING_TICKS === 0) {
+            controller.enqueue(encoder.encode(`event: ping\ndata: {"server_time":${server_time}}\n\n`));
           }
         } catch {
-          if (timerId) clearInterval(timerId);
-          try { controller.close(); } catch {}
+          stop();
         }
       };
-
-      sendUpdate();
-      timerId = setInterval(sendUpdate, 350);
+      tick();
+      timer = setInterval(tick, STREAM_TICK_MS);
     },
     cancel() {
-      if (timerId) {
-        clearInterval(timerId);
-        timerId = null;
-      }
+      clearInterval(timer);
     }
   });
 

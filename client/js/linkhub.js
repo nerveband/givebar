@@ -2,16 +2,14 @@
  * Surface Link Hub
  * ----------------
  * The operator hands these URLs to other machines during setup: the chart to an
- * AV laptop, the pad to volunteer phones. Home carries the full link table; the
- * working surfaces (/preview, /donations, /add) carry this compact disclosure so
- * the links are reachable without navigating back Home.
+ * AV laptop, Manage Donations to volunteer phones. Home carries the full link
+ * table; Manage Donations and the previews carry this compact disclosure so the
+ * links are reachable without navigating back Home.
  *
- * One implementation, mounted identically on all three pages. The panel is
- * absolutely positioned, so revealing it never moves page content — that is what
- * keeps it out of the way of the pad's keypad, recent list, and submit button.
+ * The panel is absolutely positioned, so revealing it never moves page content.
  *
  * Markup contract, per page:
- *   <div class="linkhub" data-linkhub data-linkhub-current="/add">
+ *   <div class="linkhub" data-linkhub data-linkhub-current="/donations">
  *     <button type="button" class="lh-toggle" data-linkhub-toggle
  *             aria-expanded="false" aria-controls="linkhub-panel"
  *             aria-label="Surface links">…</button>

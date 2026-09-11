@@ -12,21 +12,15 @@
  *    no real name, no notes, no phonetic guide, no other identifying metadata —
  *    in the hero card, the recent list, and the full history alike.
  *  - Table numbers are never rendered anywhere on this surface.
- *  - No fake zero total: a 401 shows the unlock screen instead of empty figures.
  */
 
 (function () {
   'use strict';
-  let pollInterval = null;
-  let sseSource = null;
-  let lastSuccessfulUpdateAt = Date.now();
   let serverTimeOffsetMs = 0;
-  let hasLoadedState = false;
   let historyOpen = false;
   let historySignature = null;
   let allGifts = [];
   let lastFontKey = null;
-  let lastSettingsSeq = null;
 
   // Font allowlist, identical resolution to the chart: 'system' and an unset
   // value both land on Brandon Grotesque, the licensed face for the surfaces
@@ -177,21 +171,6 @@
     scheduleDigitMeasure();
   }
 
-  /**
-   * The emcee payload carries settings_seq but not font_family. The setting is
-   * on the stage projection, which needs no PIN and moves on the same seq, so
-   * it is read once at startup and only again when settings actually change.
-   */
-  async function refreshFontSetting() {
-    try {
-      const res = await fetch('/api/state?role=stage', { headers: { 'Cache-Control': 'no-cache' } });
-      if (!res.ok) return;
-      const data = await res.json();
-      applyFont(data && data.font_family);
-    } catch (e) {
-      // Brandon is already the CSS default; a failed read changes nothing.
-    }
-  }
 
   /**
    * Paint a currency figure with each digit in a fixed-advance cell. Guarded on
@@ -212,79 +191,22 @@
   }
 
   function startSync() {
-    fetchState();
-    pollInterval = setInterval(fetchState, 1500);
-    setInterval(checkStaleness, 1000);
-    initSSE();
-  }
-
-  function checkStaleness() {
-    const elapsed = Date.now() - lastSuccessfulUpdateAt;
-    const isStale = elapsed >= 5000;
-    const dot = document.querySelector('.presenter-title .pulse-dot');
-    const degradedBanner = document.getElementById('presenter-degraded-banner');
-    if (dot) {
-      dot.classList.toggle('degraded', isStale);
-    }
-    if (degradedBanner) {
-      degradedBanner.style.display = isStale ? 'inline-flex' : 'none';
-    }
-  }
-
-  function stateQuery() {
-    return 'role=emcee';
-  }
-
-  function initSSE() {
-    try {
-      if (window.EventSource) {
-        if (sseSource) {
-          sseSource.close();
-          sseSource = null;
-        }
-        sseSource = new EventSource(`/api/state/stream?${stateQuery()}`);
-        sseSource.onmessage = function (event) {
-          try {
-            const data = JSON.parse(event.data);
-            handleStateUpdate(data);
-          } catch (e) {}
-        };
-        sseSource.onerror = function () {
-          if (sseSource) {
-            sseSource.close();
-            sseSource = null;
-          }
-        };
+    GivebarLive.connect({
+      role: 'emcee',
+      onState: handleStateUpdate,
+      onServerTime: value => { serverTimeOffsetMs = value - Date.now(); },
+      onLiveness(ok) {
+        const dot = document.querySelector('.presenter-title .pulse-dot');
+        const degradedBanner = document.getElementById('presenter-degraded-banner');
+        if (dot) dot.classList.toggle('degraded', !ok);
+        if (degradedBanner) degradedBanner.style.display = ok ? 'none' : 'inline-flex';
       }
-    } catch (e) {}
-  }
-
-  async function fetchState() {
-    try {
-      const res = await fetch(`/api/state?${stateQuery()}`, { headers: { 'Cache-Control': 'no-cache' } });
-      if (!res.ok) return;
-      const data = await res.json();
-      handleStateUpdate(data);
-    } catch (err) {
-      console.warn('[Givebar Presenter] State fetch failed:', err);
-    }
+    });
   }
 
   function handleStateUpdate(data) {
     if (!data) return;
-    lastSuccessfulUpdateAt = Date.now();
-    hasLoadedState = true;
-    if (data.server_time) {
-      serverTimeOffsetMs = data.server_time - Date.now();
-    }
-    checkStaleness();
-
-    // Font is a settings-level choice, and settings_seq is the only signal for
-    // it in this payload.
-    if (data.settings_seq !== lastSettingsSeq) {
-      lastSettingsSeq = data.settings_seq;
-      refreshFontSetting();
-    }
+    applyFont(data.font_family);
 
     // 1. Current / Latest Donor (Held items are already excluded by server getEmceeState)
     const recentGifts = Array.isArray(data.recent_gifts) ? data.recent_gifts : [];
@@ -318,16 +240,10 @@
         amountEl.style.display = 'block';
       }
 
-      // Dedication note only. Table numbers are never rendered here.
+      // Team notes never reach the podium; the meta line stays empty.
       if (metaEl) {
-        const note = !isAnon && currentGift.notes ? String(currentGift.notes).trim() : '';
-        if (note) {
-          metaEl.textContent = note;
-          metaEl.style.display = 'block';
-        } else {
-          metaEl.style.display = 'none';
-          metaEl.textContent = '';
-        }
+        metaEl.style.display = 'none';
+        metaEl.textContent = '';
       }
     } else {
       if (donorNameEl) donorNameEl.textContent = 'No gifts yet';
@@ -451,14 +367,6 @@
       return;
     }
     historyListEl.innerHTML = allGifts.map(renderGiftRow).join('');
-  }
-
-  // --- Unlock removed: presenter feed is intentionally public. ---
-
-  function showUnlockError(msg) {
-    if (!unlockErrorEl) return;
-    unlockErrorEl.textContent = msg || '';
-    unlockErrorEl.style.display = msg ? 'block' : 'none';
   }
 
   // --- Formatting Helpers ---

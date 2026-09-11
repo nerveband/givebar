@@ -1,234 +1,117 @@
 /**
- * Givebar — History Controller
- * Dense scannable vertical timeline displaying Added, Edited, Deleted, and Restored activity,
- * User attribution, relative timestamps, action filtering, search, and real ledger restore actions.
+ * Givebar History: the complete audit trail, newest first.
+ *
+ * Every create, edit, delete, and restore with the operator who did it and the
+ * exact Eastern time. Actions here go through the same ledger endpoints as
+ * Manage Donations: Undo voids a gift, Restore brings a deleted gift back.
+ * The Restore/Undo buttons follow the gift's current status, not the row, so
+ * a gift that was deleted and already restored does not offer Restore twice.
  */
-
 (function () {
   'use strict';
 
-  let rawEvents = [];
-  let filterType = 'all'; // 'all' | 'create' | 'amend' | 'void' | 'restore'
+  const fmt = GivebarSession.format;
+  let events = [];
+  let status = {};
+  let filterType = 'all';
   let searchQuery = '';
-  let pollInterval = null;
 
-  // DOM Elements
-  const timelineEl = document.getElementById('history-timeline');
+  const timeline = document.getElementById('history-timeline');
   const searchInput = document.getElementById('history-search');
-  const filterChips = document.querySelectorAll('.filter-chip');
-  function init() {
-    setupFilters();
-    setupSearch();
-    syncHistory();
-    pollInterval = setInterval(syncHistory, 2500);
+  const summary = document.getElementById('history-summary');
+  const chips = document.querySelectorAll('.filter-chip');
+  const ACTION_LABEL = { create: 'Added', amend: 'Edited', void: 'Deleted', restore: 'Restored' };
+
+  async function sync() {
+    try {
+      const response = await GivebarSession.api('/api/history');
+      if (!response.ok) return;
+      const data = await response.json();
+      events = data.events;
+      status = data.status;
+      if (summary) summary.textContent = `${data.active_donation_count} active gifts · ${fmt.money(data.total_raised_cents)} · ${data.void_count} deleted`;
+      render();
+    } catch (_) { /* next poll retries */ }
   }
 
-  function setupFilters() {
-    filterChips.forEach(chip => {
-      chip.addEventListener('click', () => {
-        filterChips.forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        filterType = chip.getAttribute('data-filter') || 'all';
-        renderTimeline();
-      });
+  function filtered() {
+    return events.filter(event => {
+      if (event.event_type === 'match_apply' || event.event_type === 'match_release') return false;
+      if (filterType !== 'all' && event.event_type !== filterType) return false;
+      if (!searchQuery) return true;
+      return [event.donor_name, event.display_name, event.entered_by, event.notes, event.card_number].some(value => value && String(value).toLowerCase().includes(searchQuery));
     });
   }
 
-  function setupSearch() {
-    if (searchInput) {
-      searchInput.addEventListener('input', () => {
-        searchQuery = searchInput.value.trim().toLowerCase();
-        renderTimeline();
-      });
-    }
-  }
-
-  async function syncHistory() {
-    try {
-      const res = await GivebarSession.api('/api/state?role=control');
-      if (!res.ok) return;
-      const data = await res.json();
-      rawEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
-      renderTimeline();
-    } catch (err) {
-      console.warn('[Givebar History] Sync error:', err);
-    }
-  }
-
-  function getFilteredEvents() {
-    // Filter out internal match events from user history
-    let events = rawEvents.filter(e => e.event_type !== 'match_apply' && e.event_type !== 'match_release');
-
-    // Type filter
-    if (filterType !== 'all') {
-      events = events.filter(e => e.event_type === filterType);
-    }
-
-    // Search filter
-    if (searchQuery) {
-      events = events.filter(e => {
-        const donor = (e.donor_name || '').toLowerCase();
-        const display = (e.display_name || '').toLowerCase();
-        const user = (e.entered_by || '').toLowerCase();
-        return donor.includes(searchQuery) || display.includes(searchQuery) || user.includes(searchQuery);
-      });
-    }
-
-    return events;
-  }
-
-  function renderTimeline() {
-    if (!timelineEl) return;
-
-    const events = getFilteredEvents();
-
-    if (events.length === 0) {
-      timelineEl.innerHTML = `
-        <div style="color: #88888e; font-size: var(--text-sm); padding: var(--space-6) 0;">
-          ${searchQuery || filterType !== 'all' ? 'No history events match your filter.' : 'No history recorded in this event.'}
-        </div>
-      `;
+  function render() {
+    const list = filtered();
+    if (list.length === 0) {
+      timeline.innerHTML = `<div class="history-empty">${searchQuery || filterType !== 'all' ? 'No history events match your filter.' : 'No history recorded in this event.'}</div>`;
       return;
     }
-
-    // Build map to detect previous amount on edits
-    const seqToEvent = new Map(rawEvents.map(e => [e.seq, e]));
-
-    timelineEl.innerHTML = events.map((event, idx) => {
-      const actionName = getActionDisplay(event.event_type);
-      const actionClass = event.event_type;
-      const donorName = event.is_anonymous ? 'Anonymous' : (event.donor_name || 'Anonymous');
-      const timeStr = formatRelativeTime(event.created_at);
-      const userStr = formatUser(event.entered_by);
-
-      // Amount calculation
-      let amountDisplay = formatCurrency(event.amount_cents);
+    const bySeq = new Map(events.map(event => [event.seq, event]));
+    timeline.innerHTML = list.map(event => {
+      const donor = event.is_anonymous ? `${fmt.escape(event.donor_name)} <span class="donation-flag">Anonymous on screen</span>` : fmt.escape(event.donor_name);
+      let amount = fmt.money(event.amount_cents);
       if (event.event_type === 'amend' && event.supersedes_seq) {
-        const prior = seqToEvent.get(event.supersedes_seq);
-        if (prior && prior.amount_cents !== event.amount_cents) {
-          amountDisplay = `${formatCurrency(prior.amount_cents)} &rarr; ${formatCurrency(event.amount_cents)}`;
-        }
+        const prior = bySeq.get(event.supersedes_seq);
+        if (prior && prior.amount_cents !== event.amount_cents) amount = `${fmt.money(prior.amount_cents)} &rarr; ${fmt.money(event.amount_cents)}`;
       }
-
-      // Action button
-      let actionBtnHtml = '';
-      if (event.event_type === 'void') {
-        actionBtnHtml = `<button type="button" class="btn-timeline-action" data-restore-id="${escapeHTML(event.donation_id)}">Restore</button>`;
-      } else if (event.event_type === 'create' || event.event_type === 'restore') {
-        actionBtnHtml = `<button type="button" class="btn-timeline-action" data-void-id="${escapeHTML(event.donation_id)}">Undo</button>`;
-      }
-
+      const current = status[event.donation_id];
+      let action = '';
+      if (current && current.is_voided && event.event_type === 'void') action = `<button type="button" class="btn-timeline-action" data-restore-id="${fmt.escape(event.donation_id)}">Restore</button>`;
+      else if (current && !current.is_voided && (event.event_type === 'create' || event.event_type === 'restore' || event.event_type === 'amend')) action = `<button type="button" class="btn-timeline-action" data-void-id="${fmt.escape(event.donation_id)}">Undo</button>`;
+      const note = event.notes && event.event_type !== 'void' && event.event_type !== 'restore' ? `<div class="donation-note">${fmt.escape(event.notes)}</div>` : '';
+      const reason = (event.event_type === 'void' || event.event_type === 'restore') && event.notes ? ` &bull; <span>${fmt.escape(event.notes)}</span>` : '';
       return `
         <div class="timeline-item" data-seq="${event.seq}">
           <div class="timeline-node" aria-hidden="true"></div>
           <div class="timeline-main-content">
             <div class="timeline-primary-line">
-              <span class="timeline-action-tag ${actionClass}">${actionName}</span>
+              <span class="timeline-action-tag ${event.event_type}">${ACTION_LABEL[event.event_type] || event.event_type}</span>
               <span class="timeline-sep">|</span>
-              <span class="timeline-donor">${escapeHTML(donorName)}</span>
+              <span class="timeline-donor">${donor}</span>
               <span class="timeline-sep">|</span>
-              <span class="timeline-amount">${amountDisplay}</span>
+              <span class="timeline-amount">${amount}</span>
             </div>
+            ${note}
             <div class="timeline-sub-line">
-              <span>${escapeHTML(userStr)}</span>
+              <span>${fmt.escape(event.entered_by || 'Unknown operator')}</span>
               <span>&bull;</span>
-              <span>${timeStr}</span>
-              <span>&bull;</span><span>${escapeHTML(GivebarOperator.source(event.source))}</span>
+              <span>${fmt.escape(fmt.time(event.created_at))}</span>
+              <span>&bull;</span><span>${fmt.escape(fmt.source(event.source))}</span>${reason}
             </div>
           </div>
-          <div>
-            ${actionBtnHtml}
-          </div>
-        </div>
-      `;
+          <div>${action}</div>
+        </div>`;
     }).join('');
-
-    // Attach restore listeners
-    timelineEl.querySelectorAll('[data-restore-id]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-restore-id');
-        if (!id) return;
-        btn.textContent = 'Restoring...';
-        await executeRestore(id);
-      });
-    });
-
-    // Attach void/undo listeners
-    timelineEl.querySelectorAll('[data-void-id]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-void-id');
-        if (!id) return;
-        btn.textContent = 'Undoing...';
-        await executeVoid(id);
-      });
-    });
   }
 
-  async function executeRestore(donationId) {
-    try {
-      const res = await GivebarSession.api(`/api/donation/${donationId}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Restored from History timeline' })
-      });
-
-      if (res.ok) {
-        syncHistory();
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.message || 'Could not restore donation');
-      }
-    } catch (err) {
-      console.warn('[Givebar History] Restore error:', err);
+  timeline.addEventListener('click', async event => {
+    const restore = event.target.closest('[data-restore-id]');
+    const undo = event.target.closest('[data-void-id]');
+    const button = restore || undo;
+    if (!button) return;
+    const id = restore ? restore.dataset.restoreId : undo.dataset.voidId;
+    const verb = restore ? 'restore' : 'void';
+    button.disabled = true;
+    button.textContent = restore ? 'Restoring…' : 'Undoing…';
+    const response = await GivebarSession.api(`/api/donation/${id}/${verb}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: restore ? 'Restored from History' : 'Undone from History' }) });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      window.alert(data.message || 'The change could not be made.');
     }
-  }
+    await sync();
+  });
 
-  async function executeVoid(donationId) {
-    try {
-      const res = await GivebarSession.api(`/api/donation/${donationId}/void`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Undone from History timeline' })
-      });
+  chips.forEach(chip => chip.addEventListener('click', () => {
+    chips.forEach(other => other.classList.remove('active'));
+    chip.classList.add('active');
+    filterType = chip.dataset.filter || 'all';
+    render();
+  }));
+  if (searchInput) searchInput.addEventListener('input', () => { searchQuery = searchInput.value.trim().toLowerCase(); render(); });
 
-      if (res.ok) {
-        syncHistory();
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.message || 'Could not undo donation');
-      }
-    } catch (err) {
-      console.warn('[Givebar History] Undo error:', err);
-    }
-  }
-
-  function getActionDisplay(eventType) {
-    switch (eventType) {
-      case 'create': return 'Added';
-      case 'amend': return 'Edited';
-      case 'void': return 'Deleted';
-      case 'restore': return 'Restored';
-      default: return eventType;
-    }
-  }
-
-  function formatUser(user) { return user || 'Unknown operator'; }
-
-  function formatCurrency(cents) {
-    return `$${Math.floor((cents || 0) / 100).toLocaleString('en-US')}`;
-  }
-
-  function formatRelativeTime(epochMs) { return GivebarOperator.time(epochMs); }
-
-  function escapeHTML(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  document.addEventListener('DOMContentLoaded', init);
+  sync();
+  setInterval(sync, 3000);
 })();

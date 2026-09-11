@@ -2,420 +2,252 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "fs";
 import { dirname } from "path";
 
-export interface DBConfig {
-  dbPath?: string;
-}
+/**
+ * Schema version. Fresh databases are created at this version directly.
+ * The only supported upgrade path is from the previous released version (13);
+ * anything older must start from a fresh database or a restored backup.
+ */
+export const SCHEMA_VERSION = 14;
 
 export function initDatabase(dbPath: string = process.env.GIVEBAR_DB_PATH || "data/givebar.sqlite"): Database {
-  if (dbPath !== ":memory:") {
-    try {
-      mkdirSync(dirname(dbPath), { recursive: true });
-    } catch {
-      // Ignore if directory already exists
-    }
-  }
-
+  if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
   const db = new Database(dbPath, { create: true });
-
-  // Event-grade SQLite PRAGMAs
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA synchronous = NORMAL;");
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec("PRAGMA busy_timeout = 5000;");
-
-  // Run schema migration
   migrateSchema(db);
-
   return db;
+}
+
+function tableExists(db: Database, name: string): boolean {
+  return Boolean(db.query<{ name: string }, [string]>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name));
+}
+
+function columnExists(db: Database, table: string, column: string): boolean {
+  return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().some(row => row.name === column);
+}
+
+/** Live event_state columns. Drives the fresh CREATE TABLE and the add-if-missing pass on upgrade. */
+const EVENT_STATE_COLUMNS: [string, string][] = [
+  ["event_name", "TEXT NOT NULL DEFAULT 'Annual Gala & Benefit Auction'"],
+  ["event_subtitle", "TEXT NOT NULL DEFAULT 'Supporting Community Programs & Education'"],
+  ["event_title", "TEXT NOT NULL DEFAULT ''"],
+  ["goal_cents", "INTEGER NOT NULL DEFAULT 50000000"],
+  ["match_total_cents", "INTEGER NOT NULL DEFAULT 0"],
+  ["match_ratio", "REAL NOT NULL DEFAULT 1.0"],
+  ["is_match_active", "INTEGER NOT NULL DEFAULT 0"],
+  ["match_sponsor_title", "TEXT NOT NULL DEFAULT 'Board of Directors Matching Grant'"],
+  ["is_frozen", "INTEGER NOT NULL DEFAULT 0"],
+  ["qr_url", "TEXT NOT NULL DEFAULT ''"],
+  ["display_url", "TEXT NOT NULL DEFAULT ''"],
+  ["qr_style", "TEXT NOT NULL DEFAULT 'dots'"],
+  ["qr_center_icon", "TEXT NOT NULL DEFAULT 'star'"],
+  ["qr_fg_color", "TEXT NOT NULL DEFAULT ''"],
+  ["qr_bg_color", "TEXT NOT NULL DEFAULT '#FFFFFF'"],
+  ["qr_image_url", "TEXT NOT NULL DEFAULT ''"],
+  ["qr_image_backdrop", "INTEGER NOT NULL DEFAULT 1"],
+  ["odometer_floor_cents", "INTEGER NOT NULL DEFAULT 0"],
+  ["stage_reset_seq", "INTEGER NOT NULL DEFAULT 0"],
+  ["theme_preset", "TEXT NOT NULL DEFAULT 'champagne'"],
+  ["brand_hue", "REAL NOT NULL DEFAULT 85"],
+  ["brand_chroma", "REAL NOT NULL DEFAULT 0.12"],
+  ["brand_accent_hex", "TEXT NOT NULL DEFAULT ''"],
+  ["brand_radius_px", "INTEGER NOT NULL DEFAULT 12"],
+  ["major_gift_threshold_cents", "INTEGER NOT NULL DEFAULT 950000"],
+  ["stage_delay_ms", "INTEGER NOT NULL DEFAULT 8000"],
+  ["trust_badge_text", "TEXT NOT NULL DEFAULT '501(c)(3) Tax-Deductible Contribution'"],
+  ["logo_url", "TEXT NOT NULL DEFAULT ''"],
+  ["background_style", "TEXT NOT NULL DEFAULT 'plain'"],
+  ["background_image_url", "TEXT NOT NULL DEFAULT ''"],
+  ["background_video_url", "TEXT NOT NULL DEFAULT ''"],
+  ["gradient_start", "TEXT NOT NULL DEFAULT '#183b46'"],
+  ["gradient_end", "TEXT NOT NULL DEFAULT '#39213d'"],
+  ["gradient_angle", "INTEGER NOT NULL DEFAULT 135"],
+  ["gradient_intensity", "INTEGER NOT NULL DEFAULT 35"],
+  ["bar_color", "TEXT NOT NULL DEFAULT ''"],
+  ["text_color", "TEXT NOT NULL DEFAULT ''"],
+  ["font_family", "TEXT NOT NULL DEFAULT 'system'"],
+  ["chart_orientation", "TEXT NOT NULL DEFAULT 'horizontal'"],
+  ["marker_mode", "TEXT NOT NULL DEFAULT 'milestones'"],
+  ["marker_step_cents", "INTEGER NOT NULL DEFAULT 10000000"],
+  ["show_qr", "INTEGER NOT NULL DEFAULT 1"],
+  ["show_recent_donations", "INTEGER NOT NULL DEFAULT 1"],
+  ["show_live_indicator", "INTEGER NOT NULL DEFAULT 1"],
+  ["show_goal", "INTEGER NOT NULL DEFAULT 1"],
+  ["stage_message", "TEXT NOT NULL DEFAULT ''"],
+  ["stage_message_visible", "INTEGER NOT NULL DEFAULT 0"],
+  ["impact_messages", "TEXT NOT NULL DEFAULT '[]'"],
+  ["feature_card_number", "INTEGER NOT NULL DEFAULT 0"],
+  ["feature_table_number", "INTEGER NOT NULL DEFAULT 0"],
+  ["settings_seq", "INTEGER NOT NULL DEFAULT 1"],
+  ["updated_at", "INTEGER NOT NULL DEFAULT 0"]
+];
+
+/** Final schema. Every statement is idempotent so it can run on any supported database. */
+function createSchema(db: Database): void {
+  // Append-only event ledger: the single financial source of truth.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ledger (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,         -- 'create', 'amend', 'void', 'restore', 'match_apply', 'match_release'
+      donation_id TEXT NOT NULL,        -- UUID minted on the client form, or a stable import identifier
+      supersedes_seq INTEGER,           -- Superseded record for amendments, voids, and restores
+      amount_cents INTEGER NOT NULL,
+      donor_name TEXT NOT NULL,
+      display_name TEXT,                -- Public chyron text ("Anonymous Supporter" when anonymous)
+      is_anonymous INTEGER DEFAULT 0,
+      payment_method TEXT NOT NULL,     -- 'pledge', 'card', 'check', 'cash', 'match'
+      source TEXT NOT NULL,             -- 'manual', 'bloomerang', 'rehearsal'
+      source_txn_id TEXT,               -- Upstream transaction identifier (unique with source)
+      card_number TEXT,                 -- Physical pledge card serial (#0412)
+      entered_by TEXT,                  -- Operator display name or importer name
+      notes TEXT,                       -- Team-only note; never reaches the audience feed
+      donor_phonetic TEXT,
+      table_number TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ledger_donation_id ON ledger(donation_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_source_txn ON ledger(source, source_txn_id) WHERE source_txn_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_ledger_card_number ON ledger(card_number) WHERE card_number IS NOT NULL;
+  `);
+
+  db.exec(`CREATE TABLE IF NOT EXISTS event_state (id INTEGER PRIMARY KEY CHECK (id = 1), ${EVENT_STATE_COLUMNS.map(([name, ddl]) => `${name} ${ddl}`).join(", ")});`);
+  db.query(`INSERT OR IGNORE INTO event_state (id, updated_at) VALUES (1, ?)`).run(Date.now());
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS held_donations (
+      donation_id TEXT PRIMARY KEY,
+      held_at INTEGER NOT NULL,
+      held_by TEXT,
+      reason TEXT
+    );
+    CREATE TABLE IF NOT EXISTS active_card (
+      card_number TEXT PRIMARY KEY,
+      donation_id TEXT NOT NULL,
+      entered_by TEXT,
+      amount_cents INTEGER NOT NULL DEFAULT 0,
+      donor_name TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS milestone (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sort_order INTEGER NOT NULL,
+      percent_of_goal REAL,
+      cents INTEGER,
+      label TEXT NOT NULL,
+      celebrate INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS ask_tier (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sort_order INTEGER NOT NULL,
+      cents INTEGER NOT NULL,
+      label TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS fundraising_sync (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      form_id TEXT NOT NULL DEFAULT '',
+      start_date TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 0,
+      last_sync_at INTEGER,
+      last_error TEXT NOT NULL DEFAULT '',
+      imported_count INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS fundraising_receipt (
+      transaction_id TEXT PRIMARY KEY,
+      donation_id TEXT NOT NULL,
+      remote_snapshot TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS operator_account (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      display_name TEXT NOT NULL,
+      pin_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('admin', 'operator')),
+      disabled INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS operator_session (
+      token_hash TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES operator_account(id) ON DELETE CASCADE,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS operator_session_account ON operator_session(account_id);
+    CREATE TABLE IF NOT EXISTS operator_invite (
+      token_hash TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES operator_account(id) ON DELETE CASCADE,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS operator_invite_account ON operator_invite(account_id);
+    CREATE TABLE IF NOT EXISTS login_attempt (
+      key TEXT PRIMARY KEY,
+      attempts INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS access_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_id TEXT,
+      action TEXT NOT NULL,
+      target_id TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS team_note (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      author_id TEXT NOT NULL,
+      author_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+  `);
+  db.query(`INSERT OR IGNORE INTO fundraising_sync (id) VALUES (1)`).run();
+
+  if (!db.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM milestone`).get()!.n) {
+    const insert = db.prepare(`INSERT INTO milestone (sort_order, percent_of_goal, cents, label, celebrate) VALUES (?, ?, NULL, ?, 1)`);
+    insert.run(1, 25, "Foundation");
+    insert.run(2, 50, "Staffing");
+    insert.run(3, 75, "Legal Clinic");
+    insert.run(4, 100, "Expansion Goal");
+  }
+  if (!db.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM ask_tier`).get()!.n) {
+    const insert = db.prepare(`INSERT INTO ask_tier (sort_order, cents, label) VALUES (?, ?, ?)`);
+    [[5000000, "$50,000"], [2500000, "$25,000"], [1000000, "$10,000"], [500000, "$5,000"], [200000, "$2,000"], [100000, "$1,000"], [50000, "$500"]]
+      .forEach(([cents, label], index) => insert.run(index + 1, cents, label));
+  }
+}
+
+/** Upgrade from schema 13 (the previous release): retired columns and tables go away, live columns are guaranteed. */
+function upgradeFrom13(db: Database): void {
+  for (const [name, ddl] of EVENT_STATE_COLUMNS) {
+    if (!columnExists(db, "event_state", name)) db.exec(`ALTER TABLE event_state ADD COLUMN ${name} ${ddl};`);
+  }
+  const retiredEventColumns = [
+    "match_pool_cents", "manual_override_cents", "qr_donate_url", "entry_pin", "control_pin", "milestones_json",
+    "confetti_trigger", "confetti_on_milestone", "countdown_seconds", "timer_status", "timer_ends_at",
+    "thermometer_visual_mode", "embed_media_url", "pinned_donation_id", "feature_timer",
+    "bloomerang_api_key", "bloomerang_last_sync_at", "bloomerang_last_error"
+  ];
+  for (const column of retiredEventColumns) {
+    if (columnExists(db, "event_state", column)) db.exec(`ALTER TABLE event_state DROP COLUMN ${column};`);
+  }
+  if (columnExists(db, "ledger", "is_pinned")) db.exec(`ALTER TABLE ledger DROP COLUMN is_pinned;`);
+  db.exec(`DROP TABLE IF EXISTS connector_state;`);
+  db.exec(`DROP INDEX IF EXISTS idx_ledger_seq;`);
+  // Presenter/display roles were never issued; the account table only knows admin and operator.
+  db.exec(`DELETE FROM operator_account WHERE role NOT IN ('admin', 'operator');`);
+  // Stage delay is the documented invariant; a zero here came from the old default, not a choice.
+  db.exec(`UPDATE event_state SET stage_delay_ms = 8000 WHERE stage_delay_ms = 0;`);
 }
 
 export function migrateSchema(db: Database): void {
   db.transaction(() => {
-    // 1. Append-Only Event Ledger (Source of Truth)
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS ledger (
-        seq INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_type TEXT NOT NULL,         -- 'create', 'amend', 'void', 'match_apply', 'match_release'
-        donation_id TEXT NOT NULL,        -- UUID minted on client form open or adapter receipt
-        supersedes_seq INTEGER,           -- Points to superseded record for amendments and voids
-        amount_cents INTEGER NOT NULL,    -- 64-bit signed integer cents ($10,000.00 = 1000000)
-        donor_name TEXT NOT NULL,         -- Full legal or CRM contact name
-        display_name TEXT,                -- Sanitized public chyron text ("Dr. Arthur" or "Anonymous Supporter")
-        is_anonymous INTEGER DEFAULT 0,   -- 1 = true, 0 = false
-        payment_method TEXT NOT NULL,     -- 'pledge', 'card', 'check', 'cash', 'match'
-        source TEXT NOT NULL,             -- 'manual', 'bloomerang', 'kindful', 'stripe', 'qr', 'rehearsal'
-        source_txn_id TEXT,               -- Vendor transaction/charge ID (Unique with source)
-        card_number TEXT,                 -- Physical paper pledge card serial number (0412)
-        entered_by TEXT,                  -- Volunteer initials or adapter name
-        notes TEXT,                       -- Table number, pledge terms, notes
-        donor_phonetic TEXT,              -- Podium pronunciation guide
-        table_number TEXT,                -- Table number for vocal shoutouts
-        created_at INTEGER NOT NULL       -- Server epoch millisecond timestamp
-      );
-    `);
-
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_ledger_seq ON ledger(seq);`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_ledger_donation_id ON ledger(donation_id);`);
-    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_source_txn ON ledger(source, source_txn_id) WHERE source_txn_id IS NOT NULL;`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_ledger_card_number ON ledger(card_number) WHERE card_number IS NOT NULL;`);
-
-    // 2. Event State & Live Configuration
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS event_state (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        event_name TEXT NOT NULL DEFAULT 'Annual Gala & Benefit Auction',
-        event_subtitle TEXT NOT NULL DEFAULT 'Supporting Community Programs & Education',
-        goal_cents INTEGER NOT NULL DEFAULT 50000000,          -- $500,000.00
-        match_pool_cents INTEGER NOT NULL DEFAULT 0,           -- Historical field, derived dynamically
-        match_total_cents INTEGER NOT NULL DEFAULT 0,          -- Total original matching fund
-        match_ratio REAL NOT NULL DEFAULT 1.0,                 -- 1.0 = 1:1 match
-        is_match_active INTEGER NOT NULL DEFAULT 0,            -- 0 = disabled, 1 = active on stage
-        match_sponsor_title TEXT DEFAULT 'Board of Directors Matching Grant',
-        is_frozen INTEGER NOT NULL DEFAULT 0,                  -- 1 = stage display frozen
-        manual_override_cents INTEGER DEFAULT NULL,            -- Manual override total if emergency
-        qr_donate_url TEXT DEFAULT '',                          -- Retired: superseded by qr_url
-        qr_style TEXT NOT NULL DEFAULT 'dots',                 -- 'dots', 'squircle', 'squares'
-        qr_center_icon TEXT NOT NULL DEFAULT 'star',           -- 'star', 'heart', 'gift', 'sparkle', 'none'
-        qr_fg_color TEXT NOT NULL DEFAULT '',                  -- Empty means adapt to theme
-        qr_bg_color TEXT NOT NULL DEFAULT '#FFFFFF',
-        entry_pin TEXT NOT NULL DEFAULT '',
-        control_pin TEXT NOT NULL DEFAULT '',
-        milestones_json TEXT DEFAULT '',                        -- Retired: the milestone child table is authoritative
-        odometer_floor_cents INTEGER NOT NULL DEFAULT 0,
-        confetti_trigger INTEGER NOT NULL DEFAULT 0,            -- Retired
-        theme_preset TEXT NOT NULL DEFAULT 'champagne',
-        brand_hue REAL NOT NULL DEFAULT 85,
-        brand_chroma REAL NOT NULL DEFAULT 0.12,
-        brand_accent_hex TEXT NOT NULL DEFAULT '',
-        brand_radius_px INTEGER NOT NULL DEFAULT 12,
-        major_gift_threshold_cents INTEGER NOT NULL DEFAULT 950000,
-        stage_delay_ms INTEGER NOT NULL DEFAULT 0,
-        confetti_on_milestone INTEGER NOT NULL DEFAULT 1,       -- Retired
-        countdown_seconds INTEGER NOT NULL DEFAULT 300,
-        timer_status TEXT NOT NULL DEFAULT 'stopped',
-        timer_ends_at INTEGER DEFAULT NULL,
-        thermometer_visual_mode TEXT NOT NULL DEFAULT 'classic',
-        embed_media_url TEXT DEFAULT '',
-        trust_badge_text TEXT NOT NULL DEFAULT '501(c)(3) Tax-Deductible Contribution',
-        pinned_donation_id TEXT DEFAULT NULL,
-        settings_seq INTEGER NOT NULL DEFAULT 1,
-        logo_url TEXT DEFAULT '',
-        background_style TEXT DEFAULT 'plain',
-        bar_color TEXT DEFAULT '',
-        show_qr INTEGER DEFAULT 1,
-        show_recent_donations INTEGER DEFAULT 1,
-        show_live_indicator INTEGER DEFAULT 1,
-        show_goal INTEGER DEFAULT 1,
-        stage_message TEXT DEFAULT '',
-        stage_message_visible INTEGER DEFAULT 0,
-        feature_timer INTEGER DEFAULT 0,
-        feature_card_number INTEGER DEFAULT 0,
-        feature_table_number INTEGER DEFAULT 0,
-        bloomerang_api_key TEXT DEFAULT '',
-        bloomerang_last_sync_at INTEGER DEFAULT NULL,
-        bloomerang_last_error TEXT DEFAULT '',
-        event_title TEXT DEFAULT '',
-        text_color TEXT DEFAULT '',
-        font_family TEXT DEFAULT 'system',
-        chart_orientation TEXT DEFAULT 'horizontal',
-        qr_url TEXT DEFAULT '',
-        display_url TEXT DEFAULT '',
-        updated_at INTEGER NOT NULL
-      );
-    `);
-
-    // Ensure default state row exists
-    const row = db.query(`SELECT id FROM event_state WHERE id = 1`).get();
-    if (!row) {
-      db.query(`
-        INSERT INTO event_state (
-          id, event_name, event_subtitle, goal_cents, match_pool_cents, match_total_cents,
-          match_ratio, is_match_active, match_sponsor_title, is_frozen,
-          manual_override_cents, qr_url, display_url, qr_style, qr_center_icon, qr_fg_color, qr_bg_color,
-          entry_pin, control_pin, odometer_floor_cents, confetti_trigger,
-          theme_preset, brand_hue, brand_chroma, brand_accent_hex, brand_radius_px,
-          major_gift_threshold_cents, stage_delay_ms, confetti_on_milestone,
-          countdown_seconds, timer_status, timer_ends_at, thermometer_visual_mode,
-          embed_media_url, trust_badge_text, pinned_donation_id,
-          event_title, text_color, font_family, chart_orientation,
-          settings_seq, updated_at
-        ) VALUES (
-          1, 'Annual Gala & Benefit Auction', 'Supporting Community Programs & Education',
-          50000000, 0, 0, 1.0, 0, 'Board of Directors Matching Grant', 0,
-          NULL, '', '', 'dots', 'star', '', '#FFFFFF',
-          '', '',
-          0, 0, 'champagne', 85, 0.12, '', 12, 950000, 0, 1,
-          300, 'stopped', NULL, 'classic', '', '501(c)(3) Tax-Deductible Contribution', NULL,
-          '', '', 'system', 'horizontal',
-          1, ?
-        )
-      `).run(Date.now());
+    const fresh = !tableExists(db, "event_state");
+    const version = db.query<{ user_version: number }, []>(`PRAGMA user_version;`).get()!.user_version;
+    if (!fresh && version !== 13 && version !== SCHEMA_VERSION) {
+      throw new Error(`Unsupported Givebar database schema version ${version}. Restore a backup taken with the previous release or start from a fresh database.`);
     }
-    // 3. Held / Staged Items
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS held_donations (
-        donation_id TEXT PRIMARY KEY,
-        held_at INTEGER NOT NULL,
-        held_by TEXT,
-        reason TEXT
-      );
-    `);
-
-    // Migrate from legacy yanked_chyrons table if it exists
-    try {
-      const tableCheck = db.query<{ name: string }, []>(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name='yanked_chyrons'`
-      ).get();
-      if (tableCheck) {
-        db.exec(`INSERT OR IGNORE INTO held_donations SELECT donation_id, yanked_at, yanked_by, reason FROM yanked_chyrons;`);
-        db.exec(`DROP TABLE yanked_chyrons;`);
-      }
-    } catch {
-      // Ignore if already migrated
-    }
-
-    // 4. Fast Active Card Lookup Table (O(1) duplicate prevention)
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS active_card (
-        card_number TEXT PRIMARY KEY,
-        donation_id TEXT NOT NULL,
-        entered_by TEXT,
-        amount_cents INTEGER NOT NULL DEFAULT 0,
-        donor_name TEXT NOT NULL DEFAULT '',
-        created_at INTEGER NOT NULL
-      );
-    `);
-
-    // 5. Milestones Table (Zero-JSON Schema)
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS milestone (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sort_order INTEGER NOT NULL,
-        percent_of_goal REAL,
-        cents INTEGER,
-        label TEXT NOT NULL,
-        celebrate INTEGER NOT NULL DEFAULT 1
-      );
-    `);
-
-    // Seed default milestones if empty
-    const milestoneCount = db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM milestone`).get();
-    if (!milestoneCount || milestoneCount.count === 0) {
-      const insertMilestone = db.prepare(`
-        INSERT INTO milestone (sort_order, percent_of_goal, cents, label, celebrate)
-        VALUES (?, ?, ?, ?, ?)
-      `);
-      insertMilestone.run(1, 25, null, "Foundation", 1);
-      insertMilestone.run(2, 50, null, "Staffing", 1);
-      insertMilestone.run(3, 75, null, "Legal Clinic", 1);
-      insertMilestone.run(4, 100, null, "Expansion Goal", 1);
-    }
-
-    // 6. Quick Ask Tiers Table (Zero-JSON Schema)
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS ask_tier (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sort_order INTEGER NOT NULL,
-        cents INTEGER NOT NULL,
-        label TEXT NOT NULL
-      );
-    `);
-
-    // Seed default ask tiers if empty
-    const tierCount = db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM ask_tier`).get();
-    if (!tierCount || tierCount.count === 0) {
-      const insertTier = db.prepare(`
-        INSERT INTO ask_tier (sort_order, cents, label)
-        VALUES (?, ?, ?)
-      `);
-      insertTier.run(1, 5000000, "$50,000");
-      insertTier.run(2, 2500000, "$25,000");
-      insertTier.run(3, 1000000, "$10,000");
-      insertTier.run(4, 500000, "$5,000");
-      insertTier.run(5, 200000, "$2,000");
-      insertTier.run(6, 100000, "$1,000");
-      insertTier.run(7, 50000, "$500");
-    }
-
-    // 7. Connector Leases & Checkpoints
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS connector_state (
-        connector_id TEXT PRIMARY KEY,
-        last_cursor TEXT,
-        lease_expires_at INTEGER NOT NULL DEFAULT 0,
-        last_poll_at INTEGER,
-        last_error TEXT
-      );
-    `);
-
-    // Additive migration columns for existing tables
-    const userVersionRow = db.query<{ user_version: number }, []>(`PRAGMA user_version;`).get();
-    const userVersion = userVersionRow ? userVersionRow.user_version : 0;
-
-    if (userVersion < 2) {
-      // Ensure columns exist on ledger
-      try { db.exec(`ALTER TABLE ledger ADD COLUMN donor_phonetic TEXT;`); } catch {}
-      try { db.exec(`ALTER TABLE ledger ADD COLUMN table_number TEXT;`); } catch {}
-
-      // Ensure columns exist on event_state
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN event_subtitle TEXT NOT NULL DEFAULT 'Supporting Community Programs & Education';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN theme_preset TEXT NOT NULL DEFAULT 'champagne';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN brand_hue REAL NOT NULL DEFAULT 85;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN brand_chroma REAL NOT NULL DEFAULT 0.12;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN brand_accent_hex TEXT NOT NULL DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN brand_radius_px INTEGER NOT NULL DEFAULT 12;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN major_gift_threshold_cents INTEGER NOT NULL DEFAULT 950000;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN stage_delay_ms INTEGER NOT NULL DEFAULT 0;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN confetti_on_milestone INTEGER NOT NULL DEFAULT 1;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN settings_seq INTEGER NOT NULL DEFAULT 1;`); } catch {}
-
-      db.exec(`PRAGMA user_version = 2;`);
-    }
-
-    if (userVersion < 3) {
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN qr_style TEXT NOT NULL DEFAULT 'dots';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN qr_center_icon TEXT NOT NULL DEFAULT 'star';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN qr_fg_color TEXT NOT NULL DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN qr_bg_color TEXT NOT NULL DEFAULT '#FFFFFF';`); } catch {}
-
-      db.exec(`PRAGMA user_version = 3;`);
-    }
-
-    if (userVersion < 4) {
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN countdown_seconds INTEGER NOT NULL DEFAULT 300;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN timer_status TEXT NOT NULL DEFAULT 'stopped';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN timer_ends_at INTEGER DEFAULT NULL;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN thermometer_visual_mode TEXT NOT NULL DEFAULT 'classic';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN embed_media_url TEXT DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN trust_badge_text TEXT NOT NULL DEFAULT '501(c)(3) Tax-Deductible Contribution';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN pinned_donation_id TEXT DEFAULT NULL;`); } catch {}
-      try { db.exec(`ALTER TABLE ledger ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;`); } catch {}
-
-      db.exec(`PRAGMA user_version = 4;`);
-    }
-    if (userVersion < 5) {
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN logo_url TEXT DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN background_style TEXT DEFAULT 'plain';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN bar_color TEXT DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN show_qr INTEGER DEFAULT 1;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN show_recent_donations INTEGER DEFAULT 1;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN show_live_indicator INTEGER DEFAULT 1;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN show_goal INTEGER DEFAULT 1;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN stage_message TEXT DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN stage_message_visible INTEGER DEFAULT 0;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN feature_timer INTEGER DEFAULT 0;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN feature_card_number INTEGER DEFAULT 0;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN feature_table_number INTEGER DEFAULT 0;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN bloomerang_api_key TEXT DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN bloomerang_last_sync_at INTEGER DEFAULT NULL;`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN bloomerang_last_error TEXT DEFAULT '';`); } catch {}
-
-      db.exec(`PRAGMA user_version = 5;`);
-    }
-
-    if (userVersion < 6) {
-      // Presentation settings model (Direction B): titles, typography, orientation, QR split.
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN event_title TEXT DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN text_color TEXT DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN font_family TEXT DEFAULT 'system';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN chart_orientation TEXT DEFAULT 'horizontal';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN qr_url TEXT DEFAULT '';`); } catch {}
-      try { db.exec(`ALTER TABLE event_state ADD COLUMN display_url TEXT DEFAULT '';`); } catch {}
-
-      // Default-open auth: clear the legacy seeded PINs that locked operators
-      // out of surfaces they never configured a credential for.
-      try { db.exec(`UPDATE event_state SET control_pin = '' WHERE control_pin = '9999';`); } catch {}
-      try { db.exec(`UPDATE event_state SET entry_pin = '' WHERE entry_pin = '1234';`); } catch {}
-
-      // Adopt the existing donate link as the encoded QR target.
-      try {
-        db.exec(`UPDATE event_state SET qr_url = COALESCE(qr_donate_url, '') WHERE qr_url IS NULL OR qr_url = '';`);
-      } catch {}
-
-      db.exec(`PRAGMA user_version = 6;`);
-    }
-    if (userVersion < 7) {
-      db.exec(`ALTER TABLE event_state ADD COLUMN stage_reset_seq INTEGER NOT NULL DEFAULT 0;`);
-      db.exec(`ALTER TABLE event_state ADD COLUMN marker_mode TEXT NOT NULL DEFAULT 'milestones';`);
-      db.exec(`ALTER TABLE event_state ADD COLUMN marker_step_cents INTEGER NOT NULL DEFAULT 10000000;`);
-      db.exec(`ALTER TABLE event_state ADD COLUMN background_image_url TEXT NOT NULL DEFAULT '';`);
-      db.exec(`PRAGMA user_version = 7;`);
-    }
-    if (userVersion < 8) {
-      db.exec(`CREATE TABLE fundraising_sync (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        form_id TEXT NOT NULL DEFAULT '',
-        start_date TEXT NOT NULL DEFAULT '',
-        enabled INTEGER NOT NULL DEFAULT 0,
-        last_sync_at INTEGER,
-        last_error TEXT NOT NULL DEFAULT '',
-        imported_count INTEGER NOT NULL DEFAULT 0
-      );`);
-      db.exec(`INSERT INTO fundraising_sync (id) VALUES (1);`);
-      db.exec(`CREATE TABLE fundraising_receipt (
-        transaction_id TEXT PRIMARY KEY,
-        donation_id TEXT NOT NULL,
-        remote_snapshot TEXT NOT NULL
-      );`);
-      db.exec(`PRAGMA user_version = 8;`);
-    }
-    if (userVersion < 9) {
-      db.exec(`ALTER TABLE event_state ADD COLUMN gradient_start TEXT NOT NULL DEFAULT '#183b46';`);
-      db.exec(`ALTER TABLE event_state ADD COLUMN gradient_end TEXT NOT NULL DEFAULT '#39213d';`);
-      db.exec(`ALTER TABLE event_state ADD COLUMN gradient_angle INTEGER NOT NULL DEFAULT 135;`);
-      db.exec(`ALTER TABLE event_state ADD COLUMN gradient_intensity INTEGER NOT NULL DEFAULT 35;`);
-      db.exec(`ALTER TABLE event_state ADD COLUMN background_video_url TEXT NOT NULL DEFAULT '';`);
-      db.exec(`PRAGMA user_version = 9;`);
-    }
-    if (userVersion < 10) {
-      db.exec(`ALTER TABLE event_state ADD COLUMN impact_messages TEXT NOT NULL DEFAULT '[]';`);
-      db.exec(`PRAGMA user_version = 10;`);
-    }
-    if (userVersion < 11) {
-      db.exec(`ALTER TABLE event_state ADD COLUMN qr_image_url TEXT NOT NULL DEFAULT '';`);
-      db.exec(`ALTER TABLE event_state ADD COLUMN qr_image_backdrop INTEGER NOT NULL DEFAULT 1;`);
-      db.exec(`PRAGMA user_version = 11;`);
-    }
-    if (userVersion < 12) {
-      db.exec(`CREATE TABLE operator_account (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-        display_name TEXT NOT NULL,
-        pin_hash TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN ('admin', 'operator', 'presenter', 'display')),
-        disabled INTEGER NOT NULL DEFAULT 0,
-        created_at INTEGER NOT NULL
-      );`);
-      db.exec(`CREATE TABLE operator_session (
-        token_hash TEXT PRIMARY KEY,
-        account_id TEXT NOT NULL REFERENCES operator_account(id) ON DELETE CASCADE,
-        expires_at INTEGER NOT NULL
-      );`);
-      db.exec(`CREATE INDEX operator_session_account ON operator_session(account_id);`);
-      db.exec(`CREATE TABLE login_attempt (
-        key TEXT PRIMARY KEY,
-        attempts INTEGER NOT NULL,
-        expires_at INTEGER NOT NULL
-      );`);
-      db.exec(`CREATE TABLE access_audit (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        actor_id TEXT,
-        action TEXT NOT NULL,
-        target_id TEXT,
-        created_at INTEGER NOT NULL
-      );`);
-      db.exec(`UPDATE event_state SET control_pin = '', entry_pin = '';`);
-      db.exec(`PRAGMA user_version = 12;`);
-    }
-    if (userVersion < 13) {
-      db.exec(`CREATE TABLE operator_invite (
-        token_hash TEXT PRIMARY KEY,
-        account_id TEXT NOT NULL REFERENCES operator_account(id) ON DELETE CASCADE,
-        expires_at INTEGER NOT NULL,
-        used_at INTEGER
-      );`);
-      db.exec(`CREATE INDEX operator_invite_account ON operator_invite(account_id);`);
-      db.exec(`PRAGMA user_version = 13;`);
-    }
+    createSchema(db);
+    if (!fresh && version === 13) upgradeFrom13(db);
+    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
   })();
 }

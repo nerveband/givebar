@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import nodemailer from "nodemailer";
-export type OperatorRole = "admin" | "operator" | "presenter" | "display";
+export type OperatorRole = "admin" | "operator";
 export interface OperatorSession {
   accountId: string;
   username: string;
@@ -99,7 +99,7 @@ export function logout(req: Request, db: Database): Response {
   });
 }
 
-/** Role hierarchy: admin > operator > presenter > display. */
+/** Returns the session when its role is allowed, otherwise the 401/403 response to send. */
 export function requireRole(db: Database, req: Request, allowed: OperatorRole[]): OperatorSession | Response {
   const session = getSession(req, db);
   if (!session) return Response.json({ error: "UNAUTHORIZED", message: "Sign in required" }, { status: 401 });
@@ -143,18 +143,52 @@ async function sendBrevoEmail(to: string, subject: string, html: string, text: s
   await transporter.sendMail({ from: "Givebar <info@wavedepth.com>", to, subject, html, text });
 }
 
+/** Plain-language steps every operator needs on the night; shared by the invite email and the team briefing. */
+export const OPERATOR_STEPS = [
+  "Open Manage Donations and press Add donation for every pledge card or verbal pledge. Enter the donor name and the amount, then Record donation.",
+  "Check the donor name and the amount before you press Record. Gifts at or above the major-gift threshold ask you to confirm; so does a gift that looks like one already entered.",
+  "Made a mistake? Press Delete on that row right away. Deleted within the staging delay, it never reaches the ballroom screen. Later deletes keep the screen total steady and the gift can be restored from History.",
+  "Do not enter online gifts. They arrive automatically from the donation page every 30 seconds.",
+  "Tick Anonymous on public screens when a donor asks for it. The team still sees the name; the room sees Anonymous Supporter.",
+  "Use the team note field for anything the finance team should know, and Team notes on Manage Donations to talk to the other operators.",
+  "If the page says Connection lost, keep it open: gifts you record are saved in the browser and sent as soon as the network returns."
+];
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[ch] as string);
+}
+
 export async function createInvite(db: Database, req: Request, accountId: string, email: string): Promise<{ link: string }> {
   const address = email.trim().slice(0, 254);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) throw new Error("Enter a valid email address.");
+  const account = db.query<{ display_name: string; username: string; role: OperatorRole }, [string]>(`SELECT display_name, username, role FROM operator_account WHERE id = ?`).get(accountId);
+  if (!account) throw new Error("Operator not found.");
+  const event = db.query<{ event_name: string; stage_delay_ms: number }, []>(`SELECT event_name, stage_delay_ms FROM event_state WHERE id = 1`).get()!;
   const raw = sessionToken();
   db.query(`INSERT INTO operator_invite (token_hash, account_id, expires_at) VALUES (?, ?, ?)`).run(sha256Hex(raw), accountId, now() + INVITE_MS);
-  const link = `${appOrigin(req)}/signin.html?invite=${raw}`;
-  const account = db.query<{ display_name: string; username: string }, [string]>(`SELECT display_name, username FROM operator_account WHERE id = ?`).get(accountId);
-  const name = account?.display_name || "operator";
-  const firstName = name.split(" ")[0];
-  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#070603;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;"><div style="max-width:560px;margin:0 auto;padding:32px 24px;"><div style="text-align:center;padding:24px 0 8px;"><div style="font-size:22px;font-weight:800;letter-spacing:-0.02em;color:#f4f5f6;">Givebar</div><div style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#d4a359;margin-top:4px;">Live Gala Fundraising</div></div><div style="background:#141519;border:1px solid #2a2c34;border-radius:12px;padding:32px 28px;margin-top:16px;"><h1 style="margin:0 0 8px;font-size:20px;font-weight:800;color:#f4f5f6;">Hi ${firstName}, you're on the team.</h1><p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#c4c6cc;">Your Givebar operator account is ready. Tap the button below to sign in — the link works <strong style="color:#f4f5f6;">once</strong> and expires in <strong style="color:#f4f5f6;">7 days</strong>.</p><div style="text-align:center;margin:24px 0;"><a href="${link}" style="display:inline-block;background:#d4a359;color:#121316;font-weight:800;font-size:15px;text-decoration:none;padding:14px 36px;border-radius:8px;">Sign in to Givebar</a></div><p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#88888e;">After signing in, you can change your PIN anytime from the sign-in page. Your sign-in name is <strong style="color:#c4c6cc;">${account?.username || ""}</strong>.</p><p style="margin:0;font-size:13px;line-height:1.6;color:#88888e;">If you didn't expect this invite, just ignore it — the link dies unused.</p></div><p style="text-align:center;font-size:11px;color:#55575f;margin-top:20px;">Sent by your event team via Givebar · CAIR-Georgia 10th Annual Gala Fundraiser</p></div></body></html>`;
-  const text = `Hi ${firstName},\n\nYour Givebar operator account is ready. Sign in with this one-time link (works once, expires in 7 days):\n${link}\n\nYour sign-in name is ${account?.username || ""}. After signing in you can change your PIN anytime.\n\nIf you didn't expect this, ignore it.`;
-  await sendBrevoEmail(address, "You're on the Givebar team — sign in here", html, text);
+  const origin = appOrigin(req);
+  const link = `${origin}/signin?invite=${raw}`;
+  const firstName = account.display_name.split(" ")[0];
+  const delaySeconds = Math.round(event.stage_delay_ms / 1000);
+  const steps = OPERATOR_STEPS.map(step => step.replace("the staging delay", `${delaySeconds} seconds`));
+  const roleLine = account.role === "admin"
+    ? "You are an administrator: Settings, Testing, backups, and operator accounts are yours."
+    : "You are an operator: you record and correct gifts on Manage Donations.";
+
+  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#070603;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;"><div style="max-width:560px;margin:0 auto;padding:32px 24px;">`
+    + `<div style="text-align:center;padding:24px 0 8px;"><div style="font-size:22px;font-weight:800;letter-spacing:-0.02em;color:#f4f5f6;">Givebar</div><div style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#d4a359;margin-top:4px;">${escapeHtml(event.event_name)}</div></div>`
+    + `<div style="background:#141519;border:1px solid #2a2c34;border-radius:12px;padding:32px 28px;margin-top:16px;color:#c9c6bd;font-size:14px;line-height:1.55;">`
+    + `<h1 style="margin:0 0 8px;font-size:20px;font-weight:800;color:#f4f5f6;">Hi ${escapeHtml(firstName)}, you're on the team.</h1>`
+    + `<p style="margin:0 0 16px;">${escapeHtml(roleLine)}</p>`
+    + `<p style="margin:0 0 20px;"><a href="${link}" style="display:inline-block;background:#e6bd7b;color:#1a1408;font-weight:800;text-decoration:none;padding:14px 22px;border-radius:10px;">Sign in to Givebar</a></p>`
+    + `<p style="margin:0 0 6px;">Your sign-in name is <strong style="color:#f4f5f6;">${escapeHtml(account.username)}</strong>. The button works once and expires in 7 days; after that, sign in at <a href="${origin}/signin" style="color:#e6bd7b;">${origin}/signin</a> with your name and PIN. You can change the PIN any time from the sign-in page.</p>`
+    + `<h2 style="margin:24px 0 8px;font-size:15px;color:#f4f5f6;">What to do on the night</h2>`
+    + `<ol style="margin:0;padding-left:20px;">${steps.map(step => `<li style="margin:0 0 10px;">${escapeHtml(step)}</li>`).join("")}</ol>`
+    + `<h2 style="margin:24px 0 8px;font-size:15px;color:#f4f5f6;">Links</h2>`
+    + `<p style="margin:0;">Manage Donations: <a href="${origin}/donations" style="color:#e6bd7b;">${origin}/donations</a><br>Home and links: <a href="${origin}/" style="color:#e6bd7b;">${origin}/</a></p>`
+    + `</div><p style="margin:16px 0 0;font-size:12px;color:#6b6a63;text-align:center;">If you didn't expect this, ignore it.</p></div></body></html>`;
+  const text = `Hi ${firstName},\n\n${roleLine}\n\nSign in with this one-time link (works once, expires in 7 days):\n${link}\n\nYour sign-in name is ${account.username}. Afterwards sign in at ${origin}/signin with your name and PIN.\n\nWhat to do on the night:\n${steps.map((step, index) => `${index + 1}. ${step}`).join("\n")}\n\nManage Donations: ${origin}/donations\nHome and links: ${origin}/\n\nIf you didn't expect this, ignore it.`;
+  await sendBrevoEmail(address, `${event.event_name}: your Givebar sign-in and steps`, html, text);
   return { link };
 }
 

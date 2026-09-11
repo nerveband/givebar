@@ -1,29 +1,20 @@
-# Givebar — Production Container Build (wavedepth Dokploy)
-FROM oven/bun:1-slim AS base
+# Givebar production container (wavedepth, Dokploy host)
+FROM oven/bun:1-slim
 WORKDIR /app
 
-# Copy dependency manifests
-COPY package.json tsconfig.json ./
+COPY package.json bun.lock tsconfig.json ./
+RUN bun install --frozen-lockfile --production
 
-# Install dependencies if any
-RUN bun install --production
-
-# Copy source code and client assets
 COPY server/ ./server/
 COPY client/ ./client/
 
-# Ensure SQLite data volume directory exists
-RUN mkdir -p /app/data
-
-# Environment configuration
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 ENV GIVEBAR_DB_PATH=/app/data/givebar.sqlite
 
 EXPOSE 3000
-
-# Mountable SQLite persistent volume
+# The SQLite database and its automatic snapshots live on this volume.
 VOLUME ["/app/data"]
 
 CMD ["bun", "run", "server/src/index.ts"]

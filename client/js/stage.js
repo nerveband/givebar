@@ -60,13 +60,11 @@
   var previewOverrides = null;
   var lastGoalCents = 0;
   var currentQrEncoded = '';
-  var lastSuccessfulUpdateAt = Date.now();
+  var lastLivenessOk = null;
   var lastBarKey = '';
   var lastInkKey = '';
   var lastFontKey = '';
   var recentKeys = [];
-  var sseSource = null;
-  var lockedOut = false;
   var latestState = null;
 
   var el = {};
@@ -89,7 +87,6 @@
     el.liveIndicator = $('stage-live-indicator');
     el.liveLabel = el.liveIndicator ? el.liveIndicator.querySelector('.live-label') : null;
     el.liveDot = el.liveIndicator ? el.liveIndicator.querySelector('.pulse-dot') : null;
-    el.degraded = $('stage-degraded-banner');
     el.logoSlot = $('stage-logo-slot');
     el.logoImg = $('stage-logo-img');
     el.title = $('stage-event-title');
@@ -142,55 +139,20 @@
   }
 
   // =========================================================================
-  // Realtime sync (SSE, polling fallback)
+  // Realtime sync: shared live channel (SSE with ping, polling fallback)
   // =========================================================================
   function startSync() {
-    fetchState();
-    setInterval(fetchState, 1500);
-    setInterval(checkStaleness, 1000);
-    initSSE();
-  }
-
-  function checkStaleness() {
-    var isStale = (Date.now() - lastSuccessfulUpdateAt) >= 5000;
-    if (el.liveDot) el.liveDot.classList.toggle('degraded', isStale);
-    if (el.liveIndicator) el.liveIndicator.setAttribute('data-state', isStale ? 'stale' : 'live');
-    if (el.liveLabel) el.liveLabel.textContent = isStale ? 'Reconnecting' : 'Live';
-    // The live indicator already reads "Reconnecting" when the feed is stale;
-    // this banner carries only the state the indicator cannot show.
-    if (el.degraded) el.degraded.hidden = !lockedOut;
-  }
-
-  function initSSE() {
-    try {
-      if (!window.EventSource) return;
-      sseSource = new EventSource('/api/state/stream?role=stage');
-      sseSource.onmessage = function (event) {
-        try {
-          handleStateUpdate(JSON.parse(event.data));
-        } catch (e) { /* polling covers it */ }
-      };
-      sseSource.onerror = function () {
-        if (sseSource) { sseSource.close(); sseSource = null; }
-      };
-    } catch (e) { /* EventSource unavailable */ }
-  }
-
-  function fetchState() {
-    fetch('/api/state?role=stage', { headers: { 'Cache-Control': 'no-cache' } })
-      .then(function (res) {
-        if (res.status === 401) {
-          // Never render a fake zero total: keep the last known good figure.
-          lockedOut = true;
-          checkStaleness();
-          return null;
-        }
-        if (!res.ok) return null;
-        lockedOut = false;
-        return res.json();
-      })
-      .then(function (data) { if (data) handleStateUpdate(data); })
-      .catch(function () { /* staleness watchdog reports it */ });
+    GivebarLive.connect({
+      role: 'stage',
+      onState: handleStateUpdate,
+      onLiveness: function (ok) {
+        if (ok === lastLivenessOk) return;
+        lastLivenessOk = ok;
+        if (el.liveDot) el.liveDot.classList.toggle('degraded', !ok);
+        if (el.liveIndicator) el.liveIndicator.setAttribute('data-state', ok ? 'live' : 'stale');
+        if (el.liveLabel) el.liveLabel.textContent = ok ? 'Live' : 'Reconnecting';
+      }
+    });
   }
 
   // =========================================================================
@@ -200,9 +162,6 @@
     if (!data) return;
     latestState = data;
     if (previewOverrides) data = Object.assign({}, data, previewOverrides);
-    lastSuccessfulUpdateAt = Date.now();
-    lockedOut = false;
-    checkStaleness();
 
     applyBranding(data);
 
