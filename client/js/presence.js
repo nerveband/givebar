@@ -112,7 +112,13 @@
     if (!state.view) {
       const waiting = document.createElement('p');
       waiting.className = 'gbp-empty';
-      waiting.textContent = state.locked ? 'Sign in as an operator to see the roster.' : 'Roster not loaded.';
+      if (state.locked) {
+        const signIn = document.createElement('a');
+        signIn.className = 'btn-secondary';
+        signIn.href = '/signin?next=' + encodeURIComponent(location.pathname);
+        signIn.textContent = 'Sign in to view the private roster';
+        waiting.append(signIn);
+      } else waiting.textContent = 'Roster not loaded.';
       mount.list.appendChild(waiting);
       return;
     }
