@@ -501,9 +501,8 @@
     }
 
     .stage-panel {
-      background: rgba(10, 11, 13, 0.8);
-      backdrop-filter: blur(20px) saturate(115%);
-      -webkit-backdrop-filter: blur(20px) saturate(115%);
+      /* Keep the video behind a solid panel, not a full-frame blur pass per video frame. */
+      background: rgb(10, 11, 13);
       border: 1px solid rgba(255, 255, 255, 0.075);
       border-radius: var(--stage-radius);
       padding: clamp(14px, 1.9vh, 26px) clamp(16px, 1.6vw, 30px);
