@@ -70,7 +70,10 @@ test('the sync polls every 5 seconds, a failure backs the timer off for 30 secon
   const calls: number[] = [];
   let fail = false;
   const realFetch = globalThis.fetch;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const end = tomorrow.slice(5, 7) + tomorrow.slice(8, 10) + tomorrow.slice(0, 4);
+    expect(String(url)).toContain(`: ${end}.json`.replace(": ", ":"));
     calls.push(Date.now());
     if (fail) return new Response('nope', { status: 500 });
     return Response.json(response());

@@ -121,7 +121,8 @@ export function createFundraisingSync(db: Database, readToken = () => {
       const token = readToken();
       if (!token) throw new Error("The Fundraising token has not been provisioned on this server.");
       const date = (value: string) => value.slice(5, 7) + value.slice(8, 10) + value.slice(0, 4);
-      const response = await fetch(`https://secure.qgiv.com/admin/api/reporting/transactions/dates/${date(config.start_date)}:${date(new Date().toISOString().slice(0, 10))}.json`, {
+      // Reporting treats the end date as exclusive; include the current day.
+      const response = await fetch(`https://secure.qgiv.com/admin/api/reporting/transactions/dates/${date(config.start_date)}:${date(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10))}.json`, {
         method: "POST", body: new URLSearchParams({ token }), redirect: "error", signal: AbortSignal.timeout(20000)
       });
       if (!response.ok) throw new Error(`Fundraising request failed (HTTP ${response.status}).`);
