@@ -35,7 +35,7 @@
       badge.dataset.state = data.last_error || !connected ? 'warning' : data.enabled ? 'connected' : 'paused';
       document.getElementById('fundraising-count').textContent = `${data.imported_count} ${data.imported_count === 1 ? 'gift' : 'gifts'}`;
       document.getElementById('fundraising-last-sync').textContent = lastSync;
-      message.textContent = data.last_error || (!connected ? 'Ask the event administrator to provision the Fundraising token on the server.' : !data.enabled ? 'Automatic imports are paused. Existing gifts remain in the ledger.' : data.running ? 'Sync in progress…' : `Connected to form ${data.form_id}. Next automatic check within 30 seconds.`);
+      message.textContent = data.last_error || (!connected ? 'Ask the event administrator to provision the Fundraising token on the server.' : !data.enabled ? 'Automatic imports are paused. Existing gifts remain in the ledger.' : data.running ? 'Sync in progress…' : `Connected to form ${data.form_id}. Next automatic check within ${data.interval_seconds || 5} seconds.`);
       message.style.color = data.last_error ? '#fca5a5' : '';
     } catch (error) {
       message.textContent = error.message;

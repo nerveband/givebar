@@ -148,7 +148,7 @@ export const OPERATOR_STEPS = [
   "Open Manage Donations and press Add donation for every pledge card or verbal pledge. Enter the donor name and the amount, then Record donation.",
   "Check the donor name and the amount before you press Record. Gifts at or above the major-gift threshold ask you to confirm; so does a gift that looks like one already entered.",
   "Made a mistake? Press Delete on that row right away. Deleted within the staging delay, it never reaches the ballroom screen. Later deletes keep the screen total steady and the gift can be restored from History.",
-  "Do not enter online gifts. They arrive automatically from the donation page every 30 seconds.",
+  "Do not enter online gifts. They arrive automatically from the donation page within seconds and go straight to the screen.",
   "Tick Anonymous on public screens when a donor asks for it. The team still sees the name; the room sees Anonymous Supporter.",
   "Use the team note field for anything the finance team should know, and Team notes on Manage Donations to talk to the other operators.",
   "If the page says Connection lost, keep it open: gifts you record are saved in the browser and sent as soon as the network returns."

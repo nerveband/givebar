@@ -168,6 +168,11 @@
     skip.href = `#${main.id}`;
     skip.textContent = 'Skip to content';
     document.body.prepend(skip);
+    // Sticky banners (record, outbox, Undo) sit just below the compact header on phones
+    // and tablets; publish its live height so an open menu never hides them.
+    const publishHeaderHeight = () => document.documentElement.style.setProperty('--ops-header-h', `${sidebar.offsetHeight}px`);
+    publishHeaderHeight();
+    new ResizeObserver(publishHeaderHeight).observe(sidebar);
     const menu = document.createElement('button');
     menu.type = 'button';
     menu.className = 'ops-menu-toggle';

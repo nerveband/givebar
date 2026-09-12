@@ -90,16 +90,21 @@ function heldIds(db: Database): Set<string> {
 }
 
 /**
- * Staging: a gift becomes visible stage_delay_ms after it was recorded. Until then it is
+ * Staging: a manual gift becomes visible stage_delay_ms after it was recorded. Until then it is
  * excluded from the staged fold entirely, so a void or amendment made inside the window
- * is honoured the moment the gift would have appeared. Once on stage, the floor ratchet
+ * is honoured the moment the gift would have appeared. Verified online gifts (source
+ * "bloomerang": a settled card payment, never typed by an operator) skip the window and
+ * reach the wall the moment the sync records them. Once on stage, the floor ratchet
  * keeps the total from ever rolling backward; a pause freezes both figure and feed.
  */
+export function isLiveOnStage(record: { source: string; created_at: number }, stageDelayMs: number, now: number): boolean {
+  return record.source === "bloomerang" || now - record.created_at >= stageDelayMs;
+}
+
 function stagedView(db: Database, state: EventStateRecord, fullFold: FoldedLedger, now: number) {
-  const horizon = now - state.stage_delay_ms;
   const hidden = heldIds(db);
   for (const record of fullFold.all_records.values()) {
-    if (record.created_at > horizon) hidden.add(record.donation_id);
+    if (!isLiveOnStage(record, state.stage_delay_ms, now)) hidden.add(record.donation_id);
   }
   const stagedTotal = hidden.size ? foldLedger(db, { excludeDonationIds: hidden }).total_raised_cents : fullFold.total_raised_cents;
   // The figure on the wall: the ratcheted floor, which a pause holds in place. Any
@@ -261,7 +266,7 @@ export function getControlState(db: Database) {
       notes: record.notes,
       created_at: record.created_at,
       updated_at: record.updated_at,
-      is_live_on_stage: now - record.created_at >= state.stage_delay_ms,
+      is_live_on_stage: isLiveOnStage(record, state.stage_delay_ms, now),
       is_held: heldById.has(record.donation_id),
       held_info: heldById.get(record.donation_id) || null
     }));

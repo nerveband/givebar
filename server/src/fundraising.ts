@@ -82,11 +82,18 @@ export function createFundraisingSync(db: Database, readToken = () => {
   const path = process.env.GIVEBAR_FUNDRAISING_TOKEN_FILE;
   return path ? readFileSync(path, "utf8").trim() : "";
 }) {
+  // Online gifts reach the wall as soon as the reporting API shows them: poll every
+  // 5 s. After a failure (HTTP error, timeout, rejected token) the timer waits
+  // RETRY_AFTER_FAILURE_MS before trying again so an outage or a rate limit never turns
+  // into a request storm; "Sync now" always runs immediately.
+  const POLL_MS = 5000;
+  const RETRY_AFTER_FAILURE_MS = 30000;
   let running = false;
+  let retryAt = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
   const settings = () => db.query<SyncSettings, []>("SELECT * FROM fundraising_sync WHERE id = 1").get()!;
   const tokenAvailable = () => { try { return !!readToken(); } catch { return false; } };
-  const status = () => ({ ...settings(), token_configured: tokenAvailable(), running, interval_seconds: 30 });
+  const status = () => ({ ...settings(), token_configured: tokenAvailable(), running, interval_seconds: POLL_MS / 1000 });
   async function sync() {
     if (running) return status();
     const config = settings();
@@ -108,9 +115,11 @@ export function createFundraisingSync(db: Database, readToken = () => {
         applyFundraisingGifts(db, config.form_id, gifts);
         db.query("UPDATE fundraising_sync SET last_sync_at = ?, last_error = '', imported_count = ? WHERE id = 1").run(Date.now(), gifts.filter(g => g.amount > 0).length);
       })();
+      retryAt = 0;
     } catch (error) {
       const message = error instanceof Error && /^(Fundraising|The configured|The Fundraising|A mixed)/.test(error.message) ? error.message : "Fundraising connection failed; no unverified gifts were imported.";
       db.query("UPDATE fundraising_sync SET last_error = ? WHERE id = 1").run(message);
+      retryAt = Date.now() + RETRY_AFTER_FAILURE_MS;
     } finally { running = false; }
     return status();
   }
@@ -132,5 +141,6 @@ export function createFundraisingSync(db: Database, readToken = () => {
       return Response.json(await sync());
     } catch { return Response.json({ error: "Invalid Fundraising request." }, { status: 400 }); }
   }
-  return { handle, sync, status, start() { if (!timer) { void sync(); timer = setInterval(() => { void sync(); }, 30000); } }, stop() { clearInterval(timer); timer = undefined; } };
+  const tick = () => { if (Date.now() >= retryAt) void sync(); };
+  return { handle, sync, status, start() { if (!timer) { void sync(); timer = setInterval(tick, POLL_MS); } }, stop() { clearInterval(timer); timer = undefined; } };
 }

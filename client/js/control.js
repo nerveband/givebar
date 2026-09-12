@@ -67,6 +67,8 @@
   // --- Table ----------------------------------------------------------------
   function statusOf(item) {
     if (item.is_held) return { key: 'held', label: 'Held' };
+    // Verified online gifts skip the staging window (see server isLiveOnStage).
+    if (item.source === 'bloomerang') return { key: 'confirmed', label: 'On screen' };
     const remainingMs = item.created_at + (state.event_state.stage_delay_ms || 0) - (Date.now() + serverOffsetMs);
     if (remainingMs > 0) return { key: 'pending', label: `On screen in ${Math.ceil(remainingMs / 1000)}s` };
     return { key: 'confirmed', label: 'On screen' };

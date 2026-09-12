@@ -6,10 +6,10 @@
   <title>Settings — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#070603;color-scheme:dark}</style>
-  <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/base.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.3.1">
+  <link rel="stylesheet" href="/css/tokens.css?v=7.4.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.4.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.4.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.4.0">
   <style>
     .settings-accordion {
       display: flex;
@@ -153,7 +153,7 @@
       color: #fca5a5;
       margin-top: 6px;
     }
-    .field-error:empty { display: none; }
+    .field-error:empty, .field-error[hidden] { display: none; }
     .field-error[data-tone="ok"] { color: #86efac; }
 
     .inline-fields {
@@ -474,7 +474,7 @@
               <div class="form-group">
                 <label class="form-label" for="setting-goal-dollars">Fundraising Goal (dollars)</label>
                 <input type="text" inputmode="decimal" id="setting-goal-dollars" class="form-input-text" placeholder="1,500,000">
-                <div class="field-error" id="err-goal">Enter a goal of at least $1.</div>
+                <div class="field-error" id="err-goal" hidden>Enter a goal of at least $1.</div>
               </div>
 
               <div class="form-group">
@@ -550,7 +550,7 @@
                   <div class="form-hint">#hex or oklch(). Empty keeps amber.</div>
                   <input type="text" id="setting-bar-color" class="form-input-text" placeholder="#d4a359" spellcheck="false">
                   <input type="color" id="setting-bar-picker" value="#d4a359" aria-label="Choose bar color">
-                  <div class="field-error" id="err-bar-color">Use a #hex or oklch() value, or leave it empty.</div>
+                  <div class="field-error" id="err-bar-color" hidden>Use a #hex or oklch() value, or leave it empty.</div>
                 </div>
 
                 <div class="form-group">
@@ -558,7 +558,7 @@
                   <div class="form-hint">#hex or oklch(). Empty keeps amber.</div>
                   <input type="text" id="setting-text-color" class="form-input-text" placeholder="#f4d19b" spellcheck="false">
                   <input type="color" id="setting-text-picker" value="#f4d19b" aria-label="Choose figure text color">
-                  <div class="field-error" id="err-text-color">Use a #hex or oklch() value, or leave it empty.</div>
+                  <div class="field-error" id="err-text-color" hidden>Use a #hex or oklch() value, or leave it empty.</div>
                 </div>
               </div>
 
@@ -637,7 +637,7 @@
                 <label class="form-label" for="setting-qr-url">QR Destination URL</label>
                 <div class="form-hint">Encoded in the automatic QR code. An uploaded graphic keeps its own destination—changing this URL cannot change the image.</div>
                 <input type="url" id="setting-qr-url" class="form-input-text" placeholder="https://give.example.org/gala?utm_source=ballroom&amp;utm_medium=qr" spellcheck="false">
-                <div class="field-error" id="err-qr-url">Enter a full http:// or https:// address, or leave it empty.</div>
+                <div class="field-error" id="err-qr-url" hidden>Enter a full http:// or https:// address, or leave it empty.</div>
               </div>
               <div class="form-group">
                 <label class="form-label" for="setting-qr-image-file">Custom QR artwork</label>
@@ -790,7 +790,7 @@
             <div class="accordion-body" id="sec-connections-body">
               <section class="fundraising-connection" aria-labelledby="fundraising-title">
                 <div class="donation-dialog-heading"><h3 id="fundraising-title">Bloomerang Fundraising</h3><span id="fundraising-badge" class="connection-badge">Checking…</span></div>
-                <p class="form-hint">Online gifts flow into the donation ledger every 30 seconds. No manual re-entry needed.</p>
+                <p class="form-hint">Online gifts flow into the donation ledger every 5 seconds and go straight to the ballroom screen. No manual re-entry needed.</p>
                 <div class="connection-summary">
                   <div><span>Imported gifts</span><strong id="fundraising-count">—</strong></div>
                   <div><span>Last successful sync</span><strong id="fundraising-last-sync">—</strong></div>
@@ -854,9 +854,9 @@
     </main>
   </div>
 
-  <script src="/js/session.js?v=7.3.0"></script>
-  <script src="/js/presence.js?v=7.0.0"></script>
-  <script src="/js/settings.js?v=7.3.0"></script>
-  <script src="/js/fundraising.js?v=7.0.0"></script>
+  <script src="/js/session.js?v=7.4.0"></script>
+  <script src="/js/presence.js?v=7.4.0"></script>
+  <script src="/js/settings.js?v=7.4.0"></script>
+  <script src="/js/fundraising.js?v=7.4.0"></script>
 </body>
 </html>

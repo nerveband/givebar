@@ -44,7 +44,7 @@ Sessions last 12 hours. Disabling an account ends its session immediately. Five 
 
 ## Online gifts (Bloomerang Fundraising)
 
-Settings → Connections → Bloomerang Fundraising. Set the gala form ID and the date to import from, tick **Automatically import gifts**, and save. The server reconciles the form every 30 seconds; **Sync now** runs the same reconciliation. Only the gift amount counts: donor-covered fee assistance and ticket or store purchases are excluded. Refunds and corrections append ledger events and release matching funds. A gift an operator deleted stays deleted. Never enter online gifts by hand.
+Settings → Connections → Bloomerang Fundraising. Set the gala form ID and the date to import from, tick **Automatically import gifts**, and save. The server reconciles the form every 5 seconds (after a failed attempt it waits 30 seconds before retrying); **Sync now** runs the same reconciliation immediately. Online gifts skip the staging delay: they are settled card payments, so they reach the ballroom screen the moment the sync records them. Only the gift amount counts: donor-covered fee assistance and ticket or store purchases are excluded. Refunds and corrections append ledger events and release matching funds. A gift an operator deleted stays deleted. Never enter online gifts by hand.
 
 The Fundraising token lives in a mode-600 file on the server (`GIVEBAR_FUNDRAISING_TOKEN_FILE`). It is never shown in the app.
 

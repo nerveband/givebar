@@ -705,6 +705,7 @@ dialog::backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
 #add-donation-status, #outbox-status { padding:16px; margin-bottom:20px; border:1px solid #41664a; border-radius:12px; color:#b5ecc1; }
 /* Feedback that must survive scrolling: the record confirmation, the sync queue, and the 30-second undo. */
 #add-donation-status, #outbox-status, .undo-bar { position: sticky; top: 8px; z-index: 30; background: #10160f; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+@media (max-width: 900px) { #add-donation-status, #outbox-status, .undo-bar { top: calc(var(--ops-header-h, 86px) + 8px); } }
 #outbox-status { background: #1c1810; }
 .undo-bar { background: #1c1a14; top: 8px; }
 .undo-btn { min-height: 44px; padding: 0 18px; font-size: 14px; }
@@ -900,7 +901,8 @@ textarea.form-input-text { min-height:80px; resize:vertical; }
 @media (max-width: 900px) { .toast-host { bottom: 88px; } }
 
 /* Donation dialog: scrolling body, fixed footer that never covers a field */
-.donation-dialog { display: flex; flex-direction: column; padding: 0; max-height: calc(100dvh - 24px); }
+.donation-dialog[open] { display: flex; flex-direction: column; }
+.donation-dialog { padding: 0; max-height: calc(100dvh - 24px); }
 .donation-dialog form { display: flex; flex-direction: column; min-height: 0; flex: 1; gap: 0; }
 .donation-dialog .dialog-head { padding: clamp(16px, 3vw, 24px) clamp(16px, 4vw, 32px) 8px; }
 .donation-dialog .dialog-body { display: grid; gap: 16px; padding: 8px clamp(16px, 4vw, 32px) 16px; overflow: auto; min-height: 0; flex: 1; }

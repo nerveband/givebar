@@ -177,6 +177,9 @@
       majorBox.hidden = false; majorConfirmed.focus(); return;
     }
     const payload = collect(cents);
+    // Minted before the write so a retry after a lost response replays the same gift:
+    // the server treats a second PUT for a known donation_id as already recorded.
+    const donationId = editing ? null : crypto.randomUUID();
     pending = true;
     form.querySelectorAll('input, textarea, button').forEach(control => { control.disabled = true; });
     submit.textContent = editing ? 'Saving…' : 'Recording…';
@@ -191,7 +194,6 @@
         window.dispatchEvent(new Event('givebar:donation-recorded'));
         return;
       }
-      const donationId = crypto.randomUUID();
       const response = await GivebarSession.api(`/api/donation/${donationId}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
       const result = await response.json();
       if (handleRail(response, result, cents)) return;
@@ -204,8 +206,8 @@
         showError('The server could not be reached. Your changes were not saved; try again in a moment.');
         return;
       }
-      // Keep the exact identifier so a lost response can never create a second gift.
-      outbox.push({ donation_id: crypto.randomUUID(), ...payload, confirmed_duplicate: true });
+      // Same identifier, same confirmation state: the guards still apply on replay.
+      outbox.push({ donation_id: donationId, ...payload });
       saveOutbox();
       announce(`${fmt.money(cents)} from ${payload.donor_name} is waiting to sync and is not yet counted. Do not enter it again.`);
       dialog.close();
@@ -227,7 +229,10 @@
         const response = await GivebarSession.api(`/api/donation/${payload.donation_id}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
           const result = await response.json().catch(() => ({}));
-          announce(`Waiting gift for ${payload.donor_name}: ${result.message || result.error || 'sync unavailable'}. It stays saved in this browser.`);
+          const reason = response.status === 409 && result.error === 'POSSIBLE_DUPLICATE'
+            ? `${fmt.money(result.prior_amount_cents)} from ${result.prior_donor_name} is already recorded. If this waiting gift is the same one, discard it; if it is a different gift, enter it again and tick "record anyway", then discard this one.`
+            : `${result.message || result.error || 'sync unavailable'}. It stays saved in this browser.`;
+          announce(`Waiting gift for ${payload.donor_name}: ${reason}`);
           break;
         }
         outbox = outbox.filter(item => item.donation_id !== payload.donation_id);

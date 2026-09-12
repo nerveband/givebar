@@ -312,7 +312,7 @@
 
   function setFieldValidity(input, errEl, ok) {
     if (input) input.classList.toggle('invalid', !ok);
-    if (errEl) errEl.style.display = ok ? 'none' : 'block';
+    if (errEl) errEl.hidden = ok;
     return ok;
   }
 
@@ -379,6 +379,7 @@
     if (fontFamilySelect) {
       fontFamilySelect.value = FONT_KEYS.includes(es.font_family) ? es.font_family : DEFAULT_FONT_KEY;
     }
+    setFieldValidity(goalDollarsInput, errGoal, true);
     setFieldValidity(barColorInput, errBarColor, true);
     setFieldValidity(textColorInput, errTextColor, true);
     updateChartPreview();
