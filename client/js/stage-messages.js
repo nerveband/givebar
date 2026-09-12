@@ -16,10 +16,13 @@
     field.addEventListener('input', () => { rotationDirty = true; });
     row.append(field, remove); list.append(row); return field;
   }
-  input.addEventListener('input', () => { messageDirty = true; });
+  const counter = document.getElementById('stage-message-count');
+  const count = () => { counter.textContent = `${input.value.length} / ${input.maxLength}`; counter.style.color = input.value.length >= input.maxLength ? '#fca5a5' : ''; };
+  input.addEventListener('input', () => { messageDirty = true; count(); });
+  count();
   window.addEventListener('givebar:control-state', event => {
     const state = event.detail.event_state;
-    if (!messageDirty) input.value = state.stage_message || '';
+    if (!messageDirty) { input.value = state.stage_message || ''; count(); }
     if (!rotationDirty && lastMessages !== state.impact_messages) {
       list.replaceChildren(); JSON.parse(state.impact_messages || '[]').forEach(addPoint); lastMessages = state.impact_messages;
     }

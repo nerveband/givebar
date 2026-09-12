@@ -60,10 +60,10 @@
       stageDelayMs = data.stage_delay_ms;
       $('field-card-number-wrap').hidden = !data.feature_card_number;
       $('field-table-number-wrap').hidden = !data.feature_table_number;
-      $('preset-grid').replaceChildren(...data.ask_tiers.map(tier => {
+      $('preset-grid').replaceChildren(...[...data.ask_tiers].sort((a, b) => a.cents - b.cents).map(tier => {
         const button = document.createElement('button');
         button.type = 'button'; button.className = 'btn-secondary'; button.textContent = fmt.money(tier.cents);
-        button.addEventListener('click', () => { amount.value = (tier.cents / 100).toLocaleString('en-US'); resetConfirmations(); amount.focus(); });
+        button.addEventListener('click', () => { amount.value = (tier.cents / 100).toLocaleString('en-US'); resetConfirmations(); echoAmount(); amount.focus(); });
         return button;
       }));
     } catch (_) { /* Server still enforces every rail. */ }
@@ -93,6 +93,7 @@
     dialog.showModal();
     donor.focus();
     loadSettings();
+    echoAmount();
   }
 
   $('btn-open-add').addEventListener('click', () => open(null));
@@ -105,6 +106,16 @@
     error.hidden = true;
     if (event.target !== majorConfirmed && event.target !== duplicateConfirmed) resetConfirmations();
   });
+
+  /** The submit button repeats the amount so the operator confirms with their eyes on the number. */
+  function echoAmount() {
+    if (pending) return;
+    const cents = parseAmount();
+    submit.textContent = editing
+      ? (cents ? `Save changes (${fmt.money(cents)})` : 'Save changes')
+      : (cents ? `Record ${fmt.money(cents)}` : 'Record donation');
+  }
+  amount.addEventListener('input', echoAmount);
 
   function parseAmount() {
     const raw = amount.value.trim().replace(/^\$/, '');
@@ -199,7 +210,7 @@
     } finally {
       pending = false;
       form.querySelectorAll('input, textarea, button').forEach(control => { control.disabled = false; });
-      submit.textContent = editing ? 'Save changes' : 'Record donation';
+      echoAmount();
       if (!error.hidden) form.querySelector('[aria-invalid="true"]')?.focus();
       else if (!majorBox.hidden) majorConfirmed.focus();
       else if (!duplicateBox.hidden) duplicateConfirmed.focus();

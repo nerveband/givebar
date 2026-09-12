@@ -180,7 +180,7 @@
   // --- Delete and undo ------------------------------------------------------
   function promptDelete(item) {
     pendingDelete = item;
-    const live = item.is_live_on_stage && !item.is_held;
+    const live = statusOf(item).key === 'confirmed';
     $('delete-dialog-body').textContent = live
       ? `Delete ${fmt.money(item.amount_cents)} from ${item.donor_name}? It leaves the total and the list. The ballroom figure never rolls backward, so the screen absorbs the difference in later gifts. Restorable from History.`
       : `Delete ${fmt.money(item.amount_cents)} from ${item.donor_name}? It has not reached the ballroom screen yet, so nobody in the room will see it. Restorable from History.`;

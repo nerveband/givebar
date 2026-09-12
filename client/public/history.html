@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
   <link rel="stylesheet" href="/css/base.css?v=7.0.0">
   <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.2.1">
   <style>
     .timeline-wrap {
       position: relative;
@@ -120,13 +120,14 @@
 
     .btn-timeline-action {
       background: transparent;
-      border: none;
-      color: #88888e;
-      font-size: var(--text-xs);
+      border: 1px solid #383a44;
+      border-radius: 8px;
+      color: #d8dade;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-      text-decoration: underline;
-      padding: 4px 8px;
+      min-height: 44px;
+      padding: 8px 14px;
       border-radius: var(--brand-radius);
       font-family: var(--font-sans);
       transition: color 0.12s ease;
@@ -134,9 +135,11 @@
     }
 
     .btn-timeline-action:hover {
-      color: #d4a359;
-      background: #202126;
+      color: #f4f5f6;
+      border-color: #d4a359;
     }
+    .btn-timeline-action.danger { color: #fca5a5; border-color: #78313d; background: #2a1416; }
+    .btn-timeline-action.danger:hover { border-color: #fca5a5; }
 
     /* Filter Strip */
     .filter-strip {
@@ -234,8 +237,19 @@
     </main>
   </div>
 
+  <div id="history-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title" aria-describedby="history-dialog-body">
+    <div class="modal-dialog">
+      <h2 id="history-dialog-title" class="modal-title"></h2>
+      <p id="history-dialog-body" class="modal-body"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-history-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-history-confirm" class="btn-danger"></button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/session.js?v=7.0.0"></script>
   <script src="/js/presence.js?v=7.0.0"></script>
-  <script src="/js/history.js?v=7.0.0"></script>
+  <script src="/js/history.js?v=7.2.0"></script>
 </body>
 </html>

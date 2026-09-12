@@ -100,7 +100,6 @@
     el.recentPanel = $('stage-recent-panel');
     el.matchBanner = $('stage-match-banner');
     el.matchText = $('stage-match-text');
-    el.freezeBanner = $('stage-freeze-banner');
 
     if (el.logoImg) {
       el.logoImg.addEventListener('error', function () {
@@ -245,7 +244,6 @@
         el.matchText.textContent = sponsor ? sponsor + ' \u00b7 Gifts Matched' : 'Gifts Matched';
       }
     }
-    if (el.freezeBanner) el.freezeBanner.hidden = !data.is_frozen;
 
     lastTotalCents = totalCents;
     lastGoalCents = goalCents;

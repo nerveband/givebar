@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
   <link rel="stylesheet" href="/css/base.css?v=7.0.0">
   <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.2.1">
   <style>
     .settings-accordion {
       display: flex;
@@ -147,12 +147,14 @@
     }
 
     .field-error {
-      display: none;
+      display: block;
       font-size: var(--text-xs);
       font-weight: 600;
       color: #fca5a5;
       margin-top: 6px;
     }
+    .field-error:empty { display: none; }
+    .field-error[data-tone="ok"] { color: #86efac; }
 
     .inline-fields {
       display: grid;
@@ -877,7 +879,7 @@
                 <input id="operator-username" class="form-input-text" autocomplete="username" maxlength="64">
                 <label class="form-label" for="operator-display">Display name</label>
                 <input id="operator-display" class="form-input-text" autocomplete="name" maxlength="80">
-                <label class="form-label" for="operator-pin">Operator PIN</label>
+                <label class="form-label" for="operator-pin">Operator PIN <span class="form-hint" style="font-weight:400">(4 to 12 characters; digits are easiest on a phone)</span></label>
                 <input id="operator-pin" type="password" class="form-input-text" inputmode="numeric" autocomplete="new-password" minlength="4" maxlength="12">
                 <label class="form-label" for="operator-role">Role</label>
                 <select id="operator-role" class="form-input-text"><option value="operator">Operator</option><option value="admin">Administrator</option></select>
@@ -927,7 +929,7 @@
 
   <script src="/js/session.js?v=7.0.0"></script>
   <script src="/js/presence.js?v=7.0.0"></script>
-  <script src="/js/settings.js?v=7.0.1"></script>
+  <script src="/js/settings.js?v=7.2.0"></script>
   <script src="/js/fundraising.js?v=7.0.0"></script>
 </body>
 </html>

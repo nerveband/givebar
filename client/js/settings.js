@@ -779,6 +779,7 @@
     document.getElementById('btn-create-operator').addEventListener('click', async () => {
       const error = document.getElementById('operator-error');
       error.textContent = '';
+      error.removeAttribute('data-tone');
       const result = await GivebarSession.control('create_account', {
         username: document.getElementById('operator-username').value,
         displayName: document.getElementById('operator-display').value,
@@ -786,6 +787,8 @@
         role: document.getElementById('operator-role').value
       });
       if (!result.ok) { error.textContent = result.data.message || 'Could not create operator.'; return; }
+      error.dataset.tone = 'ok';
+      error.textContent = `Account created for ${document.getElementById('operator-display').value.trim()}. Tell them the name and PIN, or use Sign-in link / Email invite below.`;
       document.getElementById('operator-username').value = '';
       document.getElementById('operator-display').value = '';
       document.getElementById('operator-pin').value = '';
