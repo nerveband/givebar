@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stats — Givebar</title>
+  <meta name="color-scheme" content="dark">
+  <style>html{background:#070603;color-scheme:dark}</style>
+  <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.1.0">
+</head>
+<body>
+  <div class="ops-shell">
+    <aside class="ops-sidebar">
+      <div class="ops-brand">
+        <div class="ops-brand-title">Givebar</div>
+        <div class="ops-brand-sub">Live Gala Fundraising</div>
+      </div>
+      <nav class="ops-nav" aria-label="Main Navigation">
+        <a href="/" class="ops-nav-item">Home</a>
+        <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/donations" class="ops-nav-item">Manage Donations</a>
+        <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
+        <a href="/settings" class="ops-nav-item">Settings</a>
+        <a href="/testing" class="ops-nav-item">Testing</a>
+        <a href="/history" class="ops-nav-item">History</a>
+        <a href="/stats" class="ops-nav-item active" aria-current="page">Stats</a>
+      </nav>
+    </aside>
+
+    <main class="ops-main stats-main">
+      <header class="page-header">
+        <div>
+          <h1>Stats</h1>
+          <p class="form-hint" id="stats-subtitle">Gifts, sources, and how people reached the donation page.</p>
+        </div>
+        <div class="page-header-actions">
+          <a class="btn-secondary" href="/api/export/csv">Download CSV</a>
+        </div>
+      </header>
+
+      <div class="stats-filters" role="group" aria-label="Filters">
+        <div class="seg" id="range-seg" role="radiogroup" aria-label="Time range">
+          <button type="button" data-range="today" role="radio" aria-checked="false">Today</button>
+          <button type="button" data-range="24h" role="radio" aria-checked="false">24 hours</button>
+          <button type="button" data-range="7d" role="radio" aria-checked="false">7 days</button>
+          <button type="button" data-range="30d" role="radio" aria-checked="false">30 days</button>
+          <button type="button" data-range="all" role="radio" aria-checked="true">All</button>
+        </div>
+        <div class="seg" id="source-seg" role="radiogroup" aria-label="Source">
+          <button type="button" data-source="" role="radio" aria-checked="true">All sources</button>
+          <button type="button" data-source="bloomerang" role="radio" aria-checked="false">Online</button>
+          <button type="button" data-source="manual" role="radio" aria-checked="false">By hand</button>
+        </div>
+        <div class="seg" id="method-seg" role="radiogroup" aria-label="Payment method">
+          <button type="button" data-method="" role="radio" aria-checked="true">All methods</button>
+          <button type="button" data-method="pledge" role="radio" aria-checked="false">Pledge</button>
+          <button type="button" data-method="card" role="radio" aria-checked="false">Card</button>
+          <button type="button" data-method="check" role="radio" aria-checked="false">Check</button>
+          <button type="button" data-method="cash" role="radio" aria-checked="false">Cash</button>
+        </div>
+        <span class="form-hint" id="stats-updated"></span>
+      </div>
+
+      <section class="stats-tiles" aria-label="Totals">
+        <div class="stat-tile"><span class="stat-label">Raised in range</span><strong class="stat-val accent" id="t-total">—</strong><span class="stat-sub" id="t-total-sub"></span></div>
+        <div class="stat-tile"><span class="stat-label">Gifts</span><strong class="stat-val" id="t-gifts">—</strong><span class="stat-sub" id="t-gifts-sub"></span></div>
+        <div class="stat-tile"><span class="stat-label">Average gift</span><strong class="stat-val" id="t-average">—</strong><span class="stat-sub" id="t-average-sub"></span></div>
+        <div class="stat-tile"><span class="stat-label">Largest gift</span><strong class="stat-val" id="t-largest">—</strong><span class="stat-sub" id="t-largest-sub"></span></div>
+        <div class="stat-tile"><span class="stat-label">Donation page visitors</span><strong class="stat-val" id="t-visitors">—</strong><span class="stat-sub" id="t-visitors-sub"></span></div>
+        <div class="stat-tile"><span class="stat-label">Arrived via QR or link</span><strong class="stat-val" id="t-tagged">—</strong><span class="stat-sub" id="t-tagged-sub"></span></div>
+      </section>
+
+      <section class="stats-card">
+        <div class="stats-card-head"><h2>Total raised over time</h2><span class="form-hint" id="timeline-hint"></span></div>
+        <div id="chart-timeline" class="chart"></div>
+      </section>
+
+      <div class="stats-grid">
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>Gifts per period</h2></div>
+          <div id="chart-gifts" class="chart"></div>
+        </section>
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>Donation page visits</h2><span class="form-hint" id="web-hint"></span></div>
+          <div id="chart-web" class="chart"></div>
+        </section>
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>By source</h2></div>
+          <div id="chart-source" class="chart bars"></div>
+        </section>
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>By payment method</h2></div>
+          <div id="chart-method" class="chart bars"></div>
+        </section>
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>Gift sizes</h2></div>
+          <div id="chart-size" class="chart bars"></div>
+        </section>
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>Time of day</h2><span class="form-hint">Eastern</span></div>
+          <div id="chart-hour" class="chart bars"></div>
+        </section>
+      </div>
+
+      <div class="stats-grid">
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>QR codes and tagged links</h2><span class="form-hint">Visitors who arrived with UTM tags</span></div>
+          <div id="table-utm" class="stats-table"></div>
+        </section>
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>Where visitors came from</h2></div>
+          <div id="table-referrers" class="stats-table"></div>
+          <div class="stats-card-head" style="margin-top:20px"><h2>Devices on the donation page</h2></div>
+          <div id="chart-devices" class="chart bars"></div>
+        </section>
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>Largest gifts</h2></div>
+          <div id="table-top" class="stats-table"></div>
+        </section>
+        <section class="stats-card">
+          <div class="stats-card-head"><h2>Operator activity</h2></div>
+          <div id="table-operators" class="stats-table"></div>
+          <div class="stats-card-head" style="margin-top:20px"><h2>Donation pages</h2></div>
+          <div id="table-pages" class="stats-table"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/session.js?v=7.0.0"></script>
+  <script src="/js/presence.js?v=7.0.0"></script>
+  <script src="/js/stats.js?v=7.1.0"></script>
+</body>
+</html>

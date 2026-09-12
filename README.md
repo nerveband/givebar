@@ -5,6 +5,7 @@ Live fundraising bar chart and stage suite for nonprofit galas and benefit appea
 - **Fullscreen Bar Chart** `/chart` for the projector or LED wall: rolling total, progress bar, recent-gift feed, rotating impact messages, donation QR.
 - **Presenter View** `/presenter` for the podium: current donor with pronunciation, total, next milestone, full gift list.
 - **Manage Donations** `/donations` for operators: add, edit, delete, undo, team notes, stage messages, pause switch, CSV.
+- **Stats** `/stats` for the team: raised over time with milestones, gifts per period, sources, payment methods, gift sizes, time of day, largest gifts, operator activity, plus donation-page visits, QR/UTM arrivals, referrers, and devices from the website analytics. Filter by range, source, and method.
 - **Settings** `/settings`, **Testing** `/testing`, **History** `/history`, **Home** `/` with links, presence, and the team briefing.
 
 ---
@@ -32,7 +33,7 @@ Administrators create one account per person in Settings → Operator accounts, 
 | :--- | :---: | :---: |
 | Record, edit, delete, restore gifts; team notes | yes | yes |
 | Stage message, impact rotation, pause/resume chart | yes | yes |
-| CSV export, History, Home presence | yes | yes |
+| CSV export, History, Stats, Home presence | yes | yes |
 | Settings, milestones, appearance, QR, ask tiers, matching | | yes |
 | Rehearsal gifts and purge, full reset | | yes |
 | Backups, restore, accounts, invites, Fundraising import setup | | yes |
@@ -88,6 +89,8 @@ bun test
 ```
 
 Environment: `PORT`, `HOST`, `GIVEBAR_DB_PATH`, `GIVEBAR_FUNDRAISING_TOKEN_FILE`, and for invite emails either `BREVO_API_KEY` or `BREVO_SMTP_USER` + `BREVO_SMTP_KEY`. Backups are written next to the database in `backups/`.
+
+Website analytics on the Stats page read the Umami database directly with a read-only role: set `GIVEBAR_UMAMI_DATABASE_URL` (postgres URL) and `GIVEBAR_UMAMI_WEBSITE_ID` (the Umami website UUID). Without them the page shows ledger figures only. Tag donation links with UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`); the ballroom QR already carries `utm_source=givebar&utm_medium=qr`.
 
 ### Production (wavedepth)
 

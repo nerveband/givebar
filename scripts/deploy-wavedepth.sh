@@ -9,9 +9,9 @@
 #   5. wait for /api/state to answer, or roll back to the previous image
 #
 # nginx-rc proxies givebar.wavedepth.com to 127.0.0.1:3333 (Cloudflare in front).
-# Secrets stay on the host: the Fundraising token is a mode-600 file under
-# private/, and the Brevo SMTP key is read from private/brevo-smtp-key (created
-# from the running container's environment on first use). Nothing is printed.
+# Secrets stay on the host under private/ as mode-600 files: the Fundraising
+# token, the Brevo SMTP key, and the read-only Umami database URL that feeds
+# the Stats page (CAIR-Georgia website). Nothing is printed.
 #
 # Usage: scripts/deploy-wavedepth.sh [ssh-target]      (default root@172.245.248.17)
 #        SSH="ssh -F ~/.ssh/config" scripts/deploy-wavedepth.sh isla-production
@@ -31,6 +31,8 @@ fi
 
 REMOTE_LIB=$(cat <<'EOF'
 APP_DIR=/etc/dokploy/applications/givebar
+UMAMI_NETWORK=wd-umami-analytics_default
+UMAMI_WEBSITE_ID=22e2b8d7-39c9-4434-b91d-8a1b8fae91d3
 ensure_smtp_key() {
   if [ ! -s "$APP_DIR/private/brevo-smtp-key" ]; then
     docker inspect givebar --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^BREVO_SMTP_KEY=//p' | head -1 > "$APP_DIR/private/brevo-smtp-key"
@@ -45,9 +47,13 @@ run_container() {
     -e NODE_ENV=production -e PORT=3000 -e HOST=0.0.0.0 -e GIVEBAR_DB_PATH=/app/data/givebar.sqlite \
     -e GIVEBAR_FUNDRAISING_TOKEN_FILE=/run/secrets/givebar-fundraising-token \
     -e BREVO_SMTP_USER=info@wavedepth.com -e BREVO_SMTP_KEY="$(cat "$APP_DIR/private/brevo-smtp-key")" \
+    -e GIVEBAR_UMAMI_DATABASE_URL="$(cat "$APP_DIR/private/umami-database-url" 2>/dev/null || true)" \
+    -e GIVEBAR_UMAMI_WEBSITE_ID="$UMAMI_WEBSITE_ID" \
     -v "$APP_DIR/data:/app/data" \
     -v "$APP_DIR/private/fundraising-token:/run/secrets/givebar-fundraising-token:ro" \
     "$1" >/dev/null
+  # Stats reads the Umami database over its private network; the container stays on the default bridge for nginx-rc.
+  docker network connect "$UMAMI_NETWORK" givebar 2>/dev/null || true
 }
 healthy() {
   for _ in $(seq 1 25); do

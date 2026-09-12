@@ -9,6 +9,7 @@ import { handleQRRequest } from "./routes/qr";
 import { handlePresenceRequest } from "./presence";
 import { createFundraisingSync } from "./fundraising";
 import { createBackupManager } from "./backup";
+import { createWebStats, handleStatsRequest } from "./stats";
 import { getSession, type OperatorRole } from "./authz";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
@@ -23,6 +24,7 @@ const backups = createBackupManager(db, DB_PATH);
 backups.start();
 const fundraising = createFundraisingSync(db);
 fundraising.start();
+const webStats = createWebStats();
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -80,6 +82,7 @@ const PUBLIC_PAGES: Record<string, string> = {
 const OPERATOR_PAGES: Record<string, { file: string; roles: OperatorRole[] }> = {
   "/donations": { file: "public/control.html", roles: ["admin", "operator"] },
   "/history": { file: "public/history.html", roles: ["admin", "operator"] },
+  "/stats": { file: "public/stats.html", roles: ["admin", "operator"] },
   "/settings": { file: "public/settings.html", roles: ["admin"] },
   "/testing": { file: "public/testing.html", roles: ["admin"] }
 };
@@ -103,6 +106,7 @@ export const server = Bun.serve({
       if (resource === "donation") return withSecurity(await handleDonationRequest(req, db, parts));
       if (resource === "control") return withSecurity(await handleControlRequest(req, db, backups));
       if (resource === "history") return withSecurity(handleHistoryRequest(req, db));
+      if (resource === "stats") return withSecurity(await handleStatsRequest(req, db, webStats));
       if (resource === "export" && parts[2] === "csv") return withSecurity(handleExportCSV(req, db));
       if (resource === "export" && parts[2] === "backup") return withSecurity(handleExportBackup(req, db, backups));
       if (resource === "rehearsal") return withSecurity(await handleRehearsalRequest(req, db));
