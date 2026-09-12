@@ -42,6 +42,56 @@ describe("Sessions", () => {
     expect((await handleControlRequest(control({ action: "login", username: "founder", pin: "1357911" }), db, backups)).status).toBe(200);
   });
 
+  test("email and username authenticate the same account, and removing email or disabling the account revokes email access", async () => {
+    const admin = await sessionCookie(db, backups);
+    const created = await handleControlRequest(control({ action: "create_account", username: "sara", email: " Sara@Example.org ", displayName: "Sara", pin: "2468" }, admin), db, backups);
+    expect(created.status).toBe(200);
+    const { id } = await created.json();
+    for (const username of ["sara", " SARA@EXAMPLE.ORG "]) {
+      const response = await handleControlRequest(control({ action: "login", username, pin: "2468" }), db, backups);
+      expect(response.status).toBe(200);
+      const cookie = response.headers.get("set-cookie")!.split(";")[0];
+      const me = await (await handleControlRequest(control({ action: "auth_check" }, cookie), db, backups)).json();
+      expect(me.username).toBe("sara");
+      expect(me.role).toBe("operator");
+      expect((await handleControlRequest(control({ action: "update_account", id, email: "other@example.org" }, cookie), db, backups)).status).toBe(403);
+    }
+    expect((await handleControlRequest(control({ action: "update_account", id, email: "new@example.org" }, admin), db, backups)).status).toBe(200);
+    expect((await handleControlRequest(control({ action: "login", username: "sara@example.org", pin: "2468" }), db, backups)).status).toBe(401);
+    expect((await handleControlRequest(control({ action: "login", username: "new@example.org", pin: "2468" }), db, backups)).status).toBe(200);
+    await handleControlRequest(control({ action: "update_account", id, email: "" }, admin), db, backups);
+    expect((await handleControlRequest(control({ action: "login", username: "new@example.org", pin: "2468" }), db, backups)).status).toBe(401);
+    expect((await handleControlRequest(control({ action: "login", username: "sara", pin: "2468" }), db, backups)).status).toBe(200);
+    await handleControlRequest(control({ action: "update_account", id, email: "new@example.org", disabled: true }, admin), db, backups);
+    expect((await handleControlRequest(control({ action: "login", username: "new@example.org", pin: "2468" }), db, backups)).status).toBe(401);
+  });
+
+  test("email aliases cannot bypass the five-attempt account lockout", async () => {
+    const admin = await sessionCookie(db, backups);
+    const { accounts } = await (await handleControlRequest(control({ action: "list_accounts" }, admin), db, backups)).json();
+    await handleControlRequest(control({ action: "update_account", id: accounts[0].id, email: "admin@example.org" }, admin), db, backups);
+    for (const username of ["founder", "admin@example.org", "FOUNDER", "ADMIN@EXAMPLE.ORG", "founder"]) {
+      expect((await handleControlRequest(control({ action: "login", username, pin: "0000" }), db, backups)).status).toBe(401);
+    }
+    expect((await handleControlRequest(control({ action: "login", username: "admin@example.org", pin: "1357911" }), db, backups)).status).toBe(429);
+    expect((await handleControlRequest(control({ action: "login", username: "founder", pin: "1357911" }), db, backups)).status).toBe(429);
+  });
+
+  test("account names and emails cannot collide across accounts, including concurrent account creation", async () => {
+    const admin = await sessionCookie(db, backups);
+    const create = (username: string, email?: string) => handleControlRequest(control({ action: "create_account", username, email, displayName: username, pin: "2468" }, admin), db, backups);
+    const responses = await Promise.all([create("sara", "sara@example.org"), create("sara@example.org")]);
+    expect(responses.map(r => r.status).sort()).toEqual([200, 409]);
+    const ownerIndex = responses.findIndex(r => r.status === 200);
+    const owner = await responses[ownerIndex].json();
+    const other = await (await create("other", "other@example.org")).json();
+    expect((await create("third", "SARA@EXAMPLE.ORG")).status).toBe(409);
+    expect((await handleControlRequest(control({ action: "update_account", id: other.id, email: "sara@example.org" }, admin), db, backups)).status).toBe(409);
+    expect((await handleControlRequest(control({ action: "update_account", id: owner.id, email: "OTHER@EXAMPLE.ORG" }, admin), db, backups)).status).toBe(409);
+    expect((await handleControlRequest(control({ action: "login", username: "other@example.org", pin: "2468" }), db, backups)).status).toBe(200);
+    expect((await create("invalid", "not-an-email")).status).toBe(400);
+  });
+
   test("bootstrap works once; afterwards only administrators create accounts, and disabling revokes immediately", async () => {
     const admin = await sessionCookie(db, backups);
     expect((await handleControlRequest(control({ action: "bootstrap_admin", username: "x", displayName: "X", pin: "1234" }), db, backups)).status).toBe(403);

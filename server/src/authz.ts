@@ -37,7 +37,7 @@ function now(): number {
 }
 
 export function normalizeUsername(value: unknown): string {
-  return String(value || "").trim().toLowerCase().slice(0, 64);
+  return String(value || "").trim().toLowerCase();
 }
 
 export function getSession(req: Request, db: Database): OperatorSession | null {
@@ -58,21 +58,23 @@ export function getSession(req: Request, db: Database): OperatorSession | null {
 }
 
 export async function login(db: Database, req: Request, username: string, pin: string, ip: string): Promise<{ response: Response; accountId?: string; action?: string }> {
-  const key = `${ip}:${normalizeUsername(username)}`;
+  const identifier = normalizeUsername(username);
+  const account = db.query<{ id: string; username: string; display_name: string; pin_hash: string; role: OperatorRole; disabled: number }, [string, string]>(
+    `SELECT id, username, display_name, pin_hash, role, disabled FROM operator_account WHERE username = ? OR email = ?`
+  ).get(identifier, identifier);
+  // Both sign-in identifiers share the same attempt budget.
+  const key = `${ip}:${account?.username || identifier}`;
   const attempt = db.query<{ attempts: number; expires_at: number }, [string]>(`SELECT attempts, expires_at FROM login_attempt WHERE key = ?`).get(key);
   if (attempt && attempt.expires_at > now() && attempt.attempts >= MAX_ATTEMPTS) {
     return { response: Response.json({ error: "LOCKED_OUT", message: "Too many sign-in attempts. Wait 15 minutes." }, { status: 429 }) };
   }
   if (attempt && attempt.expires_at <= now()) db.query(`DELETE FROM login_attempt WHERE key = ?`).run(key);
 
-  const account = db.query<{ id: string; username: string; display_name: string; pin_hash: string; role: OperatorRole; disabled: number }, [string]>(
-    `SELECT id, username, display_name, pin_hash, role, disabled FROM operator_account WHERE username = ?`
-  ).get(normalizeUsername(username));
   if (!account || account.disabled || !(await Bun.password.verify(pin, account.pin_hash))) {
     const remainingAttempts = (attempt?.attempts || 0) + 1;
     db.query(`INSERT OR REPLACE INTO login_attempt (key, attempts, expires_at) VALUES (?, ?, ?)`).run(key, remainingAttempts, now() + LOCKOUT_MS);
     db.query(`INSERT INTO access_audit (actor_id, action, target_id, created_at) VALUES (?, 'login_failed', ?, ?)`).run(account ? account.id : null, username, now());
-    return { response: Response.json({ error: "UNAUTHORIZED", message: "Invalid name or PIN." }, { status: 401 }) };
+    return { response: Response.json({ error: "UNAUTHORIZED", message: "Invalid name, email, or PIN." }, { status: 401 }) };
   }
 
   db.query(`DELETE FROM login_attempt WHERE key = ?`).run(key);
@@ -183,12 +185,13 @@ export function createInviteLink(db: Database, req: Request, accountId: string):
 export async function createInvite(db: Database, req: Request, accountId: string, email: string): Promise<{ link: string }> {
   const address = email.trim().slice(0, 254);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) throw new Error("Enter a valid email address.");
-  const account = db.query<{ display_name: string; username: string; role: OperatorRole }, [string]>(`SELECT display_name, username, role FROM operator_account WHERE id = ?`).get(accountId);
+  const account = db.query<{ display_name: string; username: string; email: string | null; role: OperatorRole }, [string]>(`SELECT display_name, username, email, role FROM operator_account WHERE id = ?`).get(accountId);
   if (!account) throw new Error("Operator not found.");
   const event = db.query<{ event_name: string; stage_delay_ms: number }, []>(`SELECT event_name, stage_delay_ms FROM event_state WHERE id = 1`).get()!;
   const { link } = createInviteLink(db, req, accountId);
   const origin = appOrigin(req);
   const firstName = account.display_name.split(" ")[0];
+  const signInNames = account.email ? `${account.email} or ${account.username}` : account.username;
   const delaySeconds = Math.round(event.stage_delay_ms / 1000);
   const steps = OPERATOR_STEPS.map(step => step.replace("the staging delay", `${delaySeconds} seconds`));
   const roleLine = account.role === "admin"
@@ -201,13 +204,13 @@ export async function createInvite(db: Database, req: Request, accountId: string
     + `<h1 style="margin:0 0 8px;font-size:20px;font-weight:800;color:#f4f5f6;">Hi ${escapeHtml(firstName)}, you're on the team.</h1>`
     + `<p style="margin:0 0 16px;">${escapeHtml(roleLine)}</p>`
     + `<p style="margin:0 0 20px;"><a href="${link}" style="display:inline-block;background:#e6bd7b;color:#1a1408;font-weight:800;text-decoration:none;padding:14px 22px;border-radius:10px;">Sign in to Givebar</a></p>`
-    + `<p style="margin:0 0 6px;">Your sign-in name is <strong style="color:#f4f5f6;">${escapeHtml(account.username)}</strong>. The button works once and expires in 7 days; after that, sign in at <a href="${origin}/signin" style="color:#e6bd7b;">${origin}/signin</a> with your name and PIN. You can change the PIN any time from the sign-in page.</p>`
+    + `<p style="margin:0 0 6px;">Sign in with <strong style="color:#f4f5f6;">${escapeHtml(signInNames)}</strong>. The button works once and expires in 7 days; after that, sign in at <a href="${origin}/signin" style="color:#e6bd7b;">${origin}/signin</a> with your email or sign-in name and PIN.</p>`
     + `<h2 style="margin:24px 0 8px;font-size:15px;color:#f4f5f6;">What to do on the night</h2>`
     + `<ol style="margin:0;padding-left:20px;">${steps.map(step => `<li style="margin:0 0 10px;">${escapeHtml(step)}</li>`).join("")}</ol>`
     + `<h2 style="margin:24px 0 8px;font-size:15px;color:#f4f5f6;">Links</h2>`
     + `<p style="margin:0;">Manage Donations: <a href="${origin}/donations" style="color:#e6bd7b;">${origin}/donations</a><br>Home and links: <a href="${origin}/" style="color:#e6bd7b;">${origin}/</a></p>`
     + `</div><p style="margin:16px 0 0;font-size:12px;color:#6b6a63;text-align:center;">If you didn't expect this, ignore it.</p></div></body></html>`;
-  const text = `Hi ${firstName},\n\n${roleLine}\n\nSign in with this one-time link (works once, expires in 7 days):\n${link}\n\nYour sign-in name is ${account.username}. Afterwards sign in at ${origin}/signin with your name and PIN.\n\nWhat to do on the night:\n${steps.map((step, index) => `${index + 1}. ${step}`).join("\n")}\n\nManage Donations: ${origin}/donations\nHome and links: ${origin}/\n\nIf you didn't expect this, ignore it.`;
+  const text = `Hi ${firstName},\n\n${roleLine}\n\nSign in with this one-time link (works once, expires in 7 days):\n${link}\n\nSign in with ${signInNames}. Afterwards sign in at ${origin}/signin with your email or sign-in name and PIN.\n\nWhat to do on the night:\n${steps.map((step, index) => `${index + 1}. ${step}`).join("\n")}\n\nManage Donations: ${origin}/donations\nHome and links: ${origin}/\n\nIf you didn't expect this, ignore it.`;
   await sendBrevoEmail(address, `${event.event_name}: your Givebar sign-in and steps`, html, text);
   return { link };
 }

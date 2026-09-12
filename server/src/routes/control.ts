@@ -204,9 +204,11 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
     const username = normalizeUsername(body.username);
     const displayName = String(body.displayName || "").trim().slice(0, 80);
     const pin = String(body.pin || "");
-    if (!username || !displayName || pin.length < 4 || pin.length > 12) return Response.json({ error: "INVALID_ACCOUNT", message: "Name, display name, and a 4-12 character PIN are required." }, { status: 400 });
+    if (!username || username.length > 64 || !displayName || pin.length < 4 || pin.length > 12) return Response.json({ error: "INVALID_ACCOUNT", message: "Name (up to 64 characters), display name, and a 4-12 character PIN are required." }, { status: 400 });
     const id = crypto.randomUUID();
-    db.query(`INSERT INTO operator_account (id, username, display_name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, 'admin', ?)`).run(id, username, displayName, await Bun.password.hash(pin), Date.now());
+    const pinHash = await Bun.password.hash(pin);
+    if (db.query(`SELECT id FROM operator_account WHERE username = ? OR email = ?`).get(username, username)) return Response.json({ error: "ACCOUNT_EXISTS", message: "That sign-in name already belongs to an account." }, { status: 409 });
+    db.query(`INSERT INTO operator_account (id, username, display_name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, 'admin', ?)`).run(id, username, displayName, pinHash, Date.now());
     audit(db, id, "bootstrap_admin");
     return Response.json({ ok: true, id });
   }
@@ -333,17 +335,23 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
         const denied = adminOnly();
         if (denied) return denied;
         const username = normalizeUsername(body.username);
+        const email = normalizeUsername(body.email) || null;
         const displayName = String(body.displayName || "").trim().slice(0, 80);
         const pin = String(body.pin || "");
         const role = String(body.role || "operator");
-        if (!username || !displayName || pin.length < 4 || pin.length > 12 || !["admin", "operator"].includes(role)) {
-          return Response.json({ error: "INVALID_ACCOUNT", message: "Name, display name, 4-12 character PIN, and admin/operator role are required." }, { status: 400 });
+        if (!username || username.length > 64 || !displayName || pin.length < 4 || pin.length > 12 || !["admin", "operator"].includes(role)) {
+          return Response.json({ error: "INVALID_ACCOUNT", message: "Name (up to 64 characters), display name, 4-12 character PIN, and admin/operator role are required." }, { status: 400 });
         }
+        if (email && (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) return Response.json({ error: "INVALID_EMAIL", message: "Enter a valid email address." }, { status: 400 });
         const id = crypto.randomUUID();
+        const pinHash = await Bun.password.hash(pin);
         try {
-          db.query(`INSERT INTO operator_account (id, username, display_name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, username, displayName, await Bun.password.hash(pin), role, Date.now());
+          if (db.query(`SELECT id FROM operator_account WHERE username IN (?, ?) OR email IN (?, ?)`).get(username, email, username, email)) {
+            return Response.json({ error: "ACCOUNT_EXISTS", message: "That sign-in name or email already belongs to an account." }, { status: 409 });
+          }
+          db.query(`INSERT INTO operator_account (id, username, email, display_name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, username, email, displayName, pinHash, role, Date.now());
         } catch {
-          return Response.json({ error: "ACCOUNT_EXISTS", message: "That operator name already exists." }, { status: 409 });
+          return Response.json({ error: "ACCOUNT_EXISTS", message: "That sign-in name or email already belongs to an account." }, { status: 409 });
         }
         audit(db, operator.accountId, "create_account", id);
         return Response.json({ ok: true, id });
@@ -354,6 +362,7 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
         const id = String(body.id || "");
         if (!db.query<{ id: string }, [string]>(`SELECT id FROM operator_account WHERE id = ?`).get(id)) return Response.json({ error: "NOT_FOUND", message: "Operator not found." }, { status: 404 });
         const displayName = body.displayName !== undefined ? String(body.displayName || "").trim().slice(0, 80) : undefined;
+        const email = body.email !== undefined ? normalizeUsername(body.email) || null : undefined;
         const role = body.role !== undefined ? String(body.role) : undefined;
         const pin = body.pin !== undefined ? String(body.pin) : undefined;
         const disabled = body.disabled !== undefined ? Boolean(body.disabled) : undefined;
@@ -361,10 +370,16 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
         if (role !== undefined && !["admin", "operator"].includes(role)) return Response.json({ error: "INVALID_ACCOUNT", message: "Role must be admin or operator." }, { status: 400 });
         if (pin !== undefined && pin !== "" && (pin.length < 4 || pin.length > 12)) return Response.json({ error: "INVALID_PIN", message: "PIN must be 4-12 characters." }, { status: 400 });
         if (id === operator.accountId && (disabled || (role !== undefined && role !== "admin"))) return Response.json({ error: "INVALID_ACCOUNT", message: "You cannot disable or demote your own administrator account." }, { status: 400 });
+        if (email && (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) return Response.json({ error: "INVALID_EMAIL", message: "Enter a valid email address." }, { status: 400 });
+        const pinHash = pin ? await Bun.password.hash(pin) : undefined;
+        if (email && db.query(`SELECT id FROM operator_account WHERE id <> ? AND (email = ? OR username = ?)`).get(id, email, email)) {
+          return Response.json({ error: "ACCOUNT_EXISTS", message: "That email already belongs to an account." }, { status: 409 });
+        }
+        if (email !== undefined) db.query(`UPDATE operator_account SET email = ? WHERE id = ?`).run(email, id);
         if (displayName !== undefined) db.query(`UPDATE operator_account SET display_name = ? WHERE id = ?`).run(displayName, id);
         if (role !== undefined) db.query(`UPDATE operator_account SET role = ? WHERE id = ?`).run(role, id);
-        if (pin) {
-          db.query(`UPDATE operator_account SET pin_hash = ? WHERE id = ?`).run(await Bun.password.hash(pin), id);
+        if (pinHash) {
+          db.query(`UPDATE operator_account SET pin_hash = ? WHERE id = ?`).run(pinHash, id);
           db.query(`DELETE FROM operator_session WHERE account_id = ?`).run(id);
         }
         if (disabled !== undefined) {
@@ -400,7 +415,7 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
       case "list_accounts": {
         const denied = adminOnly();
         if (denied) return denied;
-        const accounts = db.query<{ id: string; username: string; display_name: string; role: string; disabled: number; created_at: number }, []>(`SELECT id, username, display_name, role, disabled, created_at FROM operator_account ORDER BY role, username`).all();
+        const accounts = db.query<{ id: string; username: string; email: string | null; display_name: string; role: string; disabled: number; created_at: number }, []>(`SELECT id, username, email, display_name, role, disabled, created_at FROM operator_account ORDER BY role, username`).all();
         return Response.json({ ok: true, accounts: accounts.map(account => ({ ...account, disabled: Boolean(account.disabled) })) });
       }
       case "list_audit": {

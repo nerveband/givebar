@@ -29,6 +29,8 @@ Live fundraising bar chart and stage suite for nonprofit galas and benefit appea
 
 Administrators create one account per person in **Team and backups**, then hand over the name and PIN, copy a one-time **Sign-in link** to text them, or send an **Email invite**. Links work once and expire after 7 days; the email also carries the sign-in name and the steps for the night. Home → **Copy briefing** gives the same steps plus every link as plain text for a group chat.
 
+Accounts can also have a unique sign-in email. Add it when creating the account or use **Edit email** on its row. Email addresses are case-insensitive; the email and existing sign-in name use the same PIN and share the same lockout. Changing or removing an email does not change the PIN.
+
 Viewing does not require sign-in: Home totals, gift count and progress, Donations, History, Stats, the projector, and the presenter are public. Editing requires a named account. Public data pages offer **Sign in to edit** links rather than exposing edit controls. Settings, Team and backups, and Testing are administrative tools and require sign-in. Private CSV exports, team notes, and operator activity also require sign-in. Home uses the live ledger total, not the projector's held figure; an unavailable or invalid total is never displayed as zero or `NaN%`.
 
 | | Operator | Administrator |
@@ -40,7 +42,7 @@ Viewing does not require sign-in: Home totals, gift count and progress, Donation
 | Team and backups: accounts, sign-in links, invites, snapshots, restore | | yes |
 | Testing: rehearsal gifts, purge, chart re-sync; full reset | | yes |
 
-Sessions last 12 hours. Disabling an account ends its session immediately. Five wrong PINs lock a name for 15 minutes.
+Sessions last 12 hours. Disabling an account ends its session immediately. Five wrong PINs lock the account for 15 minutes, whether entered through its email or sign-in name.
 
 ---
 

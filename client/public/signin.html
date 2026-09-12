@@ -18,10 +18,10 @@
 
     <section class="auth-card" id="signin-card">
       <h1>Operator sign in</h1>
-      <p class="form-hint">Use the name and PIN your administrator gave you. Sessions last 12 hours.</p>
+      <p class="form-hint">Use your email address or sign-in name and the PIN your administrator gave you. Sessions last 12 hours.</p>
       <form id="signin-form">
-        <label class="form-label" for="signin-username">Operator name</label>
-        <input id="signin-username" class="form-input-text" autocomplete="username" autocapitalize="none" required maxlength="64">
+        <label class="form-label" for="signin-username">Email or sign-in name</label>
+        <input id="signin-username" class="form-input-text" autocomplete="username" autocapitalize="none" spellcheck="false" required maxlength="254">
         <label class="form-label" for="signin-pin">PIN</label>
         <input id="signin-pin" type="password" class="form-input-text" inputmode="numeric" autocomplete="current-password" required minlength="4" maxlength="12">
         <div id="signin-error" class="field-error" role="alert"></div>
@@ -31,7 +31,7 @@
 
     <section class="auth-card" id="pin-card" hidden>
       <h2>Set your PIN</h2>
-      <p class="form-hint">Your invite link works once. Set a PIN now so you can sign in again later with your name and PIN; it takes a few seconds. Pick something you can type quickly on a phone.</p>
+      <p class="form-hint">Your invite link works once. Set a PIN now so you can sign in again later with your email or sign-in name and PIN; it takes a few seconds. Pick something you can type quickly on a phone.</p>
       <form id="pin-form">
         <label class="form-label" for="pin-current">Current PIN (leave blank if you were never given one)</label>
         <input id="pin-current" type="password" class="form-input-text" autocomplete="current-password" maxlength="12">
@@ -79,7 +79,7 @@
         notice.dataset.tone = redeem.ok ? 'ok' : 'error';
         notice.textContent = redeem.ok
           ? `Welcome, ${redeem.data.displayName}. You are signed in. Set a PIN below so you can sign in again later, or continue.`
-          : 'That invite link is invalid, expired, or already used. Sign in with your name and PIN instead.';
+          : 'That invite link is invalid, expired, or already used. Sign in with your email or sign-in name and PIN instead.';
         invited = redeem.ok;
         history.replaceState(null, '', location.pathname);
       }

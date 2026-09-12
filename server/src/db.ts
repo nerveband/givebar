@@ -4,10 +4,10 @@ import { dirname } from "path";
 
 /**
  * Schema version. Fresh databases are created at this version directly.
- * The only supported upgrade path is from the previous released version (13);
+ * The only supported upgrade path is from the previous released version (14);
  * anything older must start from a fresh database or a restored backup.
  */
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export function initDatabase(dbPath: string = process.env.GIVEBAR_DB_PATH || "data/givebar.sqlite"): Database {
   if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
@@ -24,11 +24,8 @@ function tableExists(db: Database, name: string): boolean {
   return Boolean(db.query<{ name: string }, [string]>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name));
 }
 
-function columnExists(db: Database, table: string, column: string): boolean {
-  return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().some(row => row.name === column);
-}
 
-/** Live event_state columns. Drives the fresh CREATE TABLE and the add-if-missing pass on upgrade. */
+/** Live event_state columns used to create a fresh database. */
 const EVENT_STATE_COLUMNS: [string, string][] = [
   ["event_name", "TEXT NOT NULL DEFAULT 'Annual Gala & Benefit Auction'"],
   ["event_subtitle", "TEXT NOT NULL DEFAULT 'Supporting Community Programs & Education'"],
@@ -161,6 +158,7 @@ function createSchema(db: Database, seedDefaults: boolean): void {
     CREATE TABLE IF NOT EXISTS operator_account (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      email TEXT UNIQUE COLLATE NOCASE,
       display_name TEXT NOT NULL,
       pin_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('admin', 'operator')),
@@ -218,38 +216,21 @@ function createSchema(db: Database, seedDefaults: boolean): void {
   }
 }
 
-/** Upgrade from schema 13 (the previous release): retired columns and tables go away, live columns are guaranteed. */
-function upgradeFrom13(db: Database): void {
-  for (const [name, ddl] of EVENT_STATE_COLUMNS) {
-    if (!columnExists(db, "event_state", name)) db.exec(`ALTER TABLE event_state ADD COLUMN ${name} ${ddl};`);
-  }
-  const retiredEventColumns = [
-    "match_pool_cents", "manual_override_cents", "qr_donate_url", "entry_pin", "control_pin", "milestones_json",
-    "confetti_trigger", "confetti_on_milestone", "countdown_seconds", "timer_status", "timer_ends_at",
-    "thermometer_visual_mode", "embed_media_url", "pinned_donation_id", "feature_timer",
-    "bloomerang_api_key", "bloomerang_last_sync_at", "bloomerang_last_error"
-  ];
-  for (const column of retiredEventColumns) {
-    if (columnExists(db, "event_state", column)) db.exec(`ALTER TABLE event_state DROP COLUMN ${column};`);
-  }
-  if (columnExists(db, "ledger", "is_pinned")) db.exec(`ALTER TABLE ledger DROP COLUMN is_pinned;`);
-  db.exec(`DROP TABLE IF EXISTS connector_state;`);
-  db.exec(`DROP INDEX IF EXISTS idx_ledger_seq;`);
-  // Presenter/display roles were never issued; the account table only knows admin and operator.
-  db.exec(`DELETE FROM operator_account WHERE role NOT IN ('admin', 'operator');`);
-  // Stage delay is the documented invariant; a zero here came from the old default, not a choice.
-  db.exec(`UPDATE event_state SET stage_delay_ms = 8000 WHERE stage_delay_ms = 0;`);
+/** Upgrade from schema 14 without changing gifts, settings, or existing account credentials. */
+function upgradeFrom14(db: Database): void {
+  db.exec(`ALTER TABLE operator_account ADD COLUMN email TEXT COLLATE NOCASE;`);
+  db.exec(`CREATE UNIQUE INDEX operator_account_email ON operator_account(email);`);
 }
 
 export function migrateSchema(db: Database): void {
   db.transaction(() => {
     const fresh = !tableExists(db, "event_state");
     const version = db.query<{ user_version: number }, []>(`PRAGMA user_version;`).get()!.user_version;
-    if (!fresh && version !== 13 && version !== SCHEMA_VERSION) {
+    if (!fresh && version !== 14 && version !== SCHEMA_VERSION) {
       throw new Error(`Unsupported Givebar database schema version ${version}. Restore a backup taken with the previous release or start from a fresh database.`);
     }
     createSchema(db, fresh);
-    if (!fresh && version === 13) upgradeFrom13(db);
+    if (!fresh && version === 14) upgradeFrom14(db);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
   })();
 }

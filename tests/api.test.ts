@@ -181,31 +181,34 @@ describe("Rehearsal purge, reset, and backups", () => {
 });
 
 describe("Schema upgrade", () => {
-  test("a previous-release database upgrades in place: retired columns go, gifts and accounts stay, stage delay becomes 8 seconds", () => {
-    const legacy = new Database(":memory:");
-    legacy.exec(`
-      CREATE TABLE ledger (seq INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, donation_id TEXT NOT NULL, supersedes_seq INTEGER, amount_cents INTEGER NOT NULL, donor_name TEXT NOT NULL, display_name TEXT, is_anonymous INTEGER DEFAULT 0, payment_method TEXT NOT NULL, source TEXT NOT NULL, source_txn_id TEXT, card_number TEXT, entered_by TEXT, notes TEXT, donor_phonetic TEXT, table_number TEXT, created_at INTEGER NOT NULL, is_pinned INTEGER NOT NULL DEFAULT 0);
-      CREATE INDEX idx_ledger_seq ON ledger(seq);
-      CREATE TABLE event_state (id INTEGER PRIMARY KEY CHECK (id = 1), event_name TEXT NOT NULL DEFAULT 'Old Gala', goal_cents INTEGER NOT NULL DEFAULT 1000, match_pool_cents INTEGER NOT NULL DEFAULT 0, match_total_cents INTEGER NOT NULL DEFAULT 0, match_ratio REAL NOT NULL DEFAULT 1, is_match_active INTEGER NOT NULL DEFAULT 0, control_pin TEXT NOT NULL DEFAULT '', entry_pin TEXT NOT NULL DEFAULT '', bloomerang_api_key TEXT DEFAULT 'secret', timer_status TEXT NOT NULL DEFAULT 'stopped', stage_delay_ms INTEGER NOT NULL DEFAULT 0, odometer_floor_cents INTEGER NOT NULL DEFAULT 0, stage_reset_seq INTEGER NOT NULL DEFAULT 0, settings_seq INTEGER NOT NULL DEFAULT 1, impact_messages TEXT NOT NULL DEFAULT '[]', updated_at INTEGER NOT NULL);
-      INSERT INTO event_state (id, updated_at) VALUES (1, 0);
-      INSERT INTO ledger (event_type, donation_id, amount_cents, donor_name, payment_method, source, created_at) VALUES ('create', 'old', 4200, 'Old Donor', 'pledge', 'manual', 0);
-      CREATE TABLE operator_account (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, display_name TEXT NOT NULL, pin_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin', 'operator', 'presenter', 'display')), disabled INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
-      INSERT INTO operator_account VALUES ('a1', 'admin', 'Admin', 'hash', 'admin', 0, 0), ('d1', 'screen', 'Screen', 'hash', 'display', 0, 0);
-      CREATE TABLE connector_state (connector_id TEXT PRIMARY KEY);
-      PRAGMA user_version = 13;
-    `);
-    migrateSchema(legacy);
-    const columns = legacy.query<{ name: string }, []>(`PRAGMA table_info(event_state)`).all().map(c => c.name);
-    expect(columns).not.toContain("control_pin");
-    expect(columns).not.toContain("bloomerang_api_key");
-    expect(columns).not.toContain("timer_status");
-    expect(columns).toContain("stage_message");
-    expect(legacy.query<{ name: string }, []>(`PRAGMA table_info(ledger)`).all().map(c => c.name)).not.toContain("is_pinned");
-    expect(legacy.query<{ user_version: number }, []>(`PRAGMA user_version`).get()!.user_version).toBe(SCHEMA_VERSION);
-    expect(getEventState(legacy).stage_delay_ms).toBe(8000);
-    expect(foldLedger(legacy).total_raised_cents).toBe(4200);
-    expect(legacy.query<{ username: string }, []>(`SELECT username FROM operator_account`).all().map(r => r.username)).toEqual(["admin"]);
-    expect(legacy.query<{ name: string }, []>(`SELECT name FROM sqlite_master WHERE name IN ('connector_state', 'team_note')`).all().map(r => r.name)).toEqual(["team_note"]);
+  test("schema 14 upgrades without changing gifts, settings, or existing account credentials", async () => {
+    const legacy = initDatabase(":memory:");
+    try {
+      legacy.exec(`
+        DROP TABLE operator_account;
+        CREATE TABLE operator_account (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, display_name TEXT NOT NULL, pin_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin', 'operator')), disabled INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
+        PRAGMA user_version = 14;
+      `);
+      const legacyBackups = backupsFor(legacy);
+      legacy.query(`INSERT INTO operator_account (id, username, display_name, pin_hash, role, created_at) VALUES ('a1', 'founder', 'Founder', ?, 'admin', ?)`).run(await Bun.password.hash("1357911"), Date.now());
+      const token = "migration-session";
+      legacy.query(`INSERT INTO operator_session (token_hash, account_id, expires_at) VALUES (?, 'a1', ?)`).run(new Bun.CryptoHasher("sha256").update(token).digest("hex"), Date.now() + 60000);
+      const admin = `givebar_session=${token}`;
+      recordDonation(legacy, { donation_id: "old", donor_name: "Old donor", amount_cents: 4200 });
+      updateEventState(legacy, { goal_cents: 123400, stage_delay_ms: 12000 });
+      migrateSchema(legacy);
+      expect(legacy.query<{ user_version: number }, []>(`PRAGMA user_version`).get()!.user_version).toBe(SCHEMA_VERSION);
+      expect(getEventState(legacy).stage_delay_ms).toBe(12000);
+      expect(getEventState(legacy).goal_cents).toBe(123400);
+      expect(foldLedger(legacy).total_raised_cents).toBe(4200);
+      const accounts = await (await handleControlRequest(control({ action: "list_accounts" }, admin), legacy, legacyBackups)).json();
+      const account = accounts.accounts[0];
+      expect((await handleControlRequest(control({ action: "update_account", id: account.id, email: "admin@example.org" }, admin), legacy, legacyBackups)).status).toBe(200);
+      expect((await handleControlRequest(control({ action: "login", username: "admin@example.org", pin: "1357911" }), legacy, legacyBackups)).status).toBe(200);
+      expect((await handleControlRequest(control({ action: "login", username: "founder", pin: "1357911" }), legacy, legacyBackups)).status).toBe(200);
+    } finally {
+      legacy.close();
+    }
   });
 
   test("an unsupported older schema refuses to start instead of silently migrating", () => {

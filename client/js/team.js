@@ -20,13 +20,14 @@
       return;
     }
     tbody.innerHTML = result.data.accounts.map(account => `<tr>
-      <td>${fmt.escape(account.username)}</td>
+      <td>${fmt.escape(account.username)}${account.email ? `<div class="donation-attribution">${fmt.escape(account.email)}</div>` : ''}</td>
       <td>${fmt.escape(account.display_name)}</td>
       <td>${account.role === 'admin' ? 'Administrator' : 'Operator'}</td>
       <td>${account.disabled ? '<span class="status-badge held">Disabled</span>' : '<span class="status-badge confirmed">Active</span>'}</td>
       <td class="row-actions text-right">
         <button type="button" class="btn-secondary btn-row" data-link="${account.id}" data-name="${fmt.escape(account.display_name)}" ${account.disabled ? 'disabled' : ''}>Sign-in link</button>
-        <button type="button" class="btn-secondary btn-row" data-invite="${account.id}" data-name="${fmt.escape(account.display_name)}" ${account.disabled ? 'disabled' : ''}>Email invite</button>
+        <button type="button" class="btn-secondary btn-row" data-email="${account.id}" data-name="${fmt.escape(account.display_name)}" data-address="${fmt.escape(account.email || '')}">Edit email</button>
+        <button type="button" class="btn-secondary btn-row" data-invite="${account.id}" data-name="${fmt.escape(account.display_name)}" data-address="${fmt.escape(account.email || '')}" ${account.disabled ? 'disabled' : ''}>Email invite</button>
         <button type="button" class="btn-secondary btn-row" data-reset-pin="${account.id}" data-name="${fmt.escape(account.display_name)}">Reset PIN</button>
         <button type="button" class="btn-secondary btn-row" data-disable="${account.id}" data-name="${fmt.escape(account.display_name)}" data-disabled="${account.disabled ? 0 : 1}">${account.disabled ? 'Enable' : 'Disable'}</button>
       </td></tr>`).join('');
@@ -40,6 +41,7 @@
     const displayName = $('operator-display').value.trim();
     const result = await GivebarSession.control('create_account', {
       username: $('operator-username').value,
+      email: $('operator-email').value,
       displayName,
       pin: $('operator-pin').value,
       role: $('operator-role').value
@@ -52,9 +54,22 @@
   });
 
   $('operator-tbody').addEventListener('click', async event => {
-    const button = event.target.closest('button[data-link], button[data-invite], button[data-reset-pin], button[data-disable]');
+    const button = event.target.closest('button[data-link], button[data-invite], button[data-reset-pin], button[data-disable], button[data-email]');
     if (!button) return;
     const name = button.dataset.name;
+    if (button.dataset.email) {
+      const email = await GivebarSession.prompt({
+        title: `Sign-in email for ${name}`,
+        body: 'They can sign in with this email or their existing sign-in name, using the same PIN. Leave it blank to remove email sign-in.',
+        label: 'Email address', type: 'email', value: button.dataset.address, confirmLabel: 'Save email',
+        validate: value => !value || (value.length <= 254 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) ? '' : 'Enter a valid email address.'
+      });
+      if (email === null) return;
+      const result = await GivebarSession.control('update_account', { id: button.dataset.email, email });
+      if (!result.ok) GivebarSession.toast(result.data.message || 'Could not update the email.', 'error');
+      else { GivebarSession.toast(`Sign-in email updated for ${name}.`); await loadOperators(); }
+      return;
+    }
 
     if (button.dataset.link) {
       const result = await GivebarSession.control('create_invite_link', { id: button.dataset.link });
@@ -70,7 +85,7 @@
     if (button.dataset.invite) {
       $('invite-account-id').value = button.dataset.invite;
       $('invite-dialog-title').textContent = `Email invite to ${name}`;
-      $('invite-email').value = '';
+      $('invite-email').value = button.dataset.address;
       $('invite-result').hidden = true;
       $('invite-error').textContent = '';
       inviteDialog.showModal();

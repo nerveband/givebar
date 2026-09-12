@@ -50,9 +50,9 @@ export function createBackupManager(db: Database, dbPath: string, backupDir?: st
     const seq = db.query<{ seq: number | null }, []>(`SELECT MAX(seq) AS seq FROM ledger`).get()!.seq || 0;
     const state = db.query<{ settings_seq: number; updated_at: number }, []>(`SELECT settings_seq, updated_at FROM event_state WHERE id = 1`).get()!;
     const notes = db.query<{ id: number | null }, []>(`SELECT MAX(id) AS id FROM team_note`).get()!.id || 0;
-    // Accounts, invites, and the import configuration are restored too, so a change to any of them earns a snapshot.
+    // Account and import-configuration changes also earn a complete database snapshot.
     const accounts = db.query<{ n: number; latest: number | null }, []>(`SELECT COUNT(*) AS n, MAX(created_at) AS latest FROM operator_account`).get()!;
-    const accountState = db.query<{ h: string | null }, []>(`SELECT GROUP_CONCAT(id || ':' || disabled || ':' || role || ':' || pin_hash, '|') AS h FROM operator_account`).get()!.h || "";
+    const accountState = db.query<{ h: string | null }, []>(`SELECT GROUP_CONCAT(id || ':' || disabled || ':' || role || ':' || pin_hash || ':' || COALESCE(email, ''), '|') AS h FROM operator_account`).get()!.h || "";
     const sync = db.query<{ form_id: string; start_date: string; enabled: number }, []>(`SELECT form_id, start_date, enabled FROM fundraising_sync WHERE id = 1`).get()!;
     return `${seq}:${state.settings_seq}:${state.updated_at}:${notes}:${accounts.n}:${accounts.latest || 0}:${Bun.hash(accountState)}:${sync.form_id}:${sync.start_date}:${sync.enabled}`;
   };
