@@ -22,7 +22,9 @@ export function sessionCookie(req: Request, value: string, maxAgeSeconds: number
 const INVITE_PIN_SETUP_MS = 30 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 export const LOCKOUT_MS = 15 * 60 * 1000;
-const SESSION_MS = 12 * 60 * 60 * 1000;
+const COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
+const COOKIE_RENEW_MS = 24 * 60 * 60 * 1000;
+const pendingRenewals = new WeakMap<Request, { token: string; hash: string }>();
 
 function sha256Hex(value: string): string {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex");
@@ -40,20 +42,39 @@ export function normalizeUsername(value: unknown): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function requestToken(req: Request): string | undefined {
+  return (req.headers.get("cookie") || "").split(";").map(part => part.trim()).find(part => part.startsWith(`${SESSION_COOKIE}=`))?.slice(SESSION_COOKIE.length + 1);
+}
+
+function issueSessionCookie(db: Database, req: Request, accountId: string, pinSetupExpiresAt = 0): string {
+  const raw = sessionToken();
+  db.query(`INSERT INTO operator_session (token_hash, account_id, cookie_renewed_at, pin_setup_expires_at) VALUES (?, ?, ?, ?)`).run(sha256Hex(raw), accountId, now(), pinSetupExpiresAt);
+  return sessionCookie(req, raw, COOKIE_MAX_AGE_SECONDS);
+}
+
+/** Renew a validated browser cookie at most daily, without imposing a server session lifetime. */
+export function renewSessionCookie(req: Request, db: Database, response: Response): void {
+  const renewal = pendingRenewals.get(req);
+  pendingRenewals.delete(req);
+  if (!renewal || response.headers.has("Set-Cookie")) return;
+  const updated = db.query(`UPDATE operator_session SET cookie_renewed_at = ? WHERE token_hash = ?`).run(now(), renewal.hash);
+  if (updated.changes) response.headers.set("Set-Cookie", sessionCookie(req, renewal.token, COOKIE_MAX_AGE_SECONDS));
+}
+
 export function getSession(req: Request, db: Database): OperatorSession | null {
-  const header = req.headers.get("cookie") || "";
-  const token = header.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${SESSION_COOKIE}=`))?.slice(SESSION_COOKIE.length + 1);
+  const token = requestToken(req);
   if (!token) return null;
   const hashed = sha256Hex(token);
-  const row = db.query<{ account_id: string; expires_at: number; username: string; display_name: string; role: OperatorRole; disabled: number }, [string]>(
-    `SELECT s.account_id, s.expires_at, a.username, a.display_name, a.role, a.disabled
+  const row = db.query<{ account_id: string; cookie_renewed_at: number; username: string; display_name: string; role: OperatorRole; disabled: number }, [string]>(
+    `SELECT s.account_id, s.cookie_renewed_at, a.username, a.display_name, a.role, a.disabled
      FROM operator_session s JOIN operator_account a ON a.id = s.account_id
      WHERE s.token_hash = ?`
   ).get(hashed);
-  if (!row || row.disabled || row.expires_at < now()) {
+  if (!row || row.disabled) {
     if (row) db.query(`DELETE FROM operator_session WHERE token_hash = ?`).run(hashed);
     return null;
   }
+  if (now() - row.cookie_renewed_at >= COOKIE_RENEW_MS) pendingRenewals.set(req, { token, hash: hashed });
   return { accountId: row.account_id, username: row.username, displayName: row.display_name, role: row.role };
 }
 
@@ -78,9 +99,7 @@ export async function login(db: Database, req: Request, username: string, pin: s
   }
 
   db.query(`DELETE FROM login_attempt WHERE key = ?`).run(key);
-  db.query(`DELETE FROM operator_session WHERE account_id = ? AND expires_at < ?`).run(account.id, now());
-  const raw = sessionToken();
-  db.query(`INSERT INTO operator_session (token_hash, account_id, expires_at) VALUES (?, ?, ?)`).run(sha256Hex(raw), account.id, now() + SESSION_MS);
+  const cookie = issueSessionCookie(db, req, account.id);
   db.query(`INSERT INTO access_audit (actor_id, action, created_at) VALUES (?, 'login', ?)`).run(account.id, now());
   return {
     response: new Response(JSON.stringify({ ok: true, username: account.username, displayName: account.display_name, role: account.role }), {
@@ -88,7 +107,7 @@ export async function login(db: Database, req: Request, username: string, pin: s
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
-        "Set-Cookie": sessionCookie(req, raw, SESSION_MS / 1000)
+        "Set-Cookie": cookie
       }
     }),
     accountId: account.id,
@@ -98,8 +117,7 @@ export async function login(db: Database, req: Request, username: string, pin: s
 
 export function logout(req: Request, db: Database): Response {
   const session = getSession(req, db);
-  const header = req.headers.get("cookie") || "";
-  const token = header.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${SESSION_COOKIE}=`))?.slice(SESSION_COOKIE.length + 1);
+  const token = requestToken(req);
   if (token) db.query(`DELETE FROM operator_session WHERE token_hash = ?`).run(sha256Hex(token));
   if (session) db.query(`INSERT INTO access_audit (actor_id, action, created_at) VALUES (?, 'logout', ?)`).run(session.accountId, now());
   return new Response(JSON.stringify({ ok: true }), {
@@ -225,13 +243,11 @@ export async function redeemInvite(db: Database, req: Request, token: string): P
     return Response.json({ error: "INVALID_INVITE", message: "That invite link is invalid, expired, or already used." }, { status: 400 });
   }
   db.query(`UPDATE operator_invite SET used_at = ? WHERE token_hash = ?`).run(now(), hashed);
-  db.query(`DELETE FROM operator_session WHERE account_id = ?`).run(row.account_id);
-  const raw = sessionToken();
-  db.query(`INSERT INTO operator_session (token_hash, account_id, expires_at) VALUES (?, ?, ?)`).run(sha256Hex(raw), row.account_id, now() + SESSION_MS);
+  const cookie = issueSessionCookie(db, req, row.account_id, now() + INVITE_PIN_SETUP_MS);
   db.query(`INSERT INTO access_audit (actor_id, action, created_at) VALUES (?, 'invite_redeemed', ?)`).run(row.account_id, now());
   return new Response(JSON.stringify({ ok: true, username: row.username, displayName: row.display_name, role: row.role }), {
     status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Set-Cookie": sessionCookie(req, raw, SESSION_MS / 1000) }
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Set-Cookie": cookie }
   });
 }
 
@@ -241,20 +257,21 @@ export async function changePin(db: Database, req: Request, currentPin: string, 
   if (nextPin.length < 4 || nextPin.length > 12) return Response.json({ error: "INVALID_PIN", message: "PIN must be 4-12 characters." }, { status: 400 });
   const account = db.query<{ pin_hash: string }, [string]>(`SELECT pin_hash FROM operator_account WHERE id = ?`).get(session.accountId);
   if (!account) return Response.json({ error: "UNAUTHORIZED", message: "Sign in required" }, { status: 401 });
-  // Someone who just arrived through an invite link was never given a PIN: for 30 minutes
-  // after redeeming it they may set one without the current PIN, once.
-  const latest = db.query<{ action: string; created_at: number }, [string]>(`SELECT action, created_at FROM access_audit WHERE actor_id = ? AND action IN ('invite_redeemed', 'pin_changed') ORDER BY created_at DESC, id DESC LIMIT 1`).get(session.accountId);
-  const freshInvite = latest?.action === "invite_redeemed" && now() - latest.created_at < INVITE_PIN_SETUP_MS;
-  if (!(freshInvite && !currentPin) && !(await Bun.password.verify(currentPin, account.pin_hash))) {
+  // Only the browser that redeemed an invite may set its first PIN without the old one.
+  if (currentPin && !(await Bun.password.verify(currentPin, account.pin_hash))) {
     return Response.json({ error: "UNAUTHORIZED", message: "Current PIN is incorrect." }, { status: 401 });
   }
-  db.query(`UPDATE operator_account SET pin_hash = ? WHERE id = ?`).run(await Bun.password.hash(nextPin), session.accountId);
-  db.query(`DELETE FROM operator_session WHERE account_id = ?`).run(session.accountId);
-  const raw = sessionToken();
-  db.query(`INSERT INTO operator_session (token_hash, account_id, expires_at) VALUES (?, ?, ?)`).run(sha256Hex(raw), session.accountId, now() + SESSION_MS);
+  const setupTokenHash = currentPin ? null : sha256Hex(requestToken(req)!);
+  if (setupTokenHash && !db.query(`SELECT 1 FROM operator_session WHERE token_hash = ? AND pin_setup_expires_at > ?`).get(setupTokenHash, now())) {
+    return Response.json({ error: "UNAUTHORIZED", message: "Current PIN is required." }, { status: 401 });
+  }
+  const pinHash = await Bun.password.hash(nextPin);
+  if (setupTokenHash) {
+    const consumed = db.query(`UPDATE operator_session SET pin_setup_expires_at = 0 WHERE token_hash = ? AND pin_setup_expires_at > ?`).run(setupTokenHash, now());
+    if (!consumed.changes) return Response.json({ error: "UNAUTHORIZED", message: "Current PIN is required." }, { status: 401 });
+  }
+  db.query(`UPDATE operator_account SET pin_hash = ? WHERE id = ?`).run(pinHash, session.accountId);
+  db.query(`UPDATE operator_session SET pin_setup_expires_at = 0 WHERE account_id = ?`).run(session.accountId);
   db.query(`INSERT INTO access_audit (actor_id, action, created_at) VALUES (?, 'pin_changed', ?)`).run(session.accountId, now());
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Set-Cookie": sessionCookie(req, raw, SESSION_MS / 1000) }
-  });
+  return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }

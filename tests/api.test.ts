@@ -181,13 +181,13 @@ describe("Rehearsal purge, reset, and backups", () => {
 });
 
 describe("Schema upgrade", () => {
-  test("schema 14 upgrades without changing gifts, settings, or existing account credentials", async () => {
+  test("schema 15 upgrades without changing gifts, account credentials, or existing sign-ins", async () => {
     const legacy = initDatabase(":memory:");
     try {
       legacy.exec(`
-        DROP TABLE operator_account;
-        CREATE TABLE operator_account (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, display_name TEXT NOT NULL, pin_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin', 'operator')), disabled INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
-        PRAGMA user_version = 14;
+        DROP TABLE operator_session;
+        CREATE TABLE operator_session (token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES operator_account(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
+        PRAGMA user_version = 15;
       `);
       const legacyBackups = backupsFor(legacy);
       legacy.query(`INSERT INTO operator_account (id, username, display_name, pin_hash, role, created_at) VALUES ('a1', 'founder', 'Founder', ?, 'admin', ?)`).run(await Bun.password.hash("1357911"), Date.now());

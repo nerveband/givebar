@@ -11,7 +11,8 @@ import { handlePresenceRequest } from "./presence";
 import { createFundraisingSync } from "./fundraising";
 import { createBackupManager } from "./backup";
 import { createWebStats, handleStatsRequest } from "./stats";
-import { getSession, type OperatorRole } from "./authz";
+import { getSession, renewSessionCookie } from "./authz";
+import type { OperatorRole } from "./authz";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import type { Database } from "bun:sqlite";
@@ -103,8 +104,9 @@ const OPERATOR_PAGES: Record<string, { file: string; roles: OperatorRole[] }> = 
   "/testing": { file: "public/testing.html", roles: ["admin"] }
 };
 
-function withSecurity(response: Response): Response {
+function withSecurity(response: Response, req: Request): Response {
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) response.headers.set(key, value);
+  renewSessionCookie(req, db, response);
   return response;
 }
 
@@ -118,32 +120,32 @@ export const server = Bun.serve({
     if (pathname.startsWith("/api/")) {
       const parts = pathname.split("/").filter(Boolean);
       const resource = parts[1];
-      if (crossOriginWrite(req, url)) return withSecurity(Response.json({ error: "FORBIDDEN", message: "Cross-origin request refused" }, { status: 403 }));
+      if (crossOriginWrite(req, url)) return withSecurity(Response.json({ error: "FORBIDDEN", message: "Cross-origin request refused" }, { status: 403 }), req);
       const declaredLength = Number(req.headers.get("content-length") || 0);
-      if (declaredLength > (resource === "control" ? MAX_CONTROL_BODY_BYTES : MAX_API_BODY_BYTES)) return withSecurity(Response.json({ error: "PAYLOAD_TOO_LARGE", message: "Request body too large" }, { status: 413 }));
-      if (resource === "state") return withSecurity(parts[2] === "stream" ? handleStateStreamRequest(req, db) : handleStateRequest(req, db));
-      if (resource === "donation") return withSecurity(await handleDonationRequest(req, db, parts));
-      if (resource === "control") return withSecurity(await handleControlRequest(req, db, backups));
-      if (resource === "history") return withSecurity(handleHistoryRequest(req, db));
-      if (resource === "stats") return withSecurity(await handleStatsRequest(req, db, webStats));
-      if (resource === "export" && parts[2] === "csv") return withSecurity(handleExportCSV(req, db));
-      if (resource === "export" && parts[2] === "backup") return withSecurity(handleExportBackup(req, db, backups));
-      if (resource === "rehearsal") return withSecurity(await handleRehearsalRequest(req, db));
-      if (resource === "qr") return withSecurity(handleQRRequest(req, db));
-      if (resource === "asset") return withSecurity(handleAssetRequest(db, parts[2] || ""));
-      if (resource === "presence") return withSecurity(await handlePresenceRequest(req, db));
-      if (resource === "fundraising") return withSecurity(await fundraising.handle(req));
-      return withSecurity(Response.json({ error: "NOT_FOUND", message: `API route ${pathname} not found` }, { status: 404 }));
+      if (declaredLength > (resource === "control" ? MAX_CONTROL_BODY_BYTES : MAX_API_BODY_BYTES)) return withSecurity(Response.json({ error: "PAYLOAD_TOO_LARGE", message: "Request body too large" }, { status: 413 }), req);
+      if (resource === "state") return withSecurity(parts[2] === "stream" ? handleStateStreamRequest(req, db) : handleStateRequest(req, db), req);
+      if (resource === "donation") return withSecurity(await handleDonationRequest(req, db, parts), req);
+      if (resource === "control") return withSecurity(await handleControlRequest(req, db, backups), req);
+      if (resource === "history") return withSecurity(handleHistoryRequest(req, db), req);
+      if (resource === "stats") return withSecurity(await handleStatsRequest(req, db, webStats), req);
+      if (resource === "export" && parts[2] === "csv") return withSecurity(handleExportCSV(req, db), req);
+      if (resource === "export" && parts[2] === "backup") return withSecurity(handleExportBackup(req, db, backups), req);
+      if (resource === "rehearsal") return withSecurity(await handleRehearsalRequest(req, db), req);
+      if (resource === "qr") return withSecurity(handleQRRequest(req, db), req);
+      if (resource === "asset") return withSecurity(handleAssetRequest(db, parts[2] || ""), req);
+      if (resource === "presence") return withSecurity(await handlePresenceRequest(req, db), req);
+      if (resource === "fundraising") return withSecurity(await fundraising.handle(req), req);
+      return withSecurity(Response.json({ error: "NOT_FOUND", message: `API route ${pathname} not found` }, { status: 404 }), req);
     }
 
     if (pathname === "/projector" && ["1", "true"].includes(url.searchParams.get("edit") || "")) {
-      return withSecurity(serveOperatorPage(req, db, "public/stage.html", ["admin"]));
+      return withSecurity(serveOperatorPage(req, db, "public/stage.html", ["admin"]), req);
     }
-    if (PUBLIC_PAGES[pathname]) return withSecurity(serveStaticFile(PUBLIC_PAGES[pathname]));
+    if (PUBLIC_PAGES[pathname]) return withSecurity(serveStaticFile(PUBLIC_PAGES[pathname]), req);
     const operatorPage = OPERATOR_PAGES[pathname];
-    if (operatorPage) return withSecurity(serveOperatorPage(req, db, operatorPage.file, operatorPage.roles));
-    if (/^\/(css|js|assets)\//.test(url.pathname)) return withSecurity(serveStaticFile(url.pathname.slice(1)));
-    return withSecurity(new Response("Page Not Found", { status: 404 }));
+    if (operatorPage) return withSecurity(serveOperatorPage(req, db, operatorPage.file, operatorPage.roles), req);
+    if (/^\/(css|js|assets)\//.test(url.pathname)) return withSecurity(serveStaticFile(url.pathname.slice(1)), req);
+    return withSecurity(new Response("Page Not Found", { status: 404 }), req);
   }
 });
 

@@ -129,11 +129,13 @@ describe("Sessions", () => {
     expect(me.username).toBe("sara");
     expect(me.role).toBe("operator");
     expect((await handleControlRequest(control({ action: "redeem_invite", token }), db, backups)).status).toBe(400);
+    expect(handleStateRequest(get("/api/state?role=entry", operator), db).status).toBe(200);
+    expect((await handleControlRequest(control({ action: "change_pin", current_pin: "", pin: "1111" }, operator), db, backups)).status).toBe(401);
     // The invitee was never told a PIN: right after arriving they may set one without it, once.
     const setPin = await handleControlRequest(control({ action: "change_pin", current_pin: "", pin: "7777" }, cookie), db, backups);
     expect(setPin.status).toBe(200);
-    const fresh = setPin.headers.get("set-cookie")!.split(";")[0];
-    expect((await handleControlRequest(control({ action: "change_pin", current_pin: "", pin: "8888" }, fresh), db, backups)).status).toBe(401);
+    expect(handleStateRequest(get("/api/state?role=entry", cookie), db).status).toBe(200);
+    expect((await handleControlRequest(control({ action: "change_pin", current_pin: "", pin: "8888" }, cookie), db, backups)).status).toBe(401);
     expect((await handleControlRequest(control({ action: "login", username: "sara", pin: "7777" }), db, backups)).status).toBe(200);
     const second = await (await handleControlRequest(control({ action: "create_invite_link", id: sara.id }, admin), db, backups)).json();
     await handleControlRequest(control({ action: "update_account", id: sara.id, disabled: true }, admin), db, backups);
@@ -141,19 +143,43 @@ describe("Sessions", () => {
     expect((await handleControlRequest(control({ action: "create_invite_link", id: sara.id }, admin), db, backups)).status).toBe(400);
   });
 
-  test("a PIN change and a PIN reset both rotate sessions", async () => {
+  test("PIN changes and resets preserve other devices; logout ends only the chosen session", async () => {
     const admin = await sessionCookie(db, backups);
     const operator = await sessionCookie(db, backups, "sara", "operator");
+    const another = await handleControlRequest(control({ action: "login", username: "sara", pin: "2468" }), db, backups);
+    const otherDevice = another.headers.get("set-cookie")!.split(";")[0];
     const changed = await handleControlRequest(control({ action: "change_pin", current_pin: "2468", pin: "9999" }, operator), db, backups);
     expect(changed.status).toBe(200);
-    expect(handleStateRequest(get("/api/state?role=entry", operator), db).status).toBe(401);
-    const fresh = changed.headers.get("set-cookie")!.split(";")[0];
-    expect(handleStateRequest(get("/api/state?role=control", fresh), db).status).toBe(200);
+    expect(handleStateRequest(get("/api/state?role=entry", operator), db).status).toBe(200);
+    expect(handleStateRequest(get("/api/state?role=entry", otherDevice), db).status).toBe(200);
+    expect((await handleControlRequest(control({ action: "login", username: "sara", pin: "2468" }), db, backups)).status).toBe(401);
     const accounts = await (await handleControlRequest(control({ action: "list_accounts" }, admin), db, backups)).json();
     const sara = accounts.accounts.find((a: { username: string }) => a.username === "sara");
     await handleControlRequest(control({ action: "update_account", id: sara.id, pin: "5555" }, admin), db, backups);
-    expect(handleStateRequest(get("/api/state?role=entry", fresh), db).status).toBe(401);
+    expect(handleStateRequest(get("/api/state?role=entry", operator), db).status).toBe(200);
+    expect(handleStateRequest(get("/api/state?role=entry", otherDevice), db).status).toBe(200);
+    expect((await handleControlRequest(control({ action: "login", username: "sara", pin: "9999" }), db, backups)).status).toBe(401);
     expect((await handleControlRequest(control({ action: "login", username: "sara", pin: "5555" }), db, backups)).status).toBe(200);
+    const loggedOut = await handleControlRequest(control({ action: "logout" }, operator), db, backups);
+    expect(loggedOut.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(handleStateRequest(get("/api/state?role=entry", operator), db).status).toBe(401);
+    expect(handleStateRequest(get("/api/state?role=entry", otherDevice), db).status).toBe(200);
+    await handleControlRequest(control({ action: "update_account", id: sara.id, disabled: true }, admin), db, backups);
+    await handleControlRequest(control({ action: "update_account", id: sara.id, disabled: false }, admin), db, backups);
+    expect(handleStateRequest(get("/api/state?role=entry", otherDevice), db).status).toBe(401);
+  });
+
+  test("an idle session still authorizes editing years later", async () => {
+    const operator = await sessionCookie(db, backups, "sara", "operator");
+    const realNow = Date.now;
+    const future = realNow() + 5 * 365 * 24 * 60 * 60 * 1000;
+    Date.now = () => future;
+    try {
+      expect(handleStateRequest(get("/api/state?role=entry", operator), db).status).toBe(200);
+      expect((await handleControlRequest(control({ action: "add_team_note", body: "Still signed in" }, operator), db, backups)).status).toBe(200);
+    } finally {
+      Date.now = realNow;
+    }
   });
 });
 

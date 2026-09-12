@@ -380,7 +380,7 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
         if (role !== undefined) db.query(`UPDATE operator_account SET role = ? WHERE id = ?`).run(role, id);
         if (pinHash) {
           db.query(`UPDATE operator_account SET pin_hash = ? WHERE id = ?`).run(pinHash, id);
-          db.query(`DELETE FROM operator_session WHERE account_id = ?`).run(id);
+          db.query(`UPDATE operator_session SET pin_setup_expires_at = 0 WHERE account_id = ?`).run(id);
         }
         if (disabled !== undefined) {
           db.query(`UPDATE operator_account SET disabled = ? WHERE id = ?`).run(disabled ? 1 : 0, id);

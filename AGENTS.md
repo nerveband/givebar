@@ -27,6 +27,7 @@ Givebar is a live fundraising bar chart and stage presentation suite for high-st
 * Images uploaded in Settings are stored inline in `event_state` but every projection carries `/api/asset/<name>?v=<settings_seq>` instead of the bytes (`withAssetUrls`); the Settings form omits an unchanged asset URL on save.
 * Named operator accounts only (`operator_account`, roles `admin` and `operator`), HttpOnly session cookies (`Secure` whenever the request arrived over HTTPS, directly or via `X-Forwarded-Proto`), single-use email invites. No shared PINs. The client never relies on secure-context-only APIs (`crypto.randomUUID` has a `getRandomValues` fallback) so a plain-HTTP laptop on the venue network still works.
 * Accounts may have a unique, case-insensitive sign-in email. Email and username must not identify different accounts; both use the same PIN and login-attempt budget. Only administrators assign or remove account emails.
+* Sessions do not expire on the server. PIN changes, resets, and invite redemption preserve existing sessions. Explicit logout revokes the current session; administrator disabling revokes all account sessions. Persistent cookies are renewed daily during authenticated use, subject to browser retention. Invite PIN-setup permission is single-use, time-limited, and bound to the redeeming session, never granted account-wide.
 * Operators: record, edit, delete, and restore gifts; stage messages; pause/resume the chart; team notes; CSV.
 * Administrators additionally: Settings, Team and backups (`/team`: accounts, sign-in links, invites, snapshots, restore), Testing (rehearsal gifts, purge, chart re-sync), reset, Fundraising import configuration.
 * Presence identity comes from the session; heartbeats require a session.
@@ -50,7 +51,7 @@ Givebar is a live fundraising bar chart and stage presentation suite for high-st
 
 ## 5. Deployment & Infrastructure
 * **Production**: the manually run `givebar` container on the wavedepth host (`root@172.245.248.17`), bind-mounted `/etc/dokploy/applications/givebar/data` at `/app/data`, reached through Traefik at `givebar.wavedepth.com`. Deploy with `scripts/deploy-wavedepth.sh`.
-* **Schema**: fresh databases are created at `SCHEMA_VERSION` (15); the only in-place upgrade is from the previous release (14), adding account email without altering ledger data or existing credentials. Anything older restores from a backup or starts fresh.
+* **Schema**: fresh databases are created at `SCHEMA_VERSION` (16); the only in-place upgrade is from the previous release (15), preserving sessions while removing expiration and adding cookie-renewal and session-bound PIN-setup timestamps. Ledger data and account credentials are unchanged. Anything older restores from a backup or starts fresh.
 * **Backups**: `VACUUM INTO` snapshots in `data/backups` every 5 minutes when anything changed, plus pre-purge, pre-reset, pre-restore, and pre-deploy snapshots. Never copy `givebar.sqlite` by hand while the server runs.
 * **Verification**: after changes run `bun test` once; judge observable ledger, privacy, staging, and role behaviour. Documentation-only work needs no test run.
 * **Approval boundary**: source edits do not authorise deployment or changes to live financial data.

@@ -4,10 +4,10 @@ import { dirname } from "path";
 
 /**
  * Schema version. Fresh databases are created at this version directly.
- * The only supported upgrade path is from the previous released version (14);
+ * The only supported upgrade path is from the previous released version (15);
  * anything older must start from a fresh database or a restored backup.
  */
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export function initDatabase(dbPath: string = process.env.GIVEBAR_DB_PATH || "data/givebar.sqlite"): Database {
   if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
@@ -168,7 +168,8 @@ function createSchema(db: Database, seedDefaults: boolean): void {
     CREATE TABLE IF NOT EXISTS operator_session (
       token_hash TEXT PRIMARY KEY,
       account_id TEXT NOT NULL REFERENCES operator_account(id) ON DELETE CASCADE,
-      expires_at INTEGER NOT NULL
+      cookie_renewed_at INTEGER NOT NULL DEFAULT 0,
+      pin_setup_expires_at INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS operator_session_account ON operator_session(account_id);
     CREATE TABLE IF NOT EXISTS operator_invite (
@@ -216,21 +217,22 @@ function createSchema(db: Database, seedDefaults: boolean): void {
   }
 }
 
-/** Upgrade from schema 14 without changing gifts, settings, or existing account credentials. */
-function upgradeFrom14(db: Database): void {
-  db.exec(`ALTER TABLE operator_account ADD COLUMN email TEXT COLLATE NOCASE;`);
-  db.exec(`CREATE UNIQUE INDEX operator_account_email ON operator_account(email);`);
+/** Preserve existing sign-ins while removing server-side session expiration. */
+function upgradeFrom15(db: Database): void {
+  db.exec(`ALTER TABLE operator_session DROP COLUMN expires_at;`);
+  db.exec(`ALTER TABLE operator_session ADD COLUMN cookie_renewed_at INTEGER NOT NULL DEFAULT 0;`);
+  db.exec(`ALTER TABLE operator_session ADD COLUMN pin_setup_expires_at INTEGER NOT NULL DEFAULT 0;`);
 }
 
 export function migrateSchema(db: Database): void {
   db.transaction(() => {
     const fresh = !tableExists(db, "event_state");
     const version = db.query<{ user_version: number }, []>(`PRAGMA user_version;`).get()!.user_version;
-    if (!fresh && version !== 14 && version !== SCHEMA_VERSION) {
+    if (!fresh && version !== 15 && version !== SCHEMA_VERSION) {
       throw new Error(`Unsupported Givebar database schema version ${version}. Restore a backup taken with the previous release or start from a fresh database.`);
     }
     createSchema(db, fresh);
-    if (!fresh && version === 14) upgradeFrom14(db);
+    if (!fresh && version === 15) upgradeFrom15(db);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
   })();
 }

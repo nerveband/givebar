@@ -42,7 +42,7 @@ Viewing does not require sign-in: Home totals, gift count and progress, Donation
 | Team and backups: accounts, sign-in links, invites, snapshots, restore | | yes |
 | Testing: rehearsal gifts, purge, chart re-sync; full reset | | yes |
 
-Sessions last 12 hours. Disabling an account ends its session immediately. Five wrong PINs lock the account for 15 minutes, whether entered through its email or sign-in name.
+Sessions have no server-side time limit and survive restarts, PIN changes, PIN resets, and sign-ins on other devices. **Sign out** ends the current browser session; an administrator disabling the account revokes every session. A persistent HttpOnly cookie is renewed at most daily during authenticated use. Browsers still control cookie retention: clearing cookies, private browsing, device loss, or a browser-imposed storage limit can require signing in again. Five wrong PINs lock new sign-in attempts for 15 minutes, whether entered through the email or sign-in name; they do not end existing sessions.
 
 ---
 

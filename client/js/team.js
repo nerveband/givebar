@@ -95,7 +95,7 @@
     if (button.dataset.resetPin) {
       const pin = await GivebarSession.prompt({
         title: `New PIN for ${name}`,
-        body: 'Their current session ends and they sign in again with this PIN. Tell them in person or by phone.',
+        body: 'Existing sessions stay signed in. This PIN is used for future sign-ins. Disable the account instead if access must stop.',
         label: 'New PIN (4 to 12 characters)', type: 'password', inputMode: 'numeric', confirmLabel: 'Set PIN',
         validate: value => value.length >= 4 && value.length <= 12 ? '' : 'PIN must be 4 to 12 characters.'
       });
