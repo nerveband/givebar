@@ -2,7 +2,7 @@
 
 Live fundraising bar chart and stage suite for nonprofit galas and benefit appeals. One Bun process, one SQLite file, no external services in the money path.
 
-- **Fullscreen Bar Chart** `/chart` for the projector or LED wall: rolling total, progress bar, recent-gift feed, rotating impact messages, donation QR.
+- **Fullscreen Bar Chart** `/projector` for the projector or LED wall: rolling total, progress bar, recent-gift feed, rotating impact messages, donation QR.
 - **Presenter View** `/presenter` for the podium: current donor with pronunciation, total, next milestone, full gift list.
 - **Manage Donations** `/donations` for operators: add, edit, delete, undo, team notes, stage messages, pause switch, CSV.
 - **Stats** `/stats` for the team: raised over time with milestones, gifts per period, sources, payment methods, gift sizes, time of day, largest gifts, operator activity, plus donation-page visits, QR/UTM arrivals, referrers, and devices from the website analytics. Filter by range, source, and method.
@@ -44,7 +44,7 @@ Sessions last 12 hours. Disabling an account ends its session immediately. Five 
 
 ## Online gifts (Bloomerang Fundraising)
 
-Settings → Connections → Bloomerang Fundraising. Set the gala form ID and the date to import from, tick **Automatically import gifts**, and save. The server reconciles the form every 5 seconds (after a failed attempt it waits 30 seconds before retrying); **Sync now** runs the same reconciliation immediately. Online gifts skip the staging delay: they are settled card payments, so they reach the ballroom screen the moment the sync records them. Only the gift amount counts: donor-covered fee assistance and ticket or store purchases are excluded. Refunds and corrections append ledger events and release matching funds. A gift an operator deleted stays deleted. A transaction the import cannot read (a ticket purchase without a donation allocation, an unknown status) is skipped and listed under Connections as needing attention; every other gift still imports. Never enter online gifts by hand.
+Settings → Connections → Bloomerang Fundraising. Set the gala form ID and the date to import from, tick **Automatically import gifts**, and save once. The server then reconciles the form automatically every 5 seconds, even with all operator pages closed. After a failed attempt it waits 30 seconds before retrying automatically. **Check now (optional)** runs the same reconciliation immediately; it is not part of normal operation. Online gifts skip the manual-entry staging delay and become eligible for the ballroom screen as soon as the sync records them. Arrival time still includes Fundraising's reporting delay, the wait for the next check, and network time; there is no fixed nine-second delay or guaranteed checkout-to-screen deadline. Only the gift amount counts: donor-covered fee assistance and ticket or store purchases are excluded. Refunds and corrections append ledger events and release matching funds. A gift an operator deleted stays deleted. A transaction the import cannot read (a ticket purchase without a donation allocation, an unknown status) is skipped and listed under Connections as needing attention; every other gift still imports. Never enter online gifts by hand.
 
 The Fundraising token lives in a mode-600 file on the server (`GIVEBAR_FUNDRAISING_TOKEN_FILE`). It is never shown in the app.
 
@@ -73,7 +73,7 @@ The Fundraising token lives in a mode-600 file on the server (`GIVEBAR_FUNDRAISI
 2. **Rehearsal**: Testing → inject sample gifts, delete one inside 8 seconds and watch the chart never show it, practise Edit and Undo, check the presenter reads names correctly.
 3. **Purge**: Testing → **Purge Sample Data**, then **Re-sync chart to the real total**. Confirm Home shows the real total (online gifts already imported) and the chart restarts from it.
 4. **Settings**: goal, milestones, event title, QR target and printed URL, ask tiers, major-gift threshold, staging delay. Scan the QR on the real projector.
-5. **Room screens**: open `/chart?fullscreen=1` on the projector machine and `/presenter` on the podium tablet. Both are public URLs; nobody signs in on them.
+5. **Room screens**: open `/projector?fullscreen=1` on the projector machine and `/presenter` on the podium tablet. Both are public URLs; nobody signs in on them.
 6. **Bloomerang**: Settings → Connections shows "Automatic import on" with a recent sync time. Make a $1 test gift online if you want to see it arrive (then delete it).
 7. **Backups**: Team and backups → **Snapshot now**, then **Download a fresh copy** and keep it on a laptop.
 8. **During the appeal**: one person watches Manage Donations for "Waiting to appear" and the stale banner; the emcee keeps `/presenter` open; nobody opens Settings or Testing.

@@ -952,8 +952,8 @@
   }
 
   /**
-   * ?fullscreen=1 — requestFullscreen needs a user gesture, so arm a one-shot
-   * handler and tell the operator what to do. The clean /chart URL never sees
+   * ?fullscreen=1: requestFullscreen needs a user gesture, so arm a one-shot
+   * handler and tell the operator what to do. The clean /projector URL never sees
    * any of this.
    */
   function setupFullscreenHint() {

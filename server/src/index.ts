@@ -87,7 +87,7 @@ function serveOperatorPage(req: Request, db: Database, file: string, roles: Oper
 
 const PUBLIC_PAGES: Record<string, string> = {
   "/": "public/index.html",
-  "/chart": "public/stage.html",
+  "/projector": "public/stage.html",
   "/presenter": "public/emcee.html",
   "/preview": "public/preview.html",
   "/presenter-preview": "public/preview.html",
@@ -146,7 +146,7 @@ export const server = Bun.serve({
 
 console.log(`[Givebar] Live fundraising server active on http://${HOST}:${PORT}`);
 console.log(`  Home              http://localhost:${PORT}/`);
-console.log(`  Chart             http://localhost:${PORT}/chart`);
+console.log(`  Projector         http://localhost:${PORT}/projector`);
 console.log(`  Presenter         http://localhost:${PORT}/presenter`);
 console.log(`  Manage Donations  http://localhost:${PORT}/donations`);
 console.log(`  Backups           ${backups.dir || "disabled (in-memory database)"}`);

@@ -175,7 +175,7 @@ svg.icon {
    Each reel is a vertical strip of digit cells; RollingOdometer translates the
    strip so digits always travel upward (0 follows 9), never backward.
 
-   TABULAR FIGURES, MEASURED (Chromium, /chart at 1920x1080):
+   TABULAR FIGURES, MEASURED (Chromium, audience screen at 1920x1080):
    the licensed Brandon Grotesque woff2 files carry no tnum feature. At 200px
    weight 900 the digit advances run 74.81px ("1") to 124.81px ("0"), a 50px
    spread, and that spread is byte-identical with font-variant-numeric:

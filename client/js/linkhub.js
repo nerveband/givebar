@@ -21,7 +21,7 @@
 
   var SURFACES = [
     {
-      path: '/chart',
+      path: '/projector',
       name: 'Fullscreen Bar Chart',
       icon: 'M216,40H40A16,16,0,0,0,24,56V168a16,16,0,0,0,16,16H96v16H80a8,8,0,0,0,0,16h96a8,8,0,0,0,0-16H160V184h56a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,168V56H216V168H40Zm72,32h32v16H112Z'
     },

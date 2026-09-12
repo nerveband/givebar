@@ -616,7 +616,7 @@
                 <div class="font-preview" id="font-preview">
                   <div class="font-preview-label">Unsaved chart preview — the ballroom changes only after Save</div>
                   <div style="position:relative;aspect-ratio:16/9;overflow:hidden" id="settings-preview-frame">
-                    <iframe id="settings-chart-preview" src="/chart?preview=1" title="Live chart settings preview" style="border:0;width:1920px;height:1080px;transform-origin:top left;position:absolute;top:0;left:0" sandbox="allow-scripts allow-same-origin"></iframe>
+                    <iframe id="settings-chart-preview" src="/projector?preview=1" title="Live chart settings preview" style="border:0;width:1920px;height:1080px;transform-origin:top left;position:absolute;top:0;left:0" sandbox="allow-scripts allow-same-origin"></iframe>
                   </div>
                 </div>
               </div>
@@ -790,13 +790,13 @@
             <div class="accordion-body" id="sec-connections-body">
               <section class="fundraising-connection" aria-labelledby="fundraising-title">
                 <div class="donation-dialog-heading"><h3 id="fundraising-title">Bloomerang Fundraising</h3><span id="fundraising-badge" class="connection-badge">Checking…</span></div>
-                <p class="form-hint">Online gifts flow into the donation ledger every 5 seconds and go straight to the ballroom screen. No manual re-entry needed.</p>
+                <p class="form-hint">The server automatically checks for online gifts every 5 seconds, even when this page is closed. Gifts go straight to the ballroom screen once Fundraising reports them. No manual sync or re-entry needed.</p>
                 <div class="connection-summary">
                   <div><span>Imported gifts</span><strong id="fundraising-count">—</strong></div>
                   <div><span>Last successful sync</span><strong id="fundraising-last-sync">—</strong></div>
                 </div>
                 <p id="fundraising-status" role="status">Checking connection…</p>
-                <button id="fundraising-sync" type="button" class="btn-secondary">Sync now</button>
+                <button id="fundraising-sync" type="button" class="btn-secondary">Check now (optional)</button>
                 <div class="connection-config">
                   <h4>Import settings</h4>
                   <div class="inline-fields">
@@ -857,6 +857,6 @@
   <script src="/js/session.js?v=7.5.1"></script>
   <script src="/js/presence.js?v=7.5.1"></script>
   <script src="/js/settings.js?v=7.5.1"></script>
-  <script src="/js/fundraising.js?v=7.5.1"></script>
+  <script src="/js/fundraising.js?v=7.5.2"></script>
 </body>
 </html>

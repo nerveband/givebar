@@ -132,7 +132,7 @@ function stagedView(db: Database, state: EventStateRecord, fullFold: FoldedLedge
   return { hidden, stagedTotal, stageTotal };
 }
 
-/** Audience chart projection (/chart). Public: no donor legal names, notes, or operator data. */
+/** Audience chart projection (/projector). Public: no donor legal names, notes, or operator data. */
 export function getStageState(db: Database) {
   const state = withAssetUrls(getEventState(db));
   const now = Date.now();

@@ -103,7 +103,7 @@ export function createFundraisingSync(db: Database, readToken = () => {
   // Online gifts reach the wall as soon as the reporting API shows them: poll every
   // 5 s. After a failure (HTTP error, timeout, rejected token) the timer waits
   // RETRY_AFTER_FAILURE_MS before trying again so an outage or a rate limit never turns
-  // into a request storm; "Sync now" always runs immediately.
+  // into a request storm; the optional manual check always runs immediately.
   const POLL_MS = 5000;
   const RETRY_AFTER_FAILURE_MS = 30000;
   let running = false;

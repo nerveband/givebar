@@ -168,7 +168,7 @@ function briefing(db: Database, req: Request) {
     links: {
       signin: `${origin}/signin`,
       donations: `${origin}/donations`,
-      chart: `${origin}/chart`,
+      chart: `${origin}/projector`,
       presenter: `${origin}/presenter`,
       home: `${origin}/`
     },
