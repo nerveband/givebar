@@ -19,7 +19,7 @@ Live fundraising bar chart and stage suite for nonprofit galas and benefit appea
 | Major gift confirmation | Gifts at or above the threshold ($9,500 by default) need a second confirmation so $5,000 never becomes $50,000. |
 | Duplicate guards | The same donor and amount entered twice within 10 minutes is challenged before it counts. Pledge card numbers are unique. Online gifts import once, keyed by their Bloomerang transaction ID. |
 | No-backward chart | Once a figure is on the wall it never rolls back. A later delete is absorbed by the next gifts. |
-| Pause | Operators can hold the wall figure and hide the feed during an emergency, then resume. |
+| Pause | Operators can hold the ballroom chart figure and hide its feed during an emergency, then resume. The presenter keeps updating so the podium always has the true total. |
 | Privacy shield | The audience feed carries a display name, amount, and time. Team notes, operator names, card numbers, and the legal names of anonymous donors stay inside the operator pages. |
 | Backups | A consistent snapshot of the whole database is taken every 5 minutes when anything changed, and before any purge, reset, restore, or deploy. Administrators can download any snapshot or restore one. |
 

@@ -707,7 +707,11 @@ dialog::backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
 #add-donation-status, #outbox-status, .undo-bar { position: sticky; top: 8px; z-index: 30; background: #10160f; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
 @media (max-width: 900px) { #add-donation-status, #outbox-status, .undo-bar { top: calc(var(--ops-header-h, 86px) + 8px); } }
 #outbox-status { background: #1c1810; }
-.undo-bar { background: #1c1a14; top: 8px; }
+.undo-bar { background: #1c1a14; }
+.outbox-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.outbox-list { display: grid; gap: 6px; margin-top: 8px; }
+.outbox-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--text-sm); }
+.outbox-row .btn-ghost { min-height: 44px; }
 .undo-btn { min-height: 44px; padding: 0 18px; font-size: 14px; }
 #outbox-status { border-color:#ad8650; color:#ffe1af; }
 .stage-message-controls { border:1px solid #3a3b43; border-radius:16px; padding:24px; margin-bottom:28px; background:#18191d; }

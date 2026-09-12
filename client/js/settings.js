@@ -474,7 +474,9 @@
 
     milestonesTbody.querySelectorAll('.milestone-dollars').forEach((inp, idx) => {
       inp.addEventListener('input', () => {
+        // Typing a dollar figure turns a percentage milestone into a fixed target.
         milestonesData[idx].cents = dollars(inp.value) * 100;
+        milestonesData[idx].percent_of_goal = undefined;
       });
     });
 
@@ -608,7 +610,10 @@
       event_subtitle: eventSubtitleInput?.value?.trim() || '',
       goal_cents: goalDollars * 100,
       trust_badge_text: trustBadgeInput?.value?.trim() || '',
-      milestones: milestonesData.map(m => ({ cents: m.cents || 0, label: m.label || '' })),
+      // Percentage milestones stay percentages (cents omitted) so they follow the goal; fixed ones send cents.
+      milestones: milestonesData.map(m => typeof m.percent_of_goal === 'number'
+        ? { percent_of_goal: m.percent_of_goal, label: m.label || '', celebrate: m.celebrate !== false }
+        : { cents: m.cents || 0, label: m.label || '', celebrate: m.celebrate !== false }),
 
       // Branding
       logo_url: imageValue(logoUrlInput?.value),

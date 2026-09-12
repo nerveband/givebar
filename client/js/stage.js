@@ -239,8 +239,10 @@
 
     // 11. Match / freeze banners
     if (el.matchBanner) {
-      el.matchBanner.hidden = !data.is_match_active;
-      if (data.is_match_active && el.matchText) {
+      // The sponsor banner means "your gift is being matched": it goes away once the pool is spent.
+      var matchLive = Boolean(data.is_match_active) && (typeof data.match_pool_cents !== 'number' || data.match_pool_cents > 0);
+      el.matchBanner.hidden = !matchLive;
+      if (matchLive && el.matchText) {
         var sponsor = (data.match_sponsor_title || '').trim();
         el.matchText.textContent = sponsor ? sponsor + ' \u00b7 Gifts Matched' : 'Gifts Matched';
       }

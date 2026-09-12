@@ -32,8 +32,45 @@
   let pending = false;
   let flushing = false;
   let editing = null;
-  let outbox = JSON.parse(localStorage.getItem('givebar_outbox') || '[]');
   const headers = { 'Content-Type': 'application/json' };
+
+  // --- Outbox: every gift is written to localStorage before its request leaves, and every
+  // change is a read-merge-write by donation_id, so two tabs never overwrite each other's
+  // waiting gifts and a tab closed mid-request still has a durable record to replay.
+  const OUTBOX_KEY = 'givebar_outbox';
+  function readOutbox() {
+    try { const list = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); return Array.isArray(list) ? list : []; } catch (_) { return []; }
+  }
+  function writeOutbox(list) {
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(list)); } catch (_) { announce('This browser cannot save waiting gifts (storage is full or blocked). Do not close this tab until the connection returns.'); }
+    renderOutbox(list);
+  }
+  function upsertOutbox(item) { writeOutbox([...readOutbox().filter(entry => entry.donation_id !== item.donation_id), item]); }
+  function removeOutbox(donationId) { writeOutbox(readOutbox().filter(entry => entry.donation_id !== donationId)); }
+  function renderOutbox(list) {
+    const waiting = list.filter(entry => entry.state !== 'sending');
+    $('outbox-count').textContent = waiting.length;
+    $('outbox-noun').textContent = waiting.length === 1 ? 'gift' : 'gifts';
+    outboxStatus.hidden = !waiting.length;
+    const rows = $('outbox-list');
+    if (!rows) return;
+    rows.replaceChildren(...waiting.map(entry => {
+      const row = document.createElement('div');
+      row.className = 'outbox-row';
+      const text = document.createElement('span');
+      text.textContent = `${fmt.money(entry.amount_cents)} from ${entry.donor_name}${entry.problem ? `: ${entry.problem}` : ''}`;
+      const discard = document.createElement('button');
+      discard.type = 'button'; discard.className = 'btn-ghost'; discard.textContent = 'Discard this gift';
+      discard.addEventListener('click', async () => {
+        const ok = await GivebarSession.confirm({ title: `Discard ${fmt.money(entry.amount_cents)} from ${entry.donor_name}?`, body: entry.problem ? 'It was not accepted by the server. Discard it only if it is already recorded or was never real.' : 'It has not been confirmed by the server. Discard it only if you are sure it is already recorded or was never real.', confirmLabel: 'Discard', danger: true });
+        if (!ok) return;
+        removeOutbox(entry.donation_id);
+        announce(`${fmt.money(entry.amount_cents)} from ${entry.donor_name} discarded.`);
+      });
+      row.append(text, discard);
+      return row;
+    }));
+  }
 
   function showError(text, field) {
     error.textContent = text;
@@ -45,13 +82,6 @@
     majorConfirmed.checked = false; majorBox.hidden = true;
     duplicateConfirmed.checked = false; duplicateBox.hidden = true;
   }
-  function saveOutbox() {
-    localStorage.setItem('givebar_outbox', JSON.stringify(outbox));
-    $('outbox-count').textContent = outbox.length;
-    $('outbox-noun').textContent = outbox.length === 1 ? 'gift' : 'gifts';
-    outboxStatus.hidden = !outbox.length;
-  }
-
   async function loadSettings() {
     try {
       const response = await GivebarSession.api('/api/state?role=entry');
@@ -82,6 +112,7 @@
       : 'Record a pledge or offline gift. Online gifts are imported automatically; do not enter them again.';
     submit.textContent = item ? 'Save changes' : 'Record donation';
     if (item) {
+      editing = { ...item, expected_seq: item.latest_seq };
       donor.value = item.donor_name;
       amount.value = (item.amount_cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
       anonymous.checked = item.is_anonymous;
@@ -148,6 +179,10 @@
       majorConfirmed.checked = false; majorBox.hidden = false; majorConfirmed.focus();
       return true;
     }
+    if (response.status === 409 && result.error === 'STALE_EDIT') {
+      showError(result.message || 'This gift was changed by someone else since you opened it. Close the form and open it again.');
+      return true;
+    }
     if (response.status === 409 && result.error === 'POSSIBLE_DUPLICATE') {
       $('duplicate-body').textContent = `${fmt.money(result.prior_amount_cents)} from ${result.prior_donor_name} was recorded at ${fmt.time(result.prior_created_at)} by ${result.prior_entered_by || 'another operator'}. If this is the same gift, close this form; it is already counted.`;
       duplicateConfirmed.checked = false; duplicateBox.hidden = false; duplicateConfirmed.focus();
@@ -177,15 +212,18 @@
       majorBox.hidden = false; majorConfirmed.focus(); return;
     }
     const payload = collect(cents);
-    // Minted before the write so a retry after a lost response replays the same gift:
-    // the server treats a second PUT for a known donation_id as already recorded.
+    // Minted before the write so a retry after a lost response replays the same gift: the
+    // server treats a second PUT for a known donation_id as already recorded. The gift is
+    // saved in this browser before the request leaves, stamped with the moment it was keyed in.
     const donationId = editing ? null : crypto.randomUUID();
+    const queuedAt = Date.now();
+    if (!editing) upsertOutbox({ donation_id: donationId, ...payload, queued_at: queuedAt, state: 'sending' });
     pending = true;
     form.querySelectorAll('input, textarea, button').forEach(control => { control.disabled = true; });
     submit.textContent = editing ? 'Saving…' : 'Recording…';
     try {
       if (editing) {
-        const response = await GivebarSession.api(`/api/donation/${editing.donation_id}/amend`, { method: 'POST', headers, body: JSON.stringify(payload) });
+        const response = await GivebarSession.api(`/api/donation/${editing.donation_id}/amend`, { method: 'POST', headers, body: JSON.stringify({ ...payload, expected_seq: editing.expected_seq }) });
         const result = await response.json();
         if (handleRail(response, result, cents)) return;
         if (!response.ok) throw new Error('Temporary server error');
@@ -194,10 +232,11 @@
         window.dispatchEvent(new Event('givebar:donation-recorded'));
         return;
       }
-      const response = await GivebarSession.api(`/api/donation/${donationId}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+      const response = await GivebarSession.api(`/api/donation/${donationId}`, { method: 'PUT', headers, body: JSON.stringify({ ...payload, queued_at: queuedAt }) });
       const result = await response.json();
-      if (handleRail(response, result, cents)) return;
+      if (handleRail(response, result, cents)) { removeOutbox(donationId); return; }
       if (!response.ok) throw new Error('Temporary server error');
+      removeOutbox(donationId);
       announce(`${fmt.money(cents)} from ${payload.donor_name} recorded. It reaches the ballroom screen in ${Math.round(stageDelayMs / 1000)} seconds; use Delete in the table before then if it is wrong.`);
       dialog.close();
       window.dispatchEvent(new Event('givebar:donation-recorded'));
@@ -207,8 +246,7 @@
         return;
       }
       // Same identifier, same confirmation state: the guards still apply on replay.
-      outbox.push({ donation_id: donationId, ...payload, queued_at: Date.now() });
-      saveOutbox();
+      upsertOutbox({ donation_id: donationId, ...payload, queued_at: queuedAt, state: 'waiting' });
       announce(`${fmt.money(cents)} from ${payload.donor_name} is waiting to sync and is not yet counted. Do not enter it again.`);
       dialog.close();
     } finally {
@@ -222,23 +260,26 @@
   });
 
   async function flushOutbox() {
-    if (flushing || !outbox.length || !navigator.onLine) return;
+    if (flushing || !navigator.onLine) return;
+    const waiting = readOutbox().filter(entry => entry.state !== 'sending' || Date.now() - (entry.queued_at || 0) > 60000);
+    if (!waiting.length) return;
     flushing = true;
     try {
-      for (const payload of [...outbox]) {
-        const response = await GivebarSession.api(`/api/donation/${payload.donation_id}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+      for (const entry of waiting) {
+        const { state: _state, problem: _problem, ...payload } = entry;
+        const response = await GivebarSession.api(`/api/donation/${entry.donation_id}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
           const result = await response.json().catch(() => ({}));
-          const reason = response.status === 409 && result.error === 'POSSIBLE_DUPLICATE'
-            ? `${fmt.money(result.prior_amount_cents)} from ${result.prior_donor_name} is already recorded. If this waiting gift is the same one, discard it; if it is a different gift, enter it again and tick "record anyway", then discard this one.`
-            : `${result.message || result.error || 'sync unavailable'}. It stays saved in this browser.`;
-          announce(`Waiting gift for ${payload.donor_name}: ${reason}`);
           if (response.status >= 500) break;
+          const problem = response.status === 409 && result.error === 'POSSIBLE_DUPLICATE'
+            ? `${fmt.money(result.prior_amount_cents)} from ${result.prior_donor_name} is already recorded. If this is the same gift, discard it; if it is a different gift, enter it again and tick "record anyway", then discard this one.`
+            : `${result.message || result.error || 'not accepted'}.`;
+          upsertOutbox({ ...entry, state: 'waiting', problem });
+          announce(`Waiting gift for ${entry.donor_name}: ${problem}`);
           continue;
         }
-        outbox = outbox.filter(item => item.donation_id !== payload.donation_id);
-        saveOutbox();
-        announce(`${fmt.money(payload.amount_cents)} from ${payload.donor_name} synced.`);
+        removeOutbox(entry.donation_id);
+        announce(`${fmt.money(entry.amount_cents)} from ${entry.donor_name} synced.`);
         window.dispatchEvent(new Event('givebar:donation-recorded'));
       }
     } catch (_) { /* Retain pending gifts until the connection recovers. */ }
@@ -246,15 +287,16 @@
   }
   $('btn-retry-outbox').addEventListener('click', flushOutbox);
   $('btn-discard-outbox').addEventListener('click', async () => {
-    if (!outbox.length) return;
-    const ok = await GivebarSession.confirm({ title: `Discard ${outbox.length} waiting ${outbox.length === 1 ? 'gift' : 'gifts'}?`, body: 'They were never counted and will need to be entered again if they are real.', confirmLabel: 'Discard', danger: true });
+    const waiting = readOutbox().filter(entry => entry.state !== 'sending');
+    if (!waiting.length) return;
+    const ok = await GivebarSession.confirm({ title: `Discard ${waiting.length} waiting ${waiting.length === 1 ? 'gift' : 'gifts'}?`, body: 'They have not been confirmed by the server. Discard them only if you are sure they are already recorded or were never real.', confirmLabel: 'Discard all', danger: true });
     if (!ok) return;
-    outbox = [];
-    saveOutbox();
+    writeOutbox(readOutbox().filter(entry => entry.state === 'sending'));
     announce('Waiting gifts discarded.');
   });
   window.addEventListener('online', flushOutbox);
-  saveOutbox();
+  window.addEventListener('storage', event => { if (event.key === OUTBOX_KEY) renderOutbox(readOutbox()); });
+  renderOutbox(readOutbox());
   flushOutbox();
   setInterval(flushOutbox, 3000);
 })();

@@ -6,10 +6,10 @@
   <title>Presenter View — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#08080a;color-scheme:dark}</style>
-  <link rel="stylesheet" href="/css/tokens.css?v=7.4.0">
-  <link rel="stylesheet" href="/css/base.css?v=7.4.0">
-  <link rel="stylesheet" href="/css/components.css?v=7.4.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.4.0">
+  <link rel="stylesheet" href="/css/tokens.css?v=7.5.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.5.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.5.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.5.0">
   <link rel="preload" href="/assets/fonts/brandon-regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-black.woff2" as="font" type="font/woff2" crossorigin>
@@ -219,6 +219,8 @@
 
     /* Pronunciation guide: the single string that must be said correctly.
        Large, high contrast, NEVER italicized. */
+    .presenter-table { font-size: clamp(1rem, 2.2vw, 1.6rem); font-weight: 700; color: var(--pv-ink-dim, #b8b6ad); letter-spacing: 0.04em; margin-bottom: 8px; }
+    .presenter-row-table { font-size: 0.8em; font-weight: 600; color: #b8b6ad; margin-left: 8px; white-space: nowrap; }
     .presenter-pronunciation-block {
       width: 100%;
       max-width: 100%;
@@ -559,6 +561,7 @@
         </div>
 
         <!-- Pronunciation guide: large, high contrast, never italicized -->
+        <div id="presenter-table" class="presenter-table" style="display: none;"></div>
         <div id="presenter-pronunciation-block" class="presenter-pronunciation-block" style="display: none;">
           <div class="presenter-pronunciation-label">Say it like</div>
           <div id="presenter-pronunciation" class="presenter-pronunciation"></div>
@@ -623,7 +626,7 @@
   </section>
 
 
-  <script src="/js/live.js?v=7.4.0"></script>
-  <script src="/js/emcee.js?v=7.4.0"></script>
+  <script src="/js/live.js?v=7.5.0"></script>
+  <script src="/js/emcee.js?v=7.5.0"></script>
 </body>
 </html>

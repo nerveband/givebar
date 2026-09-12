@@ -150,6 +150,14 @@ export interface CreateDonationInput {
   queued_at?: number;
 }
 
+/** The gift changed since the operator opened it; their form would overwrite a colleague's correction. */
+export class StaleEditError extends Error {
+  constructor(public donation_id: string, public expected_seq: number, public current_seq: number, public updated_by: string | null) {
+    super("This gift was changed by someone else since you opened it. Close the form and open it again to see the latest values.");
+    this.name = "StaleEditError";
+  }
+}
+
 export class MajorGiftConfirmationRequiredError extends Error {
   constructor(public amount_cents: number, public threshold_cents: number) {
     super(`Gifts of $${Math.floor(threshold_cents / 100).toLocaleString("en-US")} or more require explicit confirmation.`);
@@ -273,8 +281,9 @@ export function foldLedger(db: Database, options?: FoldOptions): FoldedLedger {
       existing.card_number = event.card_number;
       existing.entered_by = event.entered_by || existing.entered_by;
       existing.notes = event.notes;
-      existing.donor_phonetic = event.donor_phonetic ?? existing.donor_phonetic;
-      existing.table_number = event.table_number ?? existing.table_number;
+      // An amend event always carries the resolved value, so an empty field is a deliberate clear.
+      existing.donor_phonetic = event.donor_phonetic;
+      existing.table_number = event.table_number;
       existing.updated_at = event.created_at;
     } else if (event.event_type === "void") {
       existing.latest_seq = event.seq;
@@ -411,10 +420,13 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
 }
 
 /** Amend an active donation. Matching is released and re-applied when the amount changes. */
-export function amendDonation(db: Database, donationId: string, input: Partial<CreateDonationInput>): number {
+export function amendDonation(db: Database, donationId: string, input: Partial<CreateDonationInput> & { expected_seq?: number }): number {
   const folded = foldLedger(db);
   const existing = folded.active_donations.get(donationId);
   if (!existing) throw new Error(`Cannot amend donation ${donationId}: donation does not exist or is voided.`);
+  if (input.expected_seq !== undefined && input.expected_seq !== existing.latest_seq) {
+    throw new StaleEditError(donationId, input.expected_seq, existing.latest_seq, existing.entered_by);
+  }
 
   const isAnonymous = input.is_anonymous !== undefined ? (input.is_anonymous ? 1 : 0) : (existing.is_anonymous ? 1 : 0);
   const donorName = (input.donor_name !== undefined ? input.donor_name : existing.donor_name).trim();
@@ -456,7 +468,13 @@ export function amendDonation(db: Database, donationId: string, input: Partial<C
     if (newAmount !== existing.amount_cents) {
       const existingMatch = folded.match_by_parent.get(donationId) || 0;
       if (existingMatch > 0) insertMatchEvent(db, "match_release", donationId, insertedSeq, existingMatch, "Matching Grant", `Match released on amendment for pledge ${donationId}`, now);
-      applyMatch(db, donationId, insertedSeq, newAmount, `Match reapplied on amendment for pledge ${donationId}`, now);
+      if (state.is_match_active === 1) {
+        applyMatch(db, donationId, insertedSeq, newAmount, `Match reapplied on amendment for pledge ${donationId}`, now);
+      } else if (existingMatch > 0) {
+        // Matching has closed: the gift keeps the match it earned, scaled down if the gift shrank.
+        const kept = Math.min(existingMatch, Math.floor(newAmount * state.match_ratio));
+        if (kept > 0) insertMatchEvent(db, "match_apply", donationId, insertedSeq, kept, state.match_sponsor_title || "Matching Grant", `Banked match kept on amendment for pledge ${donationId}`, now);
+      }
     }
     touchState(db, now);
   })();

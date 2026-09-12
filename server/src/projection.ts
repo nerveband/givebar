@@ -100,6 +100,9 @@ export function getTeamNotes(db: Database): TeamNote[] {
   return db.query<TeamNote, []>(`SELECT id, author_id, author_name, body, created_at FROM team_note ORDER BY id DESC LIMIT 100`).all();
 }
 
+/** Stable, non-reversible key for public feeds; the ledger id stays with the operator role. */
+const publicKey = (donationId: string): string => Bun.hash(donationId).toString(36);
+
 function heldIds(db: Database): Set<string> {
   return new Set(db.query<{ donation_id: string }, []>(`SELECT donation_id FROM held_donations`).all().map(row => row.donation_id));
 }
@@ -141,7 +144,8 @@ export function getStageState(db: Database) {
     .sort((a, b) => b.created_at - a.created_at)
     .slice(0, 30)
     .map(record => ({
-      donation_id: record.donation_id,
+      // Opaque row key for the feed animation: the real id names the import source and transaction.
+      donation_id: publicKey(record.donation_id),
       display_name: record.is_anonymous ? "Anonymous Supporter" : record.display_name,
       amount_cents: record.amount_cents,
       created_at: record.created_at
@@ -153,7 +157,6 @@ export function getStageState(db: Database) {
     event_subtitle: state.event_subtitle,
     event_title: state.event_title,
     total_raised_cents: stageTotal,
-    true_total_raised_cents: fullFold.total_raised_cents,
     goal_cents: state.goal_cents,
     percent: state.goal_cents > 0 ? Math.min(100, Math.round((stageTotal / state.goal_cents) * 1000) / 10) : 0,
     is_match_active: Boolean(state.is_match_active),
@@ -267,6 +270,7 @@ export function getControlState(db: Database) {
     .sort((a, b) => b.created_at - a.created_at)
     .map(record => ({
       donation_id: record.donation_id,
+      latest_seq: record.latest_seq,
       donor_name: record.donor_name,
       display_name: record.display_name,
       donor_phonetic: record.donor_phonetic,

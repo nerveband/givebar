@@ -79,6 +79,12 @@ describe("Sessions", () => {
     expect(me.username).toBe("sara");
     expect(me.role).toBe("operator");
     expect((await handleControlRequest(control({ action: "redeem_invite", token }), db, backups)).status).toBe(400);
+    // The invitee was never told a PIN: right after arriving they may set one without it, once.
+    const setPin = await handleControlRequest(control({ action: "change_pin", current_pin: "", pin: "7777" }, cookie), db, backups);
+    expect(setPin.status).toBe(200);
+    const fresh = setPin.headers.get("set-cookie")!.split(";")[0];
+    expect((await handleControlRequest(control({ action: "change_pin", current_pin: "", pin: "8888" }, fresh), db, backups)).status).toBe(401);
+    expect((await handleControlRequest(control({ action: "login", username: "sara", pin: "7777" }), db, backups)).status).toBe(200);
     const second = await (await handleControlRequest(control({ action: "create_invite_link", id: sara.id }, admin), db, backups)).json();
     await handleControlRequest(control({ action: "update_account", id: sara.id, disabled: true }, admin), db, backups);
     expect((await handleControlRequest(control({ action: "redeem_invite", token: new URL(second.link).searchParams.get("invite") }), db, backups)).status).toBe(400);

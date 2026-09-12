@@ -289,8 +289,10 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
             db.query(`DELETE FROM ledger WHERE donation_id = ? OR donation_id = ?`).run(donation_id, `match_${donation_id}`);
           }
           const current = getEventState(db);
-          updateEventState(db, { odometer_floor_cents: foldLedger(db).total_raised_cents, stage_reset_seq: current.stage_reset_seq + 1 });
+          updateEventState(db, { odometer_floor_cents: 0, stage_reset_seq: current.stage_reset_seq + 1 });
         })();
+        // The wall restarts from the staged view: held gifts and gifts inside the staging window stay off it.
+        getStageState(db);
         audit(db, operator.accountId, "purge_rehearsal");
         break;
       }

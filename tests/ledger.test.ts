@@ -3,7 +3,7 @@ import type { Database } from "bun:sqlite";
 import { initDatabase } from "../server/src/db";
 import {
   amendDonation, foldLedger, recordDonation, restoreDonation, updateEventState, voidDonation,
-  CardSerialCollisionError, MajorGiftConfirmationRequiredError, PossibleDuplicateError
+  CardSerialCollisionError, MajorGiftConfirmationRequiredError, PossibleDuplicateError, StaleEditError
 } from "../server/src/ledger";
 
 let db: Database;
@@ -56,6 +56,40 @@ describe("Ledger fold and corrections", () => {
   });
 });
 
+describe("Corrections by two operators", () => {
+  test("an edit opened before a colleague's correction is rejected instead of silently undoing it", () => {
+    recordDonation(db, { donation_id: "g", donor_name: "Grace", amount_cents: 3101 });
+    const opened = foldLedger(db).active_donations.get("g")!.latest_seq;
+    amendDonation(db, "g", { amount_cents: 6202, is_anonymous: true, expected_seq: opened });
+    expect(() => amendDonation(db, "g", { amount_cents: 3101, is_anonymous: false, notes: "note only", expected_seq: opened })).toThrow(StaleEditError);
+    const record = foldLedger(db).active_donations.get("g")!;
+    expect(record.amount_cents).toBe(6202);
+    expect(record.is_anonymous).toBe(true);
+    amendDonation(db, "g", { notes: "note only", expected_seq: record.latest_seq });
+    expect(foldLedger(db).active_donations.get("g")!.notes).toBe("note only");
+  });
+
+  test("clearing pronunciation or a table number is honoured", () => {
+    recordDonation(db, { donation_id: "p", donor_name: "Phon", amount_cents: 1000, donor_phonetic: "FOHN", table_number: "24" });
+    amendDonation(db, "p", { donor_phonetic: "", table_number: "" });
+    const record = foldLedger(db).active_donations.get("p")!;
+    expect(record.donor_phonetic).toBeNull();
+    expect(record.table_number).toBeNull();
+  });
+
+  test("a gift keeps the match it earned when it is corrected after matching closes", () => {
+    updateEventState(db, { is_match_active: 1, match_total_cents: 100000, match_ratio: 1 });
+    recordDonation(db, { donation_id: "m", donor_name: "Matched", amount_cents: 10000 });
+    expect(foldLedger(db).active_donations.get("m")!.matched_amount_cents).toBe(10000);
+    updateEventState(db, { is_match_active: 0 });
+    amendDonation(db, "m", { amount_cents: 9000 });
+    expect(foldLedger(db).active_donations.get("m")!.matched_amount_cents).toBe(9000);
+    amendDonation(db, "m", { amount_cents: 12000 });
+    expect(foldLedger(db).active_donations.get("m")!.matched_amount_cents).toBe(9000);
+    expect(foldLedger(db).total_raised_cents).toBe(21000);
+  });
+});
+
 describe("Entry guard rails", () => {
   test("major gifts need explicit confirmation on create and on an amended amount", () => {
     expect(() => recordDonation(db, { donation_id: "big", donor_name: "Whale", amount_cents: 950000 })).toThrow(MajorGiftConfirmationRequiredError);
@@ -81,6 +115,14 @@ describe("Entry guard rails", () => {
     recordDonation(db, { donation_id: "d2", donor_name: "Maya Lin", amount_cents: 50000, confirmed_duplicate: true });
     recordDonation(db, { donation_id: "import", donor_name: "Maya Lin", amount_cents: 50000, source: "bloomerang", source_txn_id: "t-1" });
     expect(foldLedger(db).active_donation_count).toBe(4);
+  });
+
+  test("rejects amounts beyond the ledger ceiling or outside the safe integer range", () => {
+    expect(() => recordDonation(db, { donation_id: "big", donor_name: "Big", amount_cents: 10_000_000_001, confirmed_major_gift: true })).toThrow(/at most/);
+    expect(() => recordDonation(db, { donation_id: "huge", donor_name: "Huge", amount_cents: 1e308, confirmed_major_gift: true })).toThrow();
+    recordDonation(db, { donation_id: "ok", donor_name: "Ok", amount_cents: 1000 });
+    expect(() => amendDonation(db, "ok", { amount_cents: 9e15, confirmed_major_gift: true })).toThrow();
+    expect(foldLedger(db).total_raised_cents).toBe(1000);
   });
 
   test("rejects zero, negative, and nameless gifts", () => {

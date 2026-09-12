@@ -111,7 +111,7 @@ export function createFundraisingSync(db: Database, readToken = () => {
   let timer: ReturnType<typeof setInterval> | undefined;
   const settings = () => db.query<SyncSettings, []>("SELECT * FROM fundraising_sync WHERE id = 1").get()!;
   const tokenAvailable = () => { try { return !!readToken(); } catch { return false; } };
-  const status = () => ({ ...settings(), token_configured: tokenAvailable(), running, interval_seconds: POLL_MS / 1000 });
+  const status = () => ({ ...settings(), token_configured: tokenAvailable(), running, interval_seconds: POLL_MS / 1000, retry_in_seconds: Math.max(0, Math.ceil((retryAt - Date.now()) / 1000)) });
   async function sync() {
     if (running) return status();
     const config = settings();
@@ -130,7 +130,7 @@ export function createFundraisingSync(db: Database, readToken = () => {
       const latest = settings();
       if (!latest.enabled || latest.form_id !== config.form_id || latest.start_date !== config.start_date) return status();
       const attention = skipped.length
-        ? `${skipped.length} transaction${skipped.length === 1 ? "" : "s"} need attention and ${skipped.length === 1 ? "was" : "were"} not imported: ${skipped.slice(0, 5).map(row => `#${row.id} (${row.reason})`).join(", ")}${skipped.length > 5 ? ", …" : ""}. Every other gift is in.`
+        ? `${skipped.length} transaction${skipped.length === 1 ? " needs" : "s need"} attention and ${skipped.length === 1 ? "was" : "were"} not imported: ${skipped.slice(0, 5).map(row => `#${row.id} (${row.reason})`).join(", ")}${skipped.length > 5 ? ", …" : ""}. Every other gift is in.`
         : "";
       db.transaction(() => {
         applyFundraisingGifts(db, config.form_id, gifts);

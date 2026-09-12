@@ -85,7 +85,7 @@ const EVENT_STATE_COLUMNS: [string, string][] = [
 ];
 
 /** Final schema. Every statement is idempotent so it can run on any supported database. */
-function createSchema(db: Database): void {
+function createSchema(db: Database, seedDefaults: boolean): void {
   // Append-only event ledger: the single financial source of truth.
   db.exec(`
     CREATE TABLE IF NOT EXISTS ledger (
@@ -202,14 +202,16 @@ function createSchema(db: Database): void {
   `);
   db.query(`INSERT OR IGNORE INTO fundraising_sync (id) VALUES (1)`).run();
 
-  if (!db.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM milestone`).get()!.n) {
+  // Sample milestones and quick amounts belong to a brand-new database only; an
+  // administrator who removed every row keeps an empty list across restarts.
+  if (seedDefaults && !db.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM milestone`).get()!.n) {
     const insert = db.prepare(`INSERT INTO milestone (sort_order, percent_of_goal, cents, label, celebrate) VALUES (?, ?, NULL, ?, 1)`);
     insert.run(1, 25, "Foundation");
     insert.run(2, 50, "Staffing");
     insert.run(3, 75, "Legal Clinic");
     insert.run(4, 100, "Expansion Goal");
   }
-  if (!db.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM ask_tier`).get()!.n) {
+  if (seedDefaults && !db.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM ask_tier`).get()!.n) {
     const insert = db.prepare(`INSERT INTO ask_tier (sort_order, cents, label) VALUES (?, ?, ?)`);
     [[5000000, "$50,000"], [2500000, "$25,000"], [1000000, "$10,000"], [500000, "$5,000"], [200000, "$2,000"], [100000, "$1,000"], [50000, "$500"]]
       .forEach(([cents, label], index) => insert.run(index + 1, cents, label));
@@ -246,7 +248,7 @@ export function migrateSchema(db: Database): void {
     if (!fresh && version !== 13 && version !== SCHEMA_VERSION) {
       throw new Error(`Unsupported Givebar database schema version ${version}. Restore a backup taken with the previous release or start from a fresh database.`);
     }
-    createSchema(db);
+    createSchema(db, fresh);
     if (!fresh && version === 13) upgradeFrom13(db);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
   })();

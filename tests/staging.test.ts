@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { initDatabase } from "../server/src/db";
-import { amendDonation, holdDonation, recordDonation, updateEventState, voidDonation } from "../server/src/ledger";
+import { amendDonation, foldLedger, holdDonation, recordDonation, updateEventState, voidDonation } from "../server/src/ledger";
 import { getControlState, getEmceeState, getStageState } from "../server/src/projection";
 
 let db: Database;
@@ -39,7 +39,7 @@ describe("Staging delay and the wall figure", () => {
 
     voidDonation(db, "b");
     expect(getStageState(db).total_raised_cents).toBe(500000);
-    expect(getStageState(db).true_total_raised_cents).toBe(300000);
+    expect(foldLedger(db).total_raised_cents).toBe(300000);
 
     recordDonation(db, { donation_id: "c", donor_name: "C", amount_cents: 100000 });
     expect(getStageState(db).total_raised_cents).toBe(500000);

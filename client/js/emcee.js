@@ -11,7 +11,8 @@
  *  - Strict privacy shield: anonymous records render as "Anonymous Supporter" with
  *    no real name, no notes, no phonetic guide, no other identifying metadata —
  *    in the hero card, the recent list, and the full history alike.
- *  - Table numbers are never rendered anywhere on this surface.
+ *  - Table numbers show beside a named donor (hero card and lists) so the podium can
+ *    point to the table; anonymous gifts never carry one.
  */
 
 (function () {
@@ -45,6 +46,7 @@
   const donorNameEl = document.getElementById('presenter-donor-name');
   const pronunciationBlockEl = document.getElementById('presenter-pronunciation-block');
   const pronunciationEl = document.getElementById('presenter-pronunciation');
+  const tableEl = document.getElementById('presenter-table');
   const amountEl = document.getElementById('presenter-amount');
   const metaEl = document.getElementById('presenter-meta');
   const recentListEl = document.getElementById('presenter-recent-list');
@@ -222,6 +224,11 @@
       if (donorNameEl) {
         donorNameEl.textContent = displayName;
       }
+      if (tableEl) {
+        const table = !isAnon && currentGift.table_number ? String(currentGift.table_number).trim() : '';
+        tableEl.textContent = table ? `Table ${table}` : '';
+        tableEl.style.display = table ? 'inline-block' : 'none';
+      }
 
       // Pronunciation guide — large, high-contrast, not italicized. Anonymous
       // gifts never expose a phonetic guide.
@@ -309,9 +316,10 @@
     const isAnon = Boolean(gift.is_anonymous);
     // Privacy shield: anonymous gifts expose the amount only.
     const name = isAnon ? 'Anonymous Supporter' : (gift.display_name || 'Anonymous Supporter');
+    const table = !isAnon && gift.table_number ? String(gift.table_number).trim() : '';
     return `
       <div class="presenter-row">
-        <span class="presenter-row-name${isAnon ? ' anon' : ''}">${escapeHTML(name)}</span>
+        <span class="presenter-row-name${isAnon ? ' anon' : ''}">${escapeHTML(name)}${table ? ` <span class="presenter-row-table">Table ${escapeHTML(table)}</span>` : ''}</span>
         <span class="presenter-row-amt">${formatCurrency(gift.amount_cents)}</span>
       </div>
     `;

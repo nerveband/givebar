@@ -96,7 +96,7 @@
     const amount = fmt.money(Number(button.dataset.amount));
     const ok = await GivebarSession.confirm(verb === 'void'
       ? { title: 'Delete this gift?', body: `Delete ${amount} from ${button.dataset.donor}? It leaves the total and the list; the ballroom figure never rolls backward. You can restore it from here.`, confirmLabel: 'Delete gift', danger: true }
-      : { title: 'Restore this gift?', body: `Restore ${amount} from ${button.dataset.donor}? It returns to the total and the list, and appears on the ballroom screen after the staging delay.`, confirmLabel: 'Restore gift' });
+      : { title: 'Restore this gift?', body: `Restore ${amount} from ${button.dataset.donor}? It returns to the total and the list and appears on the ballroom screen right away (it was recorded earlier, so the staging delay has already passed).`, confirmLabel: 'Restore gift' });
     if (!ok) return;
     const id = restore ? restore.dataset.restoreId : undo.dataset.voidId;
     const response = await GivebarSession.api(`/api/donation/${id}/${verb}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: verb === 'restore' ? 'Restored from History' : 'Deleted from History' }) });

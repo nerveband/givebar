@@ -6,10 +6,10 @@
   <title>Manage Donations — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#070603;color-scheme:dark}</style>
-  <link rel="stylesheet" href="/css/tokens.css?v=7.4.0">
-  <link rel="stylesheet" href="/css/base.css?v=7.4.0">
-  <link rel="stylesheet" href="/css/components.css?v=7.4.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.4.0">
+  <link rel="stylesheet" href="/css/tokens.css?v=7.5.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.5.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.5.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.5.0">
 </head>
 <body>
   <div class="ops-shell">
@@ -61,7 +61,10 @@
       <p id="gap-notice" class="form-hint gap-notice" role="status" hidden></p>
       <p id="paused-notice" class="paused-notice" role="status" hidden>The ballroom screen is paused. The figure is held and new gifts are not shown until you resume.</p>
       <p id="add-donation-status" role="status" hidden></p>
-      <div id="outbox-status" role="status" hidden><span id="outbox-count">0</span> <span id="outbox-noun">gifts</span> waiting to sync. Keep this browser open. <button type="button" id="btn-retry-outbox" class="btn-secondary">Retry now</button> <button type="button" id="btn-discard-outbox" class="btn-ghost">Discard waiting gifts</button></div>
+      <div id="outbox-status" role="status" hidden>
+        <div class="outbox-head"><span id="outbox-count">0</span> <span id="outbox-noun">gifts</span> waiting to sync. Keep this browser open. <button type="button" id="btn-retry-outbox" class="btn-secondary">Retry now</button> <button type="button" id="btn-discard-outbox" class="btn-ghost">Discard all</button></div>
+        <div id="outbox-list" class="outbox-list"></div>
+      </div>
 
       <div id="undo-banner" class="undo-bar" style="display: none;" role="status" aria-live="polite">
         <span id="undo-message">Donation removed.</span>
@@ -175,12 +178,12 @@
     </div>
   </div>
 
-  <script src="/js/session.js?v=7.4.0"></script>
-  <script src="/js/live.js?v=7.4.0"></script>
-  <script src="/js/presence.js?v=7.4.0"></script>
-  <script src="/js/control.js?v=7.4.0"></script>
-  <script src="/js/entry.js?v=7.4.0"></script>
-  <script src="/js/linkhub.js?v=7.4.0"></script>
-  <script src="/js/stage-messages.js?v=7.4.0"></script>
+  <script src="/js/session.js?v=7.5.0"></script>
+  <script src="/js/live.js?v=7.5.0"></script>
+  <script src="/js/presence.js?v=7.5.0"></script>
+  <script src="/js/control.js?v=7.5.0"></script>
+  <script src="/js/entry.js?v=7.5.0"></script>
+  <script src="/js/linkhub.js?v=7.5.0"></script>
+  <script src="/js/stage-messages.js?v=7.5.0"></script>
 </body>
 </html>

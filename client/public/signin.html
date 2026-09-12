@@ -6,10 +6,10 @@
   <title>Sign in — Givebar</title>
   <meta name="color-scheme" content="dark">
   <style>html{background:#070603;color-scheme:dark}</style>
-  <link rel="stylesheet" href="/css/tokens.css?v=7.4.0">
-  <link rel="stylesheet" href="/css/base.css?v=7.4.0">
-  <link rel="stylesheet" href="/css/components.css?v=7.4.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.4.0">
+  <link rel="stylesheet" href="/css/tokens.css?v=7.5.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.5.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.5.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.5.0">
 </head>
 <body>
   <main class="auth-shell">
@@ -30,15 +30,15 @@
     </section>
 
     <section class="auth-card" id="pin-card" hidden>
-      <h2>Change your PIN</h2>
-      <p class="form-hint">Optional. Pick something you can type quickly on a phone.</p>
+      <h2>Set your PIN</h2>
+      <p class="form-hint">Your invite link works once. Set a PIN now so you can sign in again later with your name and PIN; it takes a few seconds. Pick something you can type quickly on a phone.</p>
       <form id="pin-form">
-        <label class="form-label" for="pin-current">Current PIN</label>
-        <input id="pin-current" type="password" class="form-input-text" autocomplete="current-password" minlength="4" maxlength="12">
+        <label class="form-label" for="pin-current">Current PIN (leave blank if you were never given one)</label>
+        <input id="pin-current" type="password" class="form-input-text" autocomplete="current-password" maxlength="12">
         <label class="form-label" for="pin-next">New PIN</label>
         <input id="pin-next" type="password" class="form-input-text" autocomplete="new-password" minlength="4" maxlength="12">
         <div id="pin-error" class="field-error" role="alert"></div>
-        <button type="submit" class="btn-secondary">Change PIN</button>
+        <button type="submit" class="btn-secondary">Save PIN</button>
       </form>
       <a id="pin-skip" class="btn-primary" href="/donations" style="display:block;text-align:center;">Continue to Manage Donations</a>
     </section>
@@ -78,7 +78,7 @@
         notice.hidden = false;
         notice.dataset.tone = redeem.ok ? 'ok' : 'error';
         notice.textContent = redeem.ok
-          ? `Welcome, ${redeem.data.displayName}. You are signed in. Change your PIN below if you like, or continue.`
+          ? `Welcome, ${redeem.data.displayName}. You are signed in. Set a PIN below so you can sign in again later, or continue.`
           : 'That invite link is invalid, expired, or already used. Sign in with your name and PIN instead.';
         invited = redeem.ok;
         history.replaceState(null, '', location.pathname);

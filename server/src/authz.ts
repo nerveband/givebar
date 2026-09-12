@@ -9,6 +9,7 @@ export interface OperatorSession {
 }
 
 export const SESSION_COOKIE = "givebar_session";
+const INVITE_PIN_SETUP_MS = 30 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 export const LOCKOUT_MS = 15 * 60 * 1000;
 const SESSION_MS = 12 * 60 * 60 * 1000;
@@ -226,7 +227,12 @@ export async function changePin(db: Database, req: Request, currentPin: string, 
   if (!session) return Response.json({ error: "UNAUTHORIZED", message: "Sign in required" }, { status: 401 });
   if (nextPin.length < 4 || nextPin.length > 12) return Response.json({ error: "INVALID_PIN", message: "PIN must be 4-12 characters." }, { status: 400 });
   const account = db.query<{ pin_hash: string }, [string]>(`SELECT pin_hash FROM operator_account WHERE id = ?`).get(session.accountId);
-  if (!account || !(await Bun.password.verify(currentPin, account.pin_hash))) {
+  if (!account) return Response.json({ error: "UNAUTHORIZED", message: "Sign in required" }, { status: 401 });
+  // Someone who just arrived through an invite link was never given a PIN: for 30 minutes
+  // after redeeming it they may set one without the current PIN, once.
+  const latest = db.query<{ action: string; created_at: number }, [string]>(`SELECT action, created_at FROM access_audit WHERE actor_id = ? AND action IN ('invite_redeemed', 'pin_changed') ORDER BY created_at DESC, id DESC LIMIT 1`).get(session.accountId);
+  const freshInvite = latest?.action === "invite_redeemed" && now() - latest.created_at < INVITE_PIN_SETUP_MS;
+  if (!(freshInvite && !currentPin) && !(await Bun.password.verify(currentPin, account.pin_hash))) {
     return Response.json({ error: "UNAUTHORIZED", message: "Current PIN is incorrect." }, { status: 401 });
   }
   db.query(`UPDATE operator_account SET pin_hash = ? WHERE id = ?`).run(await Bun.password.hash(nextPin), session.accountId);
