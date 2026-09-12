@@ -19,6 +19,7 @@
   'use strict';
 
   const STALE_MS = 6000;
+  const REQUEST_TIMEOUT_MS = 5000;
 
   function connect(options) {
     const role = options.role;
@@ -30,6 +31,7 @@
     let lastPollAt = 0;
     let stopped = false;
     let inFlight = false;
+    let pollController = null;
 
     function confirmed(serverTime) {
       lastConfirmedAt = Date.now();
@@ -63,19 +65,26 @@
       if (stopped || inFlight) return;
       inFlight = true;
       lastPollAt = Date.now();
+      const controller = new AbortController();
+      pollController = controller;
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       try {
-        const response = await fetch('/api/state?role=' + encodeURIComponent(role), { credentials: 'same-origin', headers: { 'Cache-Control': 'no-cache' } });
+        const response = await fetch('/api/state?role=' + encodeURIComponent(role), { credentials: 'same-origin', headers: { 'Cache-Control': 'no-cache' }, signal: controller.signal });
+        if (stopped || controller.signal.aborted) return;
         if (response.status === 401 && authenticated) {
           location.replace('/signin?next=' + encodeURIComponent(location.pathname));
           return;
         }
         if (!response.ok) return;
         const data = await response.json();
+        if (stopped || controller.signal.aborted) return;
         confirmed(data.server_time);
         options.onState(data);
       } catch (_) {
         /* offline: liveness tick reports it */
       } finally {
+        clearTimeout(timeout);
+        pollController = null;
         inFlight = false;
       }
     }
@@ -98,6 +107,7 @@
       stop() {
         stopped = true;
         clearInterval(timer);
+        if (pollController) pollController.abort();
         if (source) source.close();
         source = null;
       }
