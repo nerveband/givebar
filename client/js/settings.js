@@ -27,6 +27,10 @@
   let loadedMilestones = '';
   const field = id => document.getElementById(id);
   const dollars = value => Number(String(value || '0').replaceAll(',', ''));
+  const milestonePayload = rows => rows.map(m => ({
+    ...(typeof m.percent_of_goal === 'number' ? { percent_of_goal: m.percent_of_goal } : { cents: m.cents || 0 }),
+    label: m.label || '', celebrate: m.celebrate !== false
+  }));
   // DOM Elements
   const btnSaveTop = document.getElementById('btn-save-top');
   const btnSaveBottom = document.getElementById('btn-save-bottom');
@@ -348,7 +352,7 @@
     currentSettingsSeq = data.settings_seq || 1;
     const es = data.event_state || {};
     loadedGoalCents = es.goal_cents || 0;
-    loadedMilestones = JSON.stringify((data.milestones || []).map(m => ({ cents: m.cents || 0, label: m.label || '' })));
+    loadedMilestones = JSON.stringify(milestonePayload(data.milestones || []));
     field('setting-marker-mode').querySelector(`input[value="${es.marker_mode || 'milestones'}"]`).checked = true;
     field('setting-marker-step').querySelector(`input[value="${es.marker_step_cents || 10000000}"]`).checked = true;
     field('setting-background-url').value = es.background_image_url || '';
@@ -590,9 +594,14 @@
       if (target) target.focus();
       return;
     }
-    const changedMilestones = JSON.stringify(milestonesData.map(m => ({ cents: m.cents || 0, label: m.label || '' })));
-    if ((goalDollars * 100 !== loadedGoalCents || changedMilestones !== loadedMilestones) &&
-        !(await GivebarSession.confirm({ title: 'Apply goal and milestones to the ballroom?', body: `This changes the live chart the moment it saves. Goal: $${goalDollars.toLocaleString('en-US')}.`, confirmLabel: 'Save and apply' }))) return;
+    const goalCents = Math.round(goalDollars * 100);
+    const goalChanged = goalCents !== loadedGoalCents;
+    const milestonesChanged = JSON.stringify(milestonePayload(milestonesData)) !== loadedMilestones;
+    if (goalChanged || milestonesChanged) {
+      const title = goalChanged ? 'Apply the new goal to the ballroom?' : 'Apply milestone changes to the ballroom?';
+      const body = goalChanged ? `The goal changes from ${GivebarSession.format.money(loadedGoalCents)} to ${GivebarSession.format.money(goalCents)} when saved.` : 'Milestone targets or labels have changed. The fundraising goal is unchanged.';
+      if (!(await GivebarSession.confirm({ title, body, confirmLabel: 'Save and apply' }))) return;
+    }
 
     const guardrailDollars = dollars(guardrailThresholdInput?.value) || 9500;
     const stagingSec = Math.max(0, parseInt(stagingDelayInput?.value || '0', 10) || 0);
@@ -608,12 +617,10 @@
       event_title: eventTitleInput?.value?.trim() || '',
       event_name: eventNameInput?.value?.trim() || undefined,
       event_subtitle: eventSubtitleInput?.value?.trim() || '',
-      goal_cents: goalDollars * 100,
+      goal_cents: goalCents,
       trust_badge_text: trustBadgeInput?.value?.trim() || '',
       // Percentage milestones stay percentages (cents omitted) so they follow the goal; fixed ones send cents.
-      milestones: milestonesData.map(m => typeof m.percent_of_goal === 'number'
-        ? { percent_of_goal: m.percent_of_goal, label: m.label || '', celebrate: m.celebrate !== false }
-        : { cents: m.cents || 0, label: m.label || '', celebrate: m.celebrate !== false }),
+      milestones: milestonePayload(milestonesData),
 
       // Branding
       logo_url: imageValue(logoUrlInput?.value),

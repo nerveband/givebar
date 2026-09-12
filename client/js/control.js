@@ -125,10 +125,12 @@
       const note = item.notes ? `<div class="donation-note">${fmt.escape(item.notes)}</div>` : '';
       const extras = [item.card_number && `Card ${item.card_number}`, item.table_number && `Table ${item.table_number}`, item.donor_phonetic && `Say: ${item.donor_phonetic}`].filter(Boolean).map(fmt.escape).join(' · ');
       const html = `
-        <td><div class="donation-donor">${fmt.escape(item.donor_name)} ${anonymous}</div>${note}<div class="donation-attribution">${fmt.escape(fmt.source(item.source))} · ${fmt.escape(item.entered_by || 'Unknown operator')}${extras ? ' · ' + extras : ''}</div></td>
+        <td class="donor-cell"><div class="donation-donor">${fmt.escape(item.donor_name)} ${anonymous}</div></td>
         <td class="text-right amount-cell">${fmt.money(item.amount_cents)}${item.matched_amount_cents ? `<div class="donation-attribution">+ ${fmt.money(item.matched_amount_cents)} match</div>` : ''}</td>
+        <td class="source-cell"><div>${fmt.escape(fmt.source(item.source))}</div>${item.entered_by ? `<div class="donation-attribution">${fmt.escape(item.entered_by)}</div>` : ''}</td>
+        <td class="details-cell">${note}${extras ? `<div class="donation-attribution">${extras}</div>` : ''}${!note && !extras ? '<span class="donation-attribution">No additional details</span>' : ''}</td>
         <td class="text-center time-cell">${fmt.escape(fmt.time(item.created_at))}</td>
-        <td class="text-center"><span class="status-badge ${status.key}">${status.label}</span></td>
+        <td class="text-center status-cell"><span class="status-badge ${status.key}">${status.label}</span></td>
         <td class="text-right row-actions">
           ${state.can_edit ? `<button type="button" class="btn-secondary btn-row" data-edit="${fmt.escape(item.donation_id)}">Edit</button>
           <button type="button" class="btn-delete-row" data-delete="${fmt.escape(item.donation_id)}">Delete</button>` : '<a class="btn-secondary" href="/signin?next=/donations">Sign in to edit</a>'}

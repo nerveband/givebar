@@ -352,6 +352,11 @@
   border-collapse: collapse;
   text-align: left;
 }
+#panel-table { overflow-x: auto; }
+.donations-table .donor-cell { min-width: 150px; overflow-wrap: anywhere; }
+.donations-table .source-cell { min-width: 130px; }
+.donations-table .details-cell { min-width: 180px; max-width: 300px; overflow-wrap: anywhere; }
+.donations-table .details-cell .donation-note { margin: 0; }
 
 .donations-table th {
   padding: 12px 14px;
@@ -384,9 +389,11 @@
 .text-right { text-align: right; }
 .text-center { text-align: center; }
 
-.amount-cell {
-  font-weight: 700;
+.donations-table td.amount-cell {
+  font-size: clamp(24px, 2vw, 32px);
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .time-cell {
@@ -634,11 +641,15 @@ dialog::backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
 @media (max-width: 700px) {
   #panel-table .donations-table, #panel-table .donations-table tbody { display: block; width: 100%; }
   #panel-table .donations-table thead { display: none; }
-  #panel-table .donations-table tr { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px 4px; border-bottom: 1px solid #2a2c34; }
+  #panel-table .donations-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px; padding: 16px 4px; border-bottom: 1px solid #2a2c34; }
   #panel-table .donations-table td { display: block; padding: 0; border: 0; text-align: left; }
-  #panel-table .donations-table td.amount-cell { text-align: right; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #panel-table .donations-table td.amount-cell { grid-column: 2; grid-row: 1; text-align: right; font-size: 28px; font-weight: 800; }
+  #panel-table .donations-table td.donor-cell { grid-column: 1; grid-row: 1; min-width: 0; }
+  #panel-table .donations-table td.source-cell, #panel-table .donations-table td.details-cell { grid-column: 1 / -1; min-width: 0; max-width: none; }
+  #panel-table .donations-table td.source-cell::before { content: "Source / recorded by"; display: block; color: var(--ink-secondary); font-size: 11px; }
+  #panel-table .donations-table td.details-cell::before { content: "Details / notes"; display: block; color: var(--ink-secondary); font-size: 11px; }
   #panel-table .donations-table td.time-cell { grid-column: 1; }
-  #panel-table .donations-table td:nth-child(4) { grid-column: 2; text-align: right; }
+  #panel-table .donations-table td.status-cell { grid-column: 2; text-align: right; }
   #panel-table .donations-table td.row-actions { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 8px; white-space: normal; }
   #panel-table .donations-table td.row-actions .btn-row, #panel-table .donations-table td.row-actions .btn-delete-row { flex: 1; margin: 0; min-height: 44px; text-align: center; }
   #panel-table .donations-table tr:hover td { background: transparent; }
