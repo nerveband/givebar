@@ -310,6 +310,13 @@
     }
   }
 
+  // The server hands uploaded images back as /api/asset/... URLs; sending one back unchanged
+  // must leave the stored image alone, so it is omitted from the save.
+  function imageValue(raw) {
+    const value = (raw || '').trim();
+    return value.startsWith('/api/asset/') ? undefined : value;
+  }
+
   function setFieldValidity(input, errEl, ok) {
     if (input) input.classList.toggle('invalid', !ok);
     if (errEl) errEl.hidden = ok;
@@ -604,7 +611,7 @@
       milestones: milestonesData.map(m => ({ cents: m.cents || 0, label: m.label || '' })),
 
       // Branding
-      logo_url: logoUrlInput?.value?.trim() || '',
+      logo_url: imageValue(logoUrlInput?.value),
       bar_color: barColorInput?.value?.trim() || '',
       text_color: textColorInput?.value?.trim() || '',
       background_style: bgStyleSelect?.value || 'plain',
@@ -612,7 +619,7 @@
       chart_orientation: orientation,
       marker_mode: field('setting-marker-mode').querySelector(':checked').value,
       marker_step_cents: Number(field('setting-marker-step').querySelector(':checked').value),
-      background_image_url: field('setting-background-url').value.trim(),
+      background_image_url: imageValue(field('setting-background-url').value),
       gradient_start: field('setting-gradient-start').value,
       gradient_end: field('setting-gradient-end').value,
       gradient_angle: Number(field('setting-gradient-angle').value),
@@ -621,7 +628,7 @@
 
       // Donation link & QR
       qr_url: qrUrlInput?.value?.trim() || '',
-      qr_image_url: field('setting-qr-image-url').value,
+      qr_image_url: imageValue(field('setting-qr-image-url').value),
       qr_image_backdrop: field('setting-qr-image-backdrop').checked,
       display_url: displayUrlInput?.value?.trim() || '',
       show_qr: Boolean(toggleShowQr?.checked),

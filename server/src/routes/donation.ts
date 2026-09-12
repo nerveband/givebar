@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import {
-  recordDonation, amendDonation, voidDonation, restoreDonation,
+  recordDonation, amendDonation, voidDonation, restoreDonation, isValidAmountCents, MAX_AMOUNT_CENTS,
   CardSerialCollisionError, MajorGiftConfirmationRequiredError, PossibleDuplicateError,
   type CreateDonationInput, type PaymentMethod
 } from "../ledger";
@@ -56,8 +56,8 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
   try {
     if (req.method === "PUT" && !verb) {
       const amountCents = typeof body.amount_cents === "number" ? Math.round(body.amount_cents) : 0;
+      if (!isValidAmountCents(amountCents)) return Response.json({ error: "VALIDATION_ERROR", message: `amount_cents must be a positive integer of at most ${MAX_AMOUNT_CENTS}` }, { status: 400 });
       const donorName = optionalText(body.donor_name, 200) || "";
-      if (amountCents <= 0) return Response.json({ error: "VALIDATION_ERROR", message: "amount_cents must be a positive integer" }, { status: 400 });
       if (!donorName) return Response.json({ error: "VALIDATION_ERROR", message: "donor_name is required" }, { status: 400 });
       const method = typeof body.payment_method === "string" && PAYMENT_METHODS[body.payment_method] ? body.payment_method as PaymentMethod : "pledge";
       const input: CreateDonationInput = {
@@ -73,14 +73,15 @@ export async function handleDonationRequest(req: Request, db: Database, pathPart
         donor_phonetic: optionalText(body.donor_phonetic, 200),
         table_number: optionalText(body.table_number, 40),
         confirmed_major_gift: body.confirmed_major_gift === true,
-        confirmed_duplicate: body.confirmed_duplicate === true
+        confirmed_duplicate: body.confirmed_duplicate === true,
+        queued_at: typeof body.queued_at === "number" ? body.queued_at : undefined
       };
       const result = recordDonation(db, input);
       return Response.json({ ok: true, ...result }, { status: result.is_duplicate ? 200 : 201 });
     }
     if (req.method === "POST" && verb === "amend") {
-      if (body.amount_cents !== undefined && (typeof body.amount_cents !== "number" || body.amount_cents <= 0)) {
-        return Response.json({ error: "VALIDATION_ERROR", message: "amount_cents must be a positive integer" }, { status: 400 });
+      if (body.amount_cents !== undefined && (typeof body.amount_cents !== "number" || !isValidAmountCents(Math.round(body.amount_cents)))) {
+        return Response.json({ error: "VALIDATION_ERROR", message: `amount_cents must be a positive integer of at most ${MAX_AMOUNT_CENTS}` }, { status: 400 });
       }
       const patch: Partial<CreateDonationInput> = {
         amount_cents: typeof body.amount_cents === "number" ? Math.round(body.amount_cents) : undefined,

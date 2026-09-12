@@ -207,7 +207,7 @@
         return;
       }
       // Same identifier, same confirmation state: the guards still apply on replay.
-      outbox.push({ donation_id: donationId, ...payload });
+      outbox.push({ donation_id: donationId, ...payload, queued_at: Date.now() });
       saveOutbox();
       announce(`${fmt.money(cents)} from ${payload.donor_name} is waiting to sync and is not yet counted. Do not enter it again.`);
       dialog.close();
@@ -233,7 +233,8 @@
             ? `${fmt.money(result.prior_amount_cents)} from ${result.prior_donor_name} is already recorded. If this waiting gift is the same one, discard it; if it is a different gift, enter it again and tick "record anyway", then discard this one.`
             : `${result.message || result.error || 'sync unavailable'}. It stays saved in this browser.`;
           announce(`Waiting gift for ${payload.donor_name}: ${reason}`);
-          break;
+          if (response.status >= 500) break;
+          continue;
         }
         outbox = outbox.filter(item => item.donation_id !== payload.donation_id);
         saveOutbox();

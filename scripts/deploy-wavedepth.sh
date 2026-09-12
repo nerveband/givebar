@@ -70,18 +70,36 @@ PREVIOUS="$($SSH "$TARGET" "docker inspect givebar --format '{{.Config.Image}}' 
 echo "==> Syncing code to $TARGET:$APP_DIR/code"
 rsync -az --delete -e "$SSH" --exclude .git --exclude node_modules --exclude data --exclude '*.sqlite*' ./ "$TARGET:$APP_DIR/code/"
 
-echo "==> Snapshotting the live database"
-$SSH "$TARGET" "docker exec givebar bun -e \"const {Database}=require('bun:sqlite');require('fs').mkdirSync('/app/data/backups',{recursive:true});const n='/app/data/backups/givebar-pre-deploy-'+new Date().toISOString().replace(/[-:.]/g,'').slice(0,18)+'.sqlite';new Database('/app/data/givebar.sqlite').exec(\\\"VACUUM INTO '\\\"+n+\\\"'\\\");console.log(n)\" 2>/dev/null || echo 'no running container to snapshot'"
+# The pre-deploy snapshot is the way back if the new image cannot open the database; when a
+# container is running, a failed snapshot stops the deploy before anything is touched.
+if [ -n "$PREVIOUS" ]; then
+  echo "==> Snapshotting the live database"
+  $SSH "$TARGET" "docker exec givebar bun -e \"const {Database}=require('bun:sqlite');require('fs').mkdirSync('/app/data/backups',{recursive:true});const n='/app/data/backups/givebar-pre-deploy-'+new Date().toISOString().replace(/[-:.]/g,'').slice(0,18)+'.sqlite';new Database('/app/data/givebar.sqlite').exec(\\\"VACUUM INTO '\\\"+n+\\\"'\\\");console.log(n)\"" \
+    || { echo "Pre-deploy snapshot failed; nothing was changed." >&2; exit 1; }
+else
+  echo "==> No running container: first deploy, no snapshot and no rollback target"
+fi
+
+# Secrets are checked before the old container is removed, so a missing key never leaves the site down.
+$SSH "$TARGET" "$REMOTE_LIB; ensure_smtp_key"
 
 echo "==> Building $TAG"
 $SSH "$TARGET" "cd $APP_DIR/code && docker build -q -t $TAG . >/dev/null"
 
 echo "==> Replacing the container (previous image: ${PREVIOUS:-none})"
-if $SSH "$TARGET" "$REMOTE_LIB; ensure_smtp_key; run_container $TAG; healthy"; then
+if $SSH "$TARGET" "$REMOTE_LIB; run_container $TAG; healthy"; then
   echo "Deployed $TAG. Public check: HTTP $(curl -s -o /dev/null -w '%{http_code}' -m 8 'https://givebar.wavedepth.com/api/state?role=stage')"
   exit 0
 fi
 
-echo "Health check failed; rolling back to ${PREVIOUS:-nothing}" >&2
-[ -n "$PREVIOUS" ] && $SSH "$TARGET" "$REMOTE_LIB; run_container $PREVIOUS; healthy"
+if [ -z "$PREVIOUS" ]; then
+  echo "Health check failed on a first deploy; inspect 'docker logs givebar' on the host." >&2
+  exit 1
+fi
+echo "Health check failed; rolling back to $PREVIOUS" >&2
+if $SSH "$TARGET" "$REMOTE_LIB; run_container $PREVIOUS; healthy"; then
+  echo "Rolled back to $PREVIOUS. If the new image upgraded the schema, restore the pre-deploy snapshot from Team and backups." >&2
+else
+  echo "Rollback did not come up either; restore the pre-deploy snapshot by hand (README, Recovery)." >&2
+fi
 exit 1

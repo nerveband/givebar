@@ -146,6 +146,8 @@ export interface CreateDonationInput {
   table_number?: string;
   confirmed_major_gift?: boolean;
   confirmed_duplicate?: boolean;
+  /** When the gift was first keyed in, for a replay from a browser outbox; the duplicate window is measured from here. */
+  queued_at?: number;
 }
 
 export class MajorGiftConfirmationRequiredError extends Error {
@@ -347,6 +349,10 @@ function touchState(db: Database, now: number): void {
  * Record a new donation. Idempotent on donation_id and on (source, source_txn_id),
  * so a client retrying a lost response can never create a second gift.
  */
+/** Largest single gift the ledger accepts: $100,000,000. Anything larger is a malformed request, not a pledge. */
+export const MAX_AMOUNT_CENTS = 10_000_000_000;
+export const isValidAmountCents = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0 && (value as number) <= MAX_AMOUNT_CENTS;
+
 export function recordDonation(db: Database, input: CreateDonationInput): { seq: number; donation_id: string; is_duplicate: boolean } {
   if (input.source && input.source_txn_id) {
     const existing = db.query<{ seq: number; donation_id: string }, [string, string]>(`SELECT seq, donation_id FROM ledger WHERE source = ? AND source_txn_id = ? LIMIT 1`).get(input.source, input.source_txn_id);
@@ -355,8 +361,8 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
   const existingId = db.query<{ seq: number }, [string]>(`SELECT seq FROM ledger WHERE donation_id = ? LIMIT 1`).get(input.donation_id);
   if (existingId) return { seq: existingId.seq, donation_id: input.donation_id, is_duplicate: true };
 
-  if (!Number.isInteger(input.amount_cents) || input.amount_cents <= 0) {
-    throw new Error(`Invalid donation amount: ${input.amount_cents}. Must be a positive integer in cents.`);
+  if (!isValidAmountCents(input.amount_cents)) {
+    throw new Error(`Invalid donation amount: ${input.amount_cents}. Must be a positive integer in cents, at most $${MAX_AMOUNT_CENTS / 100}.`);
   }
   if (typeof input.donor_name !== "string" || !input.donor_name.trim()) throw new Error("Donor name is required.");
 
@@ -372,8 +378,11 @@ export function recordDonation(db: Database, input: CreateDonationInput): { seq:
   if (source === "manual" && input.confirmed_duplicate !== true) {
     const key = normalizeDonor(rawDonorName);
     const now = Date.now();
+    // A gift replayed from an outbox was keyed in at queued_at; anything a colleague recorded
+    // from ten minutes before that up to now is a candidate duplicate, however long the outage lasted.
+    const since = (Number.isFinite(input.queued_at) && (input.queued_at as number) < now ? (input.queued_at as number) : now) - DUPLICATE_WINDOW_MS;
     for (const record of foldLedger(db).active_donations.values()) {
-      if (record.amount_cents === input.amount_cents && now - record.created_at <= DUPLICATE_WINDOW_MS && normalizeDonor(record.donor_name) === key) {
+      if (record.amount_cents === input.amount_cents && record.created_at >= since && normalizeDonor(record.donor_name) === key) {
         throw new PossibleDuplicateError(record.donation_id, record.donor_name, record.amount_cents, record.entered_by, record.created_at);
       }
     }
@@ -414,7 +423,7 @@ export function amendDonation(db: Database, donationId: string, input: Partial<C
     ? "Anonymous Supporter"
     : (input.display_name?.trim() || (existing.display_name === "Anonymous Supporter" || input.donor_name !== undefined ? donorName : existing.display_name));
   const newAmount = input.amount_cents !== undefined ? input.amount_cents : existing.amount_cents;
-  if (!Number.isInteger(newAmount) || newAmount <= 0) throw new Error(`Invalid amended amount: ${newAmount}. Must be a positive integer in cents.`);
+  if (!isValidAmountCents(newAmount)) throw new Error(`Invalid amended amount: ${newAmount}. Must be a positive integer in cents, at most $${MAX_AMOUNT_CENTS / 100}.`);
 
   const state = getEventState(db);
   if (input.amount_cents !== undefined && input.amount_cents !== existing.amount_cents && input.amount_cents >= state.major_gift_threshold_cents && input.confirmed_major_gift !== true) {

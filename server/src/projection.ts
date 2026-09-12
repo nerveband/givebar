@@ -45,9 +45,24 @@ export interface ThemeTokens {
   qr_bg_color: string;
 }
 
+/**
+ * Inline (data:) images uploaded in Settings are served by /api/asset/<name>?v=<settings_seq>
+ * so a projection carries a short cacheable URL, never megabytes of base64 in every frame.
+ */
+export type InlineImageField = "logo_url" | "background_image_url" | "qr_image_url";
+export const INLINE_IMAGE_FIELDS: Record<string, InlineImageField> = { logo: "logo_url", background: "background_image_url", qr: "qr_image_url" };
+export const isInlineImage = (value: string): boolean => /^data:image\//i.test(value);
+export function withAssetUrls(state: EventStateRecord): EventStateRecord {
+  let out = state;
+  for (const [name, field] of Object.entries(INLINE_IMAGE_FIELDS)) {
+    if (isInlineImage(state[field])) out = { ...out, [field]: `/api/asset/${name}?v=${state.settings_seq}` };
+  }
+  return out;
+}
+
 /** Event settings as every client sees them, plus the derived printed URL. */
 export function publicEventState(state: EventStateRecord): EventStateRecord & { display_url_effective: string } {
-  return { ...state, display_url_effective: deriveDisplayUrl(state.qr_url, state.display_url) };
+  return { ...withAssetUrls(state), display_url_effective: deriveDisplayUrl(state.qr_url, state.display_url) };
 }
 
 export function getThemeTokens(state: EventStateRecord): ThemeTokens {
@@ -116,7 +131,7 @@ function stagedView(db: Database, state: EventStateRecord, fullFold: FoldedLedge
 
 /** Audience chart projection (/chart). Public: no donor legal names, notes, or operator data. */
 export function getStageState(db: Database) {
-  const state = getEventState(db);
+  const state = withAssetUrls(getEventState(db));
   const now = Date.now();
   const fullFold = foldLedger(db);
   const { hidden, stageTotal } = stagedView(db, state, fullFold, now);
@@ -289,12 +304,16 @@ export function getControlState(db: Database) {
       active_donation_count: fullFold.active_donation_count,
       void_count: fullFold.void_count
     },
-    stage_preview: {
-      stage_total_cents: stagedView(db, state, fullFold, now).stageTotal,
-      verified_total_cents: fullFold.total_raised_cents,
-      odometer_floor_cents: state.odometer_floor_cents,
-      is_frozen: Boolean(state.is_frozen)
-    },
+    stage_preview: (() => {
+      const { stageTotal } = stagedView(db, state, fullFold, now);
+      return {
+        stage_total_cents: stageTotal,
+        verified_total_cents: fullFold.total_raised_cents,
+        // The ratchet may have just advanced; report what the wall holds now.
+        odometer_floor_cents: Math.max(state.odometer_floor_cents, stageTotal),
+        is_frozen: Boolean(state.is_frozen)
+      };
+    })(),
     donations,
     server_time: now
   };

@@ -18,37 +18,55 @@ function cents(value: unknown): number {
   return result;
 }
 
-export function parseFundraisingGifts(payload: unknown, formId: string): RemoteGift[] {
+export type ParsedFundraising = { gifts: RemoteGift[]; skipped: { id: string; reason: string }[] };
+
+/**
+ * Batch-level problems (wrong token, missing form, truncated list) throw and nothing is imported.
+ * Row-level problems (a ticket purchase without a donation allocation, an unknown status, an
+ * unparseable amount) skip that row with a reason and never hold up the other gifts.
+ */
+export function parseFundraisingGifts(payload: unknown, formId: string): ParsedFundraising {
   const forms = object(payload).forms;
   if (!Array.isArray(forms)) throw new Error("Fundraising returned an invalid response; check the form token.");
   const form = forms.map(object).find(row => String(row.id) === formId);
   if (!form) throw new Error("The configured gala form is not accessible with this token.");
   if (!Array.isArray(form.transactions)) throw new Error("Fundraising transaction list is missing.");
   if (Number(object(form.summary).totalTransactions) !== form.transactions.length) throw new Error("Fundraising returned an incomplete transaction list; no gifts were changed.");
-  return form.transactions.map(value => {
+  const gifts: RemoteGift[] = [];
+  const skipped: { id: string; reason: string }[] = [];
+  const seen = new Set<string>();
+  form.transactions.forEach((value, index) => {
     const transaction = object(value);
     const id = String(transaction.id ?? "");
-    if (!/^\d+$/.test(id) || String(transaction.formId) !== formId) throw new Error("Fundraising transaction identity does not match the configured form.");
-    const status = String(transaction.transStatus).toLowerCase();
-    if (!["accepted", "refunded", "partially refunded", "voided", "declined", "pending"].includes(status)) throw new Error("Fundraising returned an unsupported payment status; review the connection.");
-    const donationItems = list(transaction.donations);
-    const mixedPurchase = [transaction.event, transaction.registrations, transaction.storePurchases, transaction.auctionPurchases].some(v => v != null && (Array.isArray(v) ? v.length > 0 : Object.keys(object(v)).length > 0));
-    if (mixedPurchase && !donationItems.length) throw new Error("A mixed ticket or store purchase needs donation-level allocation before import.");
-    // Count the gift, not donor-covered processing fees or ticket purchases.
-    const grossGift = donationItems.length
-      ? donationItems.reduce<number>((sum, item) => sum + cents(object(item).donationAmount), 0)
-      : Math.max(0, cents(transaction.value) - cents(transaction.giftAssist ?? 0));
-    const refunds = list(object(transaction.refunds).refund ?? transaction.refunds);
-    const refunded = refunds.reduce<number>((sum, value) => sum + cents(object(value).value), 0);
-    const amount = status === "accepted" || status === "partially refunded" ? Math.max(0, grossGift - refunded) : 0;
-    const donor = [transaction.firstName, transaction.lastName].filter(v => typeof v === "string" && v.trim()).join(" ") || String(transaction.billingName || transaction.contactCompany || "").trim();
-    if (amount && !donor) throw new Error("Fundraising returned a gift without donor attribution.");
-    const anonymousValue = transaction.transactionWasAnonymous;
-    const anonymous = !["n", false, 0, "0"].includes(anonymousValue as string | boolean | number) || donationItems.some(item => object(object(item).privacyCommunicationSelection).showName === "n");
-    const payment = String(transaction.paymentType).toLowerCase();
-    const method = payment.includes("check") ? "check" : payment.includes("cash") ? "cash" : "card";
-    return { id, amount, donor, anonymous, method, date: String(transaction.transactionDate || "") };
+    const skip = (reason: string) => { skipped.push({ id: id || `row ${index + 1}`, reason }); };
+    try {
+      if (!/^\d+$/.test(id) || String(transaction.formId) !== formId) return skip("does not belong to the configured form");
+      if (seen.has(id)) return skip("listed twice in the same response; the first copy was used");
+      seen.add(id);
+      const status = String(transaction.transStatus).toLowerCase();
+      if (!["accepted", "refunded", "partially refunded", "voided", "declined", "pending"].includes(status)) return skip(`unsupported payment status "${transaction.transStatus}"`);
+      const donationItems = list(transaction.donations);
+      const mixedPurchase = [transaction.event, transaction.registrations, transaction.storePurchases, transaction.auctionPurchases].some(v => v != null && (Array.isArray(v) ? v.length > 0 : Object.keys(object(v)).length > 0));
+      if (mixedPurchase && !donationItems.length) return skip("ticket or store purchase without a donation allocation");
+      // Count the gift, not donor-covered processing fees or ticket purchases.
+      const grossGift = donationItems.length
+        ? donationItems.reduce<number>((sum, item) => sum + cents(object(item).donationAmount), 0)
+        : Math.max(0, cents(transaction.value) - cents(transaction.giftAssist ?? 0));
+      const refunds = list(object(transaction.refunds).refund ?? transaction.refunds);
+      const refunded = refunds.reduce<number>((sum, value) => sum + cents(object(value).value), 0);
+      const amount = status === "accepted" || status === "partially refunded" ? Math.max(0, grossGift - refunded) : 0;
+      const donor = [transaction.firstName, transaction.lastName].filter(v => typeof v === "string" && v.trim()).join(" ") || String(transaction.billingName || transaction.contactCompany || "").trim();
+      if (amount && !donor) return skip("gift without donor attribution");
+      const anonymousValue = transaction.transactionWasAnonymous;
+      const anonymous = !["n", false, 0, "0"].includes(anonymousValue as string | boolean | number) || donationItems.some(item => object(object(item).privacyCommunicationSelection).showName === "n");
+      const payment = String(transaction.paymentType).toLowerCase();
+      const method = payment.includes("check") ? "check" : payment.includes("cash") ? "cash" : "card";
+      gifts.push({ id, amount, donor, anonymous, method, date: String(transaction.transactionDate || "") });
+    } catch (error) {
+      skip(error instanceof Error && /monetary|precision/.test(error.message) ? "unreadable amount" : "unreadable transaction");
+    }
   });
+  return { gifts, skipped };
 }
 
 export function applyFundraisingGifts(db: Database, formId: string, gifts: RemoteGift[]): number {
@@ -107,13 +125,16 @@ export function createFundraisingSync(db: Database, readToken = () => {
         method: "POST", body: new URLSearchParams({ token }), redirect: "error", signal: AbortSignal.timeout(20000)
       });
       if (!response.ok) throw new Error(`Fundraising request failed (HTTP ${response.status}).`);
-      const gifts = parseFundraisingGifts(await response.json(), config.form_id);
+      const { gifts, skipped } = parseFundraisingGifts(await response.json(), config.form_id);
       // Do not apply an in-flight response after an operator disables or changes the form.
       const latest = settings();
       if (!latest.enabled || latest.form_id !== config.form_id || latest.start_date !== config.start_date) return status();
+      const attention = skipped.length
+        ? `${skipped.length} transaction${skipped.length === 1 ? "" : "s"} need attention and ${skipped.length === 1 ? "was" : "were"} not imported: ${skipped.slice(0, 5).map(row => `#${row.id} (${row.reason})`).join(", ")}${skipped.length > 5 ? ", …" : ""}. Every other gift is in.`
+        : "";
       db.transaction(() => {
         applyFundraisingGifts(db, config.form_id, gifts);
-        db.query("UPDATE fundraising_sync SET last_sync_at = ?, last_error = '', imported_count = ? WHERE id = 1").run(Date.now(), gifts.filter(g => g.amount > 0).length);
+        db.query("UPDATE fundraising_sync SET last_sync_at = ?, last_error = ?, imported_count = ? WHERE id = 1").run(Date.now(), attention, gifts.filter(g => g.amount > 0).length);
       })();
       retryAt = 0;
     } catch (error) {

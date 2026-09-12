@@ -12,7 +12,7 @@ const response = (patch = {}) => ({ forms: [{ id: '42', summary: { totalTransact
 
 test('imports gift excluding fee assistance once; it reaches the wall at once with stage privacy intact while a manual gift still waits out the staging delay', () => {
   updateEventState(db, { stage_delay_ms: 8000 });
-  const gifts = parseFundraisingGifts(response(), '42');
+  const { gifts } = parseFundraisingGifts(response(), '42');
   expect(applyFundraisingGifts(db, '42', gifts)).toBe(1);
   expect(applyFundraisingGifts(db, '42', gifts)).toBe(0);
   expect(foldLedger(db).direct_raised_cents).toBe(5000);
@@ -28,27 +28,40 @@ test('imports gift excluding fee assistance once; it reaches the wall at once wi
 test('partial and full refunds release matching funds without changing a manual gift', () => {
   updateEventState(db, { is_match_active: 1, match_total_cents: 1000000 });
   recordDonation(db, { donation_id: 'manual', donor_name: 'Manual Gift', amount_cents: 1000 });
-  applyFundraisingGifts(db, '42', parseFundraisingGifts(response(), '42'));
+  applyFundraisingGifts(db, '42', parseFundraisingGifts(response(), '42').gifts);
   expect(foldLedger(db).total_raised_cents).toBe(12000);
-  applyFundraisingGifts(db, '42', parseFundraisingGifts(response({ refunds: { refund: { value: '10.00' } } }), '42'));
+  applyFundraisingGifts(db, '42', parseFundraisingGifts(response({ refunds: { refund: { value: '10.00' } } }), '42').gifts);
   expect(foldLedger(db).total_raised_cents).toBe(10000);
-  applyFundraisingGifts(db, '42', parseFundraisingGifts(response({ transStatus: 'Refunded' }), '42'));
+  applyFundraisingGifts(db, '42', parseFundraisingGifts(response({ transStatus: 'Refunded' }), '42').gifts);
   expect(foldLedger(db).total_raised_cents).toBe(2000);
   expect(foldLedger(db).active_donations.get('manual')?.amount_cents).toBe(1000);
 });
 
 test('polling does not resurrect a gift deleted by an operator', () => {
-  applyFundraisingGifts(db, '42', parseFundraisingGifts(response(), '42'));
+  applyFundraisingGifts(db, '42', parseFundraisingGifts(response(), '42').gifts);
   voidDonation(db, 'qgiv-42-123', 'Event lead');
-  applyFundraisingGifts(db, '42', parseFundraisingGifts(response({ value: '102.00' }), '42'));
+  applyFundraisingGifts(db, '42', parseFundraisingGifts(response({ value: '102.00' }), '42').gifts);
   expect(foldLedger(db).total_raised_cents).toBe(0);
 });
 
-test('rejects wrong form, incomplete response, and malformed financial values before import', () => {
+test('a wrong form or a truncated response imports nothing; a bad row is skipped with a reason while the other gifts still import', () => {
   expect(() => parseFundraisingGifts(response(), '99')).toThrow();
   expect(() => parseFundraisingGifts({ forms: [{ id: '42', summary: { totalTransactions: 2 }, transactions: [] }] }, '42')).toThrow();
-  expect(() => parseFundraisingGifts(response({ value: '52oops' }), '42')).toThrow();
-  expect(() => parseFundraisingGifts(response({ value: undefined }), '42')).toThrow();
+  const good = { id: '124', formId: '42', transStatus: 'Accepted', firstName: 'Good', lastName: 'Row', value: '10.00', paymentType: 'Credit Card', transactionWasAnonymous: 'n' };
+  const rows = [
+    { ...good, id: '901', value: '1,000.00' },
+    { ...good, id: '902', transStatus: 'Chargeback' },
+    { ...good, id: '903', registrations: [{ id: 1 }], donations: [] },
+    { ...good, id: '904', value: undefined },
+    { ...good, id: '124' },
+    good
+  ];
+  const parsed = parseFundraisingGifts({ forms: [{ id: '42', summary: { totalTransactions: rows.length }, transactions: rows }] }, '42');
+  expect(parsed.gifts.map(g => g.id)).toEqual(['124']);
+  expect(parsed.skipped.map(r => r.id).sort()).toEqual(['124', '901', '902', '903', '904']);
+  expect(parsed.skipped.find(r => r.id === '903')?.reason).toContain('donation allocation');
+  expect(applyFundraisingGifts(db, '42', parsed.gifts)).toBe(1);
+  expect(foldLedger(db).total_raised_cents).toBe(1000);
 });
 
 test('the sync polls every 5 seconds, a failure backs the timer off for 30 seconds, and Sync now still runs at once', async () => {

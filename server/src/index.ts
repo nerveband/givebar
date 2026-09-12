@@ -6,6 +6,7 @@ import { handleExportBackup, handleExportCSV } from "./routes/export";
 import { handleHistoryRequest } from "./routes/history";
 import { handleRehearsalRequest } from "./routes/rehearsal";
 import { handleQRRequest } from "./routes/qr";
+import { handleAssetRequest } from "./routes/asset";
 import { handlePresenceRequest } from "./presence";
 import { createFundraisingSync } from "./fundraising";
 import { createBackupManager } from "./backup";
@@ -44,8 +45,22 @@ const MIME_TYPES: Record<string, string> = {
 const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  // Testing and the previews frame the chart from the same origin; nobody else may frame operator pages.
+  "X-Frame-Options": "SAMEORIGIN"
 };
+
+/** JSON write bodies are small, except Settings saves that carry an uploaded image; presence enforces its own 512-byte cap. */
+const MAX_API_BODY_BYTES = 65536;
+const MAX_CONTROL_BODY_BYTES = 4 * 1024 * 1024;
+
+/** A browser write that names a foreign Origin is never one of ours. */
+function crossOriginWrite(req: Request, url: URL): boolean {
+  if (req.method === "GET" || req.method === "HEAD") return false;
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  try { return new URL(origin).host !== url.host; } catch { return true; }
+}
 
 const CLIENT_ROOT = join(process.cwd(), "client");
 
@@ -103,6 +118,9 @@ export const server = Bun.serve({
     if (pathname.startsWith("/api/")) {
       const parts = pathname.split("/").filter(Boolean);
       const resource = parts[1];
+      if (crossOriginWrite(req, url)) return withSecurity(Response.json({ error: "FORBIDDEN", message: "Cross-origin request refused" }, { status: 403 }));
+      const declaredLength = Number(req.headers.get("content-length") || 0);
+      if (declaredLength > (resource === "control" ? MAX_CONTROL_BODY_BYTES : MAX_API_BODY_BYTES)) return withSecurity(Response.json({ error: "PAYLOAD_TOO_LARGE", message: "Request body too large" }, { status: 413 }));
       if (resource === "state") return withSecurity(parts[2] === "stream" ? handleStateStreamRequest(req, db) : handleStateRequest(req, db));
       if (resource === "donation") return withSecurity(await handleDonationRequest(req, db, parts));
       if (resource === "control") return withSecurity(await handleControlRequest(req, db, backups));
@@ -112,6 +130,7 @@ export const server = Bun.serve({
       if (resource === "export" && parts[2] === "backup") return withSecurity(handleExportBackup(req, db, backups));
       if (resource === "rehearsal") return withSecurity(await handleRehearsalRequest(req, db));
       if (resource === "qr") return withSecurity(handleQRRequest(req, db));
+      if (resource === "asset") return withSecurity(handleAssetRequest(db, parts[2] || ""));
       if (resource === "presence") return withSecurity(await handlePresenceRequest(req, db));
       if (resource === "fundraising") return withSecurity(await fundraising.handle(req));
       return withSecurity(Response.json({ error: "NOT_FOUND", message: `API route ${pathname} not found` }, { status: 404 }));
