@@ -23,7 +23,7 @@ Givebar is a live fundraising bar chart and stage presentation suite for high-st
 * **Browser outbox**: every manual gift is written to `localStorage` (`givebar_outbox`) before its request leaves, with `queued_at`; every change is a read-merge-write by `donation_id` so tabs never overwrite each other; entries stuck in `sending` for 60 s are replayed; each waiting gift can be discarded on its own.
 * Every JSON write is same-origin (a foreign `Origin` header is a 403), bodies are capped (64 KB; 4 MB for Settings saves carrying an image), and pages send `X-Frame-Options: SAMEORIGIN`.
 * Images uploaded in Settings are stored inline in `event_state` but every projection carries `/api/asset/<name>?v=<settings_seq>` instead of the bytes (`withAssetUrls`); the Settings form omits an unchanged asset URL on save.
-* Named operator accounts only (`operator_account`, roles `admin` and `operator`), HttpOnly session cookies, single-use email invites. No shared PINs.
+* Named operator accounts only (`operator_account`, roles `admin` and `operator`), HttpOnly session cookies (`Secure` whenever the request arrived over HTTPS, directly or via `X-Forwarded-Proto`), single-use email invites. No shared PINs. The client never relies on secure-context-only APIs (`crypto.randomUUID` has a `getRandomValues` fallback) so a plain-HTTP laptop on the venue network still works.
 * Operators: record, edit, delete, and restore gifts; stage messages; pause/resume the chart; team notes; CSV.
 * Administrators additionally: Settings, Team and backups (`/team`: accounts, sign-in links, invites, snapshots, restore), Testing (rehearsal gifts, purge, chart re-sync), reset, Fundraising import configuration.
 * Presence identity comes from the session; heartbeats require a session.

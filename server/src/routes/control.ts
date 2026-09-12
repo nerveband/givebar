@@ -189,14 +189,14 @@ export async function handleControlRequest(req: Request, db: Database, backups: 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
   // Session lifecycle: no operator session required.
-  if (action === "login") return (await login(db, String(body.username || ""), String(body.pin || ""), ip)).response;
+  if (action === "login") return (await login(db, req, String(body.username || ""), String(body.pin || ""), ip)).response;
   if (action === "logout") return logout(req, db);
   if (action === "auth_check") {
     const session = getSession(req, db);
     const accounts = db.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM operator_account WHERE disabled = 0`).get()!.count;
     return Response.json({ authenticated: Boolean(session), username: session?.username || null, displayName: session?.displayName || null, role: session?.role || null, has_operator_accounts: accounts > 0 }, { headers: { "Cache-Control": "no-store" } });
   }
-  if (action === "redeem_invite") return redeemInvite(db, String(body.token || ""));
+  if (action === "redeem_invite") return redeemInvite(db, req, String(body.token || ""));
   if (action === "change_pin") return changePin(db, req, String(body.current_pin || ""), String(body.pin || ""));
   if (action === "bootstrap_admin") {
     const existing = db.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM operator_account WHERE disabled = 0`).get()!.count;

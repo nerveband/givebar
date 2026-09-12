@@ -9,6 +9,16 @@ export interface OperatorSession {
 }
 
 export const SESSION_COOKIE = "givebar_session";
+
+/**
+ * The session cookie is Secure whenever the operator reached us over HTTPS (directly or through
+ * the production proxy, which forwards the scheme). A plain-HTTP LAN fallback on the night
+ * (a laptop on the venue Wi-Fi) still signs in; localhost is a secure context either way.
+ */
+export function sessionCookie(req: Request, value: string, maxAgeSeconds: number): string {
+  const proto = req.headers.get("x-forwarded-proto") || new URL(req.url).protocol.replace(":", "");
+  return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${proto === "https" ? "; Secure" : ""}`;
+}
 const INVITE_PIN_SETUP_MS = 30 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 export const LOCKOUT_MS = 15 * 60 * 1000;
@@ -47,7 +57,7 @@ export function getSession(req: Request, db: Database): OperatorSession | null {
   return { accountId: row.account_id, username: row.username, displayName: row.display_name, role: row.role };
 }
 
-export async function login(db: Database, username: string, pin: string, ip: string): Promise<{ response: Response; accountId?: string; action?: string }> {
+export async function login(db: Database, req: Request, username: string, pin: string, ip: string): Promise<{ response: Response; accountId?: string; action?: string }> {
   const key = `${ip}:${normalizeUsername(username)}`;
   const attempt = db.query<{ attempts: number; expires_at: number }, [string]>(`SELECT attempts, expires_at FROM login_attempt WHERE key = ?`).get(key);
   if (attempt && attempt.expires_at > now() && attempt.attempts >= MAX_ATTEMPTS) {
@@ -76,7 +86,7 @@ export async function login(db: Database, username: string, pin: string, ip: str
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
-        "Set-Cookie": `${SESSION_COOKIE}=${raw}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MS / 1000}; Secure`
+        "Set-Cookie": sessionCookie(req, raw, SESSION_MS / 1000)
       }
     }),
     accountId: account.id,
@@ -95,7 +105,7 @@ export function logout(req: Request, db: Database): Response {
     headers: {
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
-      "Set-Cookie": `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`
+      "Set-Cookie": sessionCookie(req, "", 0)
     }
   });
 }
@@ -202,7 +212,7 @@ export async function createInvite(db: Database, req: Request, accountId: string
   return { link };
 }
 
-export async function redeemInvite(db: Database, token: string): Promise<Response> {
+export async function redeemInvite(db: Database, req: Request, token: string): Promise<Response> {
   const hashed = sha256Hex(token);
   const row = db.query<{ account_id: string; expires_at: number; used_at: number | null; username: string; display_name: string; role: OperatorRole; disabled: number }, [string]>(
     `SELECT i.account_id, i.expires_at, i.used_at, a.username, a.display_name, a.role, a.disabled
@@ -218,7 +228,7 @@ export async function redeemInvite(db: Database, token: string): Promise<Respons
   db.query(`INSERT INTO access_audit (actor_id, action, created_at) VALUES (?, 'invite_redeemed', ?)`).run(row.account_id, now());
   return new Response(JSON.stringify({ ok: true, username: row.username, displayName: row.display_name, role: row.role }), {
     status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Set-Cookie": `${SESSION_COOKIE}=${raw}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MS / 1000}; Secure` }
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Set-Cookie": sessionCookie(req, raw, SESSION_MS / 1000) }
   });
 }
 
@@ -242,6 +252,6 @@ export async function changePin(db: Database, req: Request, currentPin: string, 
   db.query(`INSERT INTO access_audit (actor_id, action, created_at) VALUES (?, 'pin_changed', ?)`).run(session.accountId, now());
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Set-Cookie": `${SESSION_COOKIE}=${raw}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MS / 1000}; Secure` }
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Set-Cookie": sessionCookie(req, raw, SESSION_MS / 1000) }
   });
 }

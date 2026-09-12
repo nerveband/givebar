@@ -34,6 +34,16 @@
   let editing = null;
   const headers = { 'Content-Type': 'application/json' };
 
+  // crypto.randomUUID exists only in secure contexts; a plain-HTTP laptop on the venue Wi-Fi
+  // (the night's fallback) still needs an unguessable id, so build one from getRandomValues.
+  function newDonationId() {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
   // --- Outbox: every gift is written to localStorage before its request leaves, and every
   // change is a read-merge-write by donation_id, so two tabs never overwrite each other's
   // waiting gifts and a tab closed mid-request still has a durable record to replay.
@@ -215,7 +225,7 @@
     // Minted before the write so a retry after a lost response replays the same gift: the
     // server treats a second PUT for a known donation_id as already recorded. The gift is
     // saved in this browser before the request leaves, stamped with the moment it was keyed in.
-    const donationId = editing ? null : crypto.randomUUID();
+    const donationId = editing ? null : newDonationId();
     const queuedAt = Date.now();
     if (!editing) upsertOutbox({ donation_id: donationId, ...payload, queued_at: queuedAt, state: 'sending' });
     pending = true;
