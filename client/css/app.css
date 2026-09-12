@@ -863,4 +863,6 @@ textarea.form-input-text { min-height:80px; resize:vertical; }
 .stats-table-el th, .stats-table-el td { padding: 10px 12px; font-size: 13px; }
 .stats-table-el tr:hover td { background: transparent; }
 .mono { font-family: var(--font-mono); font-size: 12px; color: #b7b8c1; }
+.stats-table { overflow-x: auto; }
 @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr; } .stats-filters .form-hint { margin-left: 0; } }
+@media (max-width: 600px) { .stats-table-el { min-width: 520px; } .stat-val { font-size: 22px; } }
