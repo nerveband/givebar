@@ -18,7 +18,6 @@
   let sortDirection = 'desc';
   let serverOffsetMs = 0;
 
-  let pendingDelete = null;
   let lastDeleted = null;
   let undoTimer = null;
 
@@ -28,7 +27,6 @@
   const emptyState = $('empty-state');
   const staleBanner = $('stale-banner');
   const staleText = $('stale-banner-text');
-  const deleteModal = $('delete-modal');
   const undoBanner = $('undo-banner');
 
   // --- Live channel ---------------------------------------------------------
@@ -51,7 +49,11 @@
     $('summary-stage-total').textContent = fmt.money(data.stage_preview.stage_total_cents);
     $('summary-gift-count').textContent = String(data.folded.active_donation_count);
     donations = data.donations;
-    $('summary-pending-count').textContent = String(donations.filter(d => !d.is_live_on_stage || d.is_held).length);
+    $('summary-pending-count').textContent = String(donations.filter(d => statusOf(d).key !== 'confirmed').length);
+    const gap = data.stage_preview.stage_total_cents - data.folded.total_raised_cents;
+    const gapNotice = $('gap-notice');
+    gapNotice.hidden = gap <= 0;
+    if (gap > 0) gapNotice.textContent = `The screen shows ${fmt.money(gap)} more than the ledger because a gift was deleted or lowered after it appeared. The ballroom figure never rolls backward; the next ${fmt.money(gap)} of gifts closes the gap.`;
     const paused = data.stage_preview.is_frozen;
     const pauseButton = $('btn-pause-chart');
     pauseButton.textContent = paused ? 'Resume chart' : 'Pause chart';
@@ -65,10 +67,8 @@
   // --- Table ----------------------------------------------------------------
   function statusOf(item) {
     if (item.is_held) return { key: 'held', label: 'Held' };
-    if (!item.is_live_on_stage) {
-      const remaining = Math.max(0, Math.ceil((item.created_at + (state.event_state.stage_delay_ms || 0) - (Date.now() + serverOffsetMs)) / 1000));
-      return { key: 'pending', label: `On screen in ${remaining}s` };
-    }
+    const remainingMs = item.created_at + (state.event_state.stage_delay_ms || 0) - (Date.now() + serverOffsetMs);
+    if (remainingMs > 0) return { key: 'pending', label: `On screen in ${Math.ceil(remainingMs / 1000)}s` };
     return { key: 'confirmed', label: 'On screen' };
   }
 
@@ -171,36 +171,29 @@
   $('btn-pause-chart').addEventListener('click', async () => {
     if (!state) return;
     const paused = state.stage_preview.is_frozen;
-    if (!paused && !window.confirm('Pause the ballroom screen? The figure holds and new gifts stay hidden until you resume.')) return;
+    if (!paused && !(await GivebarSession.confirm({ title: 'Pause the ballroom screen?', body: 'The figure holds where it is and new gifts stay hidden until you resume. The room sees nothing change.', confirmLabel: 'Pause chart', danger: true }))) return;
     const result = await GivebarSession.control(paused ? 'resume_chart' : 'pause_chart');
-    if (!result.ok) window.alert(result.data.message || 'Could not change the chart.');
+    if (!result.ok) GivebarSession.toast(result.data.message || 'Could not change the chart.', 'error');
+    else GivebarSession.toast(paused ? 'Chart resumed.' : 'Chart paused. Press Resume chart when you are ready.', 'info');
     channel.refresh();
   });
 
   // --- Delete and undo ------------------------------------------------------
-  function promptDelete(item) {
-    pendingDelete = item;
+  async function promptDelete(item) {
     const live = statusOf(item).key === 'confirmed';
-    $('delete-dialog-body').textContent = live
-      ? `Delete ${fmt.money(item.amount_cents)} from ${item.donor_name}? It leaves the total and the list. The ballroom figure never rolls backward, so the screen absorbs the difference in later gifts. Restorable from History.`
-      : `Delete ${fmt.money(item.amount_cents)} from ${item.donor_name}? It has not reached the ballroom screen yet, so nobody in the room will see it. Restorable from History.`;
-    deleteModal.style.display = 'flex';
-    $('btn-cancel-delete').focus();
-  }
-  function closeDelete() {
-    deleteModal.style.display = 'none';
-    pendingDelete = null;
-  }
-  $('btn-cancel-delete').addEventListener('click', closeDelete);
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && deleteModal.style.display !== 'none') closeDelete(); });
-  $('btn-confirm-delete').addEventListener('click', async () => {
-    const item = pendingDelete;
-    closeDelete();
-    if (!item) return;
+    const ok = await GivebarSession.confirm({
+      title: 'Delete this donation?',
+      body: live
+        ? `Delete ${fmt.money(item.amount_cents)} from ${item.donor_name}? It leaves the total and the list. The ballroom figure never rolls backward, so the screen absorbs the difference in later gifts. Restorable from History.`
+        : `Delete ${fmt.money(item.amount_cents)} from ${item.donor_name}? The room has not seen this gift, so deleting now means it never appears. Restorable from History.`,
+      confirmLabel: 'Delete donation',
+      danger: true
+    });
+    if (!ok) return;
     const response = await GivebarSession.api(`/api/donation/${item.donation_id}/void`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Deleted from Manage Donations' }) });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      window.alert(data.message || 'Could not delete the donation.');
+      GivebarSession.toast(data.message || 'Could not delete the donation.', 'error');
       return;
     }
     lastDeleted = item;
@@ -211,7 +204,7 @@
     donations = donations.filter(d => d.donation_id !== item.donation_id);
     renderTable();
     channel.refresh();
-  });
+  }
   $('btn-undo-delete').addEventListener('click', async () => {
     const item = lastDeleted;
     if (!item) return;
@@ -221,8 +214,8 @@
     const response = await GivebarSession.api(`/api/donation/${item.donation_id}/restore`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Undo from Manage Donations' }) });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      window.alert(data.message || 'Could not restore the donation.');
-    }
+      GivebarSession.toast(data.message || 'Could not restore the donation.', 'error');
+    } else GivebarSession.toast(`${fmt.money(item.amount_cents)} from ${item.donor_name} restored.`);
     channel.refresh();
   });
 
@@ -253,9 +246,9 @@
   }
   $('team-notes-list').addEventListener('click', async event => {
     const button = event.target.closest('[data-note]');
-    if (!button || !window.confirm('Remove this note for everyone?')) return;
+    if (!button || !(await GivebarSession.confirm({ title: 'Remove this note?', body: 'It disappears for every operator.', confirmLabel: 'Remove note', danger: true }))) return;
     const result = await GivebarSession.control('delete_team_note', { id: Number(button.dataset.note) });
-    if (!result.ok) window.alert(result.data.message || 'Could not remove the note.');
+    if (!result.ok) GivebarSession.toast(result.data.message || 'Could not remove the note.', 'error');
     channel.refresh();
   });
   $('team-note-form').addEventListener('submit', async event => {
@@ -264,7 +257,7 @@
     const body = input.value.trim();
     if (!body) { input.focus(); return; }
     const result = await GivebarSession.control('add_team_note', { body });
-    if (!result.ok) { window.alert(result.data.message || 'Could not post the note.'); return; }
+    if (!result.ok) { GivebarSession.toast(result.data.message || 'Could not post the note.', 'error'); return; }
     input.value = '';
     channel.refresh();
   });

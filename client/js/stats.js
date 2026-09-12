@@ -45,7 +45,7 @@
     return el;
   }
   function text(parent, x, y, value, attrs) {
-    const el = svg('text', { x, y, fill: MUTED, 'font-size': 11, 'font-family': 'inherit', ...attrs }, parent);
+    const el = svg('text', { x, y, fill: MUTED, 'font-family': 'inherit', ...attrs }, parent);
     el.textContent = value;
     return el;
   }
@@ -54,9 +54,12 @@
   }
 
   /** Area + line for cumulative money, bars for per-period amounts, with milestone rules. */
+  /** Charts are drawn at the container's real width so labels stay legible on every screen. */
+  function chartWidth(container) { return Math.max(320, Math.round(container.clientWidth || container.parentElement.clientWidth || 900)); }
+
   function areaChart(container, points, opts) {
     if (!points.length || !points.some(p => p.y > 0)) return empty(container, opts.emptyMessage || 'Nothing in this range yet.');
-    const W = 900, H = 260, L = 56, R = 16, T = 16, B = 34;
+    const W = chartWidth(container), H = W < 520 ? 220 : 260, L = 56, R = 16, T = 16, B = 34;
     const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart-svg', role: 'img', 'aria-label': opts.label });
     const maxY = Math.max(...points.map(p => p.y), ...(opts.rules || []).filter(r => r.value <= Math.max(...points.map(p => p.y)) * 1.6).map(r => r.value), 1);
     const x = i => L + (i / Math.max(points.length - 1, 1)) * (W - L - R);
@@ -69,7 +72,7 @@
     for (const rule of opts.rules || []) {
       if (rule.value > maxY) continue;
       svg('line', { x1: L, x2: W - R, y1: y(rule.value), y2: y(rule.value), stroke: GOLD, 'stroke-dasharray': '4 4', opacity: 0.5 }, root);
-      text(root, W - R, y(rule.value) - 4, rule.label, { 'text-anchor': 'end', fill: GOLD, 'font-size': 10 });
+      text(root, W - R, y(rule.value) - 4, rule.label, { 'text-anchor': 'end', fill: GOLD });
     }
     const path = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ');
     svg('path', { d: `${path} L${x(points.length - 1).toFixed(1)},${y(0)} L${x(0)},${y(0)} Z`, fill: GOLD, opacity: 0.12 }, root);
@@ -84,7 +87,7 @@
   /** Vertical bars over time (gifts per period, visits per period). */
   function columnChart(container, points, opts) {
     if (!points.length || !points.some(p => p.y > 0)) return empty(container, opts.emptyMessage || 'Nothing in this range yet.');
-    const W = 900, H = 220, L = 40, R = 12, T = 12, B = 34;
+    const W = chartWidth(container), H = W < 520 ? 190 : 220, L = 40, R = 12, T = 12, B = 34;
     const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart-svg', role: 'img', 'aria-label': opts.label });
     const maxY = Math.max(...points.map(p => p.y), 1);
     const slot = (W - L - R) / points.length;
@@ -105,7 +108,8 @@
 
   /** About eight evenly spaced labels plus the last point, never two on top of each other. */
   function axisLabels(root, points, x, y) {
-    const step = Math.max(1, Math.ceil(points.length / 8));
+    const width = root.viewBox.baseVal.width;
+    const step = Math.max(1, Math.ceil(points.length / Math.max(3, Math.floor(width / 110))));
     const last = points.length - 1;
     points.forEach((p, i) => {
       if (i === last) text(root, x(i), y, p.label, { 'text-anchor': 'end' });
@@ -117,7 +121,7 @@
     const tip = svg('g', { opacity: 0 }, root);
     const rule = svg('line', { y1: 0, y2: root.viewBox.baseVal.height - 30, stroke: INK, opacity: 0.35 }, tip);
     const box = svg('rect', { rx: 6, fill: '#101116', stroke: '#2a2c34', height: 24 }, tip);
-    const label = text(tip, 0, 0, '', { fill: INK, 'font-size': 12 });
+    const label = text(tip, 0, 0, '', { fill: INK });
     root.addEventListener('mousemove', event => {
       const rect = root.getBoundingClientRect();
       const px = ((event.clientX - rect.left) / rect.width) * root.viewBox.baseVal.width;
@@ -160,13 +164,15 @@
   function render(data) {
     const s = data.summary;
     const rangeText = { today: 'today', '24h': 'the last 24 hours', '7d': 'the last 7 days', '30d': 'the last 30 days', all: 'all time' }[data.range];
-    $('stats-subtitle').textContent = `Gifts, sources, and how people reached the donation page, ${rangeText}.`;
+    const filters = [state.source && ({ bloomerang: 'online gifts only', manual: 'gifts entered by hand only' })[state.source], state.method && `${state.method} only`].filter(Boolean);
+    $('stats-subtitle').textContent = `Gifts, sources, and how people reached the donation page, ${rangeText}${filters.length ? ', ' + filters.join(', ') : ''}.`;
+    $('btn-clear-filters').hidden = !filters.length;
     $('t-total').textContent = money(s.total_cents);
     $('t-total-sub').textContent = s.matched_cents ? `${money(s.direct_cents)} given + ${money(s.matched_cents)} matched` : `${Math.round((s.total_cents / Math.max(data.goal_cents, 1)) * 100)}% of the ${short(data.goal_cents)} goal`;
     $('t-gifts').textContent = String(s.gifts);
     $('t-gifts-sub').textContent = `${s.online} online · ${s.manual} by hand · ${s.anonymous} anonymous`;
-    $('t-average').textContent = money(s.average_cents);
-    $('t-average-sub').textContent = `median ${money(s.median_cents)}`;
+    $('t-average').textContent = money(Math.round(s.average_cents / 100) * 100);
+    $('t-average-sub').textContent = `median ${money(Math.round(s.median_cents / 100) * 100)}`;
     $('t-largest').textContent = money(s.largest_cents);
     $('t-largest-sub').textContent = s.deleted || s.edited ? `${s.edited} edited · ${s.deleted} deleted` : 'no corrections';
 
@@ -266,6 +272,14 @@
   seg('range-seg', 'range', 'range');
   seg('source-seg', 'source', 'source');
   seg('method-seg', 'method', 'method');
+  $('btn-clear-filters').addEventListener('click', () => {
+    state.source = '';
+    state.method = '';
+    document.querySelectorAll('#source-seg button, #method-seg button').forEach(button => button.setAttribute('aria-checked', String(!button.dataset.source && !button.dataset.method)));
+    load();
+  });
+  let resizeTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (state.data) render(state.data); }, 200); });
   load();
   setInterval(load, 20000);
 })();

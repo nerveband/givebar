@@ -93,8 +93,6 @@
     setupSaveHandlers();
     setupReloadConflict();
     setupLivePreviews();
-    setupOperators();
-    setupBackups();
     loadSettings();
   }
 
@@ -435,7 +433,7 @@
         label: 'New Milestone'
       });
       renderMilestonesRows();
-      const lastInput = milestonesTbody?.querySelector('tr:last-child .milestone-label');
+      const lastInput = milestonesTbody?.querySelector('tr:last-child .milestone-label-input');
       if (lastInput) { lastInput.focus(); lastInput.select(); }
     });
   }
@@ -450,7 +448,7 @@
             <input type="text" inputmode="decimal" class="form-input-text milestone-dollars" value="${dollars.toLocaleString('en-US')}" style="padding:6px 8px" aria-label="Milestone target in dollars">
           </td>
           <td>
-            <input type="text" class="form-input-text milestone-label" value="${escapeHTML(m.label || '')}" style="padding: 6px 8px; font-size: var(--text-xs);" aria-label="Milestone label">
+            <input type="text" class="form-input-text milestone-label-input" value="${escapeHTML(m.label || '')}" style="padding: 6px 8px; font-size: var(--text-xs);" aria-label="Milestone label">
           </td>
           <td style="text-align: right;">
             <button type="button" class="btn-row-remove" data-remove-milestone="${idx}" title="Delete this milestone">
@@ -472,7 +470,7 @@
       });
     });
 
-    milestonesTbody.querySelectorAll('.milestone-label').forEach((inp, idx) => {
+    milestonesTbody.querySelectorAll('.milestone-label-input').forEach((inp, idx) => {
       inp.addEventListener('input', () => {
         milestonesData[idx].label = inp.value;
       });
@@ -584,7 +582,7 @@
     }
     const changedMilestones = JSON.stringify(milestonesData.map(m => ({ cents: m.cents || 0, label: m.label || '' })));
     if ((goalDollars * 100 !== loadedGoalCents || changedMilestones !== loadedMilestones) &&
-        !window.confirm(`This changes the live chart immediately after saving. Goal: $${goalDollars.toLocaleString('en-US')}. Apply the goal and milestone settings to the ballroom?`)) return;
+        !(await GivebarSession.confirm({ title: 'Apply goal and milestones to the ballroom?', body: `This changes the live chart the moment it saves. Goal: $${goalDollars.toLocaleString('en-US')}.`, confirmLabel: 'Save and apply' }))) return;
 
     const guardrailDollars = dollars(guardrailThresholdInput?.value) || 9500;
     const stagingSec = Math.max(0, parseInt(stagingDelayInput?.value || '0', 10) || 0);
@@ -686,157 +684,6 @@
       setSaveBusy(false);
     }
   }
-  // --- Operator accounts ---
-  const fmt = GivebarSession.format;
-  const inviteDialog = document.getElementById('invite-dialog');
-
-  async function loadOperators() {
-    const tbody = document.getElementById('operator-tbody');
-    const result = await GivebarSession.control('list_accounts');
-    if (!result.ok) {
-      tbody.innerHTML = `<tr><td colspan="5">${fmt.escape(result.data.message || 'Could not load operators.')}</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = result.data.accounts.map(account => `<tr>
-      <td>${fmt.escape(account.username)}</td>
-      <td>${fmt.escape(account.display_name)}</td>
-      <td>${account.role === 'admin' ? 'Administrator' : 'Operator'}</td>
-      <td>${account.disabled ? 'Disabled' : 'Active'}</td>
-      <td class="row-actions">
-        <button type="button" class="btn-secondary btn-row" data-link="${account.id}" data-name="${fmt.escape(account.display_name)}" ${account.disabled ? 'disabled' : ''}>Sign-in link</button>
-        <button type="button" class="btn-secondary btn-row" data-invite="${account.id}" data-name="${fmt.escape(account.display_name)}" ${account.disabled ? 'disabled' : ''}>Email invite</button>
-        <button type="button" class="btn-secondary btn-row" data-reset-pin="${account.id}" data-name="${fmt.escape(account.display_name)}">Reset PIN</button>
-        <button type="button" class="btn-secondary btn-row" data-disable="${account.id}" data-disabled="${account.disabled ? 0 : 1}">${account.disabled ? 'Enable' : 'Disable'}</button>
-      </td></tr>`).join('');
-  }
-
-  document.getElementById('operator-tbody').addEventListener('click', async event => {
-    const disable = event.target.closest('[data-disable]');
-    const reset = event.target.closest('[data-reset-pin]');
-    const invite = event.target.closest('[data-invite]');
-    const link = event.target.closest('[data-link]');
-    if (link) {
-      const result = await GivebarSession.control('create_invite_link', { id: link.dataset.link });
-      if (!result.ok) { window.alert(result.data.message || 'Could not create the link.'); return; }
-      const dialog = document.getElementById('link-dialog');
-      document.getElementById('link-dialog-title').textContent = `Sign-in link for ${link.dataset.name}`;
-      document.getElementById('link-dialog-body').textContent = `Works once, expires ${fmt.time(result.data.expires_at)}. Whoever opens it is signed in as ${result.data.display_name} (sign-in name ${result.data.username}) and can set a PIN. Send it by text or chat; do not post it anywhere public.`;
-      document.getElementById('link-value').value = result.data.link;
-      document.getElementById('btn-copy-link').dataset.copyText = result.data.link;
-      dialog.showModal();
-      document.getElementById('link-value').select();
-      return;
-    }
-    if (disable) {
-      const disabling = disable.dataset.disabled === '1';
-      if (disabling && !window.confirm('Disable this operator? Their session ends immediately and they cannot sign in until re-enabled.')) return;
-      const result = await GivebarSession.control('update_account', { id: disable.dataset.disable, disabled: disabling });
-      if (!result.ok) window.alert(result.data.message || 'Could not update the operator.');
-      await loadOperators();
-      return;
-    }
-    if (reset) {
-      const pin = window.prompt(`New PIN for ${reset.dataset.name} (4-12 characters). Their current session ends and they sign in again with this PIN.`);
-      if (pin === null) return;
-      const result = await GivebarSession.control('update_account', { id: reset.dataset.resetPin, pin });
-      window.alert(result.ok ? `PIN updated for ${reset.dataset.name}. Tell them the new PIN in person or by phone.` : (result.data.message || 'Could not update the PIN.'));
-      return;
-    }
-    if (invite) {
-      document.getElementById('invite-account-id').value = invite.dataset.invite;
-      document.getElementById('invite-dialog-title').textContent = `Email invite to ${invite.dataset.name}`;
-      document.getElementById('invite-email').value = '';
-      document.getElementById('invite-result').hidden = true;
-      document.getElementById('invite-error').textContent = '';
-      inviteDialog.showModal();
-      document.getElementById('invite-email').focus();
-    }
-  });
-
-  document.getElementById('invite-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    const error = document.getElementById('invite-error');
-    const button = document.getElementById('btn-send-invite');
-    error.textContent = '';
-    button.disabled = true;
-    button.textContent = 'Sending…';
-    try {
-      const result = await GivebarSession.control('send_invite', { id: document.getElementById('invite-account-id').value, email: document.getElementById('invite-email').value });
-      if (!result.ok) { error.textContent = result.data.message || 'Could not send the invite.'; return; }
-      const box = document.getElementById('invite-result');
-      box.hidden = false;
-      document.getElementById('invite-link').value = result.data.link;
-      document.getElementById('btn-copy-invite').dataset.copyText = result.data.link;
-    } finally {
-      button.disabled = false;
-      button.textContent = 'Send invite email';
-    }
-  });
-  document.getElementById('btn-close-invite').addEventListener('click', () => inviteDialog.close());
-  document.getElementById('btn-close-link').addEventListener('click', () => document.getElementById('link-dialog').close());
-
-  function setupOperators() {
-    document.getElementById('btn-create-operator').addEventListener('click', async () => {
-      const error = document.getElementById('operator-error');
-      error.textContent = '';
-      error.removeAttribute('data-tone');
-      const result = await GivebarSession.control('create_account', {
-        username: document.getElementById('operator-username').value,
-        displayName: document.getElementById('operator-display').value,
-        pin: document.getElementById('operator-pin').value,
-        role: document.getElementById('operator-role').value
-      });
-      if (!result.ok) { error.textContent = result.data.message || 'Could not create operator.'; return; }
-      error.dataset.tone = 'ok';
-      error.textContent = `Account created for ${document.getElementById('operator-display').value.trim()}. Tell them the name and PIN, or use Sign-in link / Email invite below.`;
-      document.getElementById('operator-username').value = '';
-      document.getElementById('operator-display').value = '';
-      document.getElementById('operator-pin').value = '';
-      await loadOperators();
-    });
-    void loadOperators();
-  }
-
-  // --- Backups ---
-  async function loadBackups() {
-    const list = document.getElementById('backup-list');
-    const result = await GivebarSession.control('list_backups');
-    if (!result.ok) { list.innerHTML = `<p class="form-hint">${fmt.escape(result.data.message || 'Backups unavailable.')}</p>`; return; }
-    const backups = result.data.backups;
-    document.getElementById('backup-summary').textContent = backups.length
-      ? `${backups.length} snapshots on the server. Latest: ${fmt.time(backups[0].created_at)} (${backups[0].label}). Automatic snapshots run every 5 minutes whenever anything changed.`
-      : 'No snapshots yet. Automatic snapshots run every 5 minutes whenever anything changed.';
-    list.innerHTML = backups.slice(0, 40).map(item => `<div class="backup-row">
-      <span>${fmt.escape(fmt.time(item.created_at))}</span>
-      <span class="backup-meta">${fmt.escape(item.label)} · ${Math.round(item.bytes / 1024)} KB</span>
-      <span class="backup-actions">
-        <a class="btn-secondary" href="/api/export/backup?name=${encodeURIComponent(item.name)}">Download</a>
-        <button type="button" class="btn-secondary" data-restore="${fmt.escape(item.name)}" data-when="${fmt.escape(fmt.time(item.created_at))}">Restore</button>
-      </span></div>`).join('');
-  }
-
-  function setupBackups() {
-    document.getElementById('btn-backup-now').addEventListener('click', async () => {
-      const result = await GivebarSession.control('create_backup');
-      if (!result.ok) window.alert(result.data.message || 'Backup failed.');
-      await loadBackups();
-    });
-    document.getElementById('backup-list').addEventListener('click', async event => {
-      const button = event.target.closest('[data-restore]');
-      if (!button) return;
-      const typed = window.prompt(`Restore the snapshot from ${button.dataset.when}?\n\nEvery gift, setting, and team note goes back to that moment. Anything recorded since is removed from the ledger (a pre-restore snapshot is taken first, so nothing is lost for good). Operator accounts and sessions stay as they are.\n\nType RESTORE to continue.`);
-      if (typed !== 'RESTORE') return;
-      button.disabled = true;
-      const result = await GivebarSession.control('restore_backup', { name: button.dataset.restore, confirm: 'RESTORE' });
-      if (!result.ok) { window.alert(result.data.message || 'Restore failed.'); button.disabled = false; return; }
-      window.alert(`Restored. A pre-restore snapshot was saved as ${result.data.pre_restore.name}.`);
-      await loadSettings();
-      await loadBackups();
-    });
-    void loadBackups();
-  }
-
-
   function setSaveBusy(busy) {
     [btnSaveTop, btnSaveBottom].forEach(btn => {
       if (!btn) return;

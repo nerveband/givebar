@@ -54,7 +54,9 @@
 
   $('btn-purge-sample-data').addEventListener('click', async () => {
     const count = sampleRecords.length;
-    if (!window.confirm(`Purge ${count} sample gift${count === 1 ? '' : 's'}? Real gifts stay. A backup is taken first, and the ballroom screen resets to the real total.`)) return;
+    if (!count) { showFeedback('No sample gifts to purge.', 'ok'); return; }
+    const ok = await GivebarSession.confirm({ title: `Purge ${count} sample gift${count === 1 ? '' : 's'}?`, body: 'Real gifts stay. A backup is taken first, and the ballroom screen resets to the real total.', confirmLabel: 'Purge sample data', danger: true });
+    if (!ok) return;
     const button = $('btn-purge-sample-data');
     button.disabled = true;
     button.textContent = 'Purging…';
@@ -70,7 +72,8 @@
   });
 
   $('btn-resync-chart').addEventListener('click', async () => {
-    if (!window.confirm('Re-sync the ballroom figure to the real total now? Use this before doors, never during the appeal.')) return;
+    const ok = await GivebarSession.confirm({ title: 'Re-sync the ballroom figure?', body: 'The chart restarts from the real total right now. Use this before doors, never during the appeal.', confirmLabel: 'Re-sync chart', danger: true });
+    if (!ok) return;
     const result = await GivebarSession.control('resync_chart');
     showFeedback(result.ok ? `Chart re-synced to ${fmt.money(result.data.state.stage_preview.stage_total_cents)}.` : (result.data.message || 'Could not re-sync the chart.'), result.ok ? 'ok' : 'error');
   });
@@ -88,8 +91,9 @@
   function render() {
     const count = sampleRecords.length;
     const banner = $('test-mode-banner');
-    banner.style.display = count > 0 ? 'flex' : 'none';
-    if (count > 0) $('test-banner-desc').textContent = `${count} sample record${count === 1 ? '' : 's'} active. Purging removes only sample data.`;
+    banner.style.display = 'flex';
+    $('test-banner-desc').textContent = count > 0 ? `${count} sample record${count === 1 ? '' : 's'} active. Purging removes only sample data.` : 'No sample records. The ledger holds real gifts only.';
+    $('btn-purge-sample-data').disabled = count === 0;
     $('sample-count-badge').textContent = `${count} active record${count === 1 ? '' : 's'}`;
     const tbody = $('sample-records-tbody');
     const clean = $('sample-clean-state');

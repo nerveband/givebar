@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
   <link rel="stylesheet" href="/css/base.css?v=7.0.0">
   <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.2.1">
+  <link rel="stylesheet" href="/css/app.css?v=7.3.1">
   <style>
     .settings-accordion {
       display: flex;
@@ -61,7 +61,7 @@
     .accordion-header-sub {
       font-size: var(--text-xs);
       font-weight: 500;
-      color: #71747a;
+      color: #9a9ca4;
       line-height: 1.4;
     }
 
@@ -286,7 +286,7 @@
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #71747a;
+      color: #9a9ca4;
       font-family: var(--font-sans);
       margin-bottom: 8px;
     }
@@ -403,6 +403,7 @@
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item active" aria-current="page">Settings</a>
+        <a href="/team" class="ops-nav-item">Team and backups</a>
         <a href="/testing" class="ops-nav-item">Testing</a>
         <a href="/history" class="ops-nav-item">History</a>
         <a href="/stats" class="ops-nav-item">Stats</a>
@@ -842,54 +843,6 @@
             </div>
           </section>
 
-          <!-- 8. BACKUPS -->
-          <section class="accordion-panel" id="sec-backups">
-            <button type="button" class="accordion-header" data-toggle="sec-backups" aria-expanded="false" aria-controls="sec-backups-body">
-              <span class="accordion-header-text">
-                <span>Backups and restore</span>
-                <span class="accordion-header-sub">Snapshots of every gift and setting</span>
-              </span>
-              <svg class="accordion-chevron" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
-            </button>
-            <div class="accordion-body" id="sec-backups-body">
-              <p class="form-hint" id="backup-summary">Loading snapshots…</p>
-              <p class="form-hint">Each snapshot is a complete copy of the database, safe to download while the event runs. Restore replaces every gift, setting, and team note with the snapshot (a pre-restore snapshot is taken first). Operator accounts are never touched by a restore. The per-gift Undo and Restore on History are usually the better tool; use a full restore only after a serious mistake.</p>
-              <div class="stage-message-actions">
-                <button type="button" id="btn-backup-now" class="btn-primary">Snapshot now</button>
-                <a class="btn-secondary" href="/api/export/backup">Download a fresh copy</a>
-                <a class="btn-secondary" href="/api/export/csv">Download CSV ledger</a>
-              </div>
-              <div id="backup-list" class="backup-list"></div>
-            </div>
-          </section>
-
-          <!-- 9. OPERATOR ACCOUNTS -->
-          <section class="accordion-panel" id="sec-access">
-            <button type="button" class="accordion-header" data-toggle="sec-access" aria-expanded="false" aria-controls="sec-access-body">
-              <span class="accordion-header-text">
-                <span>Operator accounts</span>
-                <span class="accordion-header-sub">Named sign-ins, roles, and revocation</span>
-              </span>
-              <svg class="accordion-chevron" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
-            </button>
-            <div class="accordion-body" id="sec-access-body">
-              <p class="form-hint">Create one account per person. Then either tell them the name and PIN, copy a one-time <strong>Sign-in link</strong> to text them, or send an <strong>Email invite</strong> with the link and the steps for the night. Links work once and expire after 7 days. Disabling an account ends their session immediately.</p>
-              <div class="form-group">
-                <label class="form-label" for="operator-username">Operator name</label>
-                <input id="operator-username" class="form-input-text" autocomplete="username" maxlength="64">
-                <label class="form-label" for="operator-display">Display name</label>
-                <input id="operator-display" class="form-input-text" autocomplete="name" maxlength="80">
-                <label class="form-label" for="operator-pin">Operator PIN <span class="form-hint" style="font-weight:400">(4 to 12 characters; digits are easiest on a phone)</span></label>
-                <input id="operator-pin" type="password" class="form-input-text" inputmode="numeric" autocomplete="new-password" minlength="4" maxlength="12">
-                <label class="form-label" for="operator-role">Role</label>
-                <select id="operator-role" class="form-input-text"><option value="operator">Operator</option><option value="admin">Administrator</option></select>
-                <div class="field-error" id="operator-error" role="alert"></div>
-                <button type="button" id="btn-create-operator" class="btn-secondary">Create operator</button>
-              </div>
-              <table class="donations-table"><thead><tr><th>Name</th><th>Display</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="operator-tbody"></tbody></table>
-            </div>
-          </section>
-
           <div style="margin-top: var(--space-5); display: flex; justify-content: flex-end; max-width: 900px;">
             <button type="button" id="btn-save-bottom" class="btn-save-settings">
               Save Settings
@@ -901,35 +854,9 @@
     </main>
   </div>
 
-  <dialog id="invite-dialog" class="operator-dialog" aria-labelledby="invite-dialog-title">
-    <form id="invite-form" novalidate>
-      <div class="donation-dialog-heading"><h2 id="invite-dialog-title">Email invite</h2><button type="button" id="btn-close-invite" class="btn-secondary">Close</button></div>
-      <p>The email comes from info@wavedepth.com with a one-time sign-in link (valid 7 days), the sign-in name, and what to do on the night.</p>
-      <input type="hidden" id="invite-account-id">
-      <label for="invite-email">Email address</label>
-      <input id="invite-email" type="email" autocomplete="off" required>
-      <div id="invite-error" class="field-error" role="alert"></div>
-      <div id="invite-result" hidden>
-        <p>Sent. If their inbox is slow, this is the same link; it works once.</p>
-        <input id="invite-link" readonly>
-        <div class="operator-dialog-actions"><button type="button" id="btn-copy-invite" class="btn-secondary" data-copy-label="Copy link">Copy link</button></div>
-      </div>
-      <button id="btn-send-invite" type="submit" class="btn-primary">Send invite email</button>
-    </form>
-  </dialog>
-
-  <dialog id="link-dialog" class="operator-dialog" aria-labelledby="link-dialog-title">
-    <form method="dialog" novalidate>
-      <div class="donation-dialog-heading"><h2 id="link-dialog-title">Sign-in link</h2><button type="button" id="btn-close-link" class="btn-secondary">Close</button></div>
-      <p id="link-dialog-body"></p>
-      <input id="link-value" readonly>
-      <div class="operator-dialog-actions"><button type="button" id="btn-copy-link" class="btn-primary" data-copy-label="Copy link">Copy link</button></div>
-    </form>
-  </dialog>
-
-  <script src="/js/session.js?v=7.0.0"></script>
+  <script src="/js/session.js?v=7.3.0"></script>
   <script src="/js/presence.js?v=7.0.0"></script>
-  <script src="/js/settings.js?v=7.2.0"></script>
+  <script src="/js/settings.js?v=7.3.0"></script>
   <script src="/js/fundraising.js?v=7.0.0"></script>
 </body>
 </html>

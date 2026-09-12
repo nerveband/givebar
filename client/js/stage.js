@@ -217,7 +217,8 @@
     applyStageMessage(data);
 
     // 8. Layout reflow from the visibility toggles
-    var showRecent = data.show_recent_donations === undefined ? true : Boolean(data.show_recent_donations);
+    // The Recent panel only exists while there is something to show; paused or empty, the QR takes the width.
+    var showRecent = (data.show_recent_donations === undefined ? true : Boolean(data.show_recent_donations)) && Array.isArray(data.chyrons) && data.chyrons.length > 0;
     var qrEncoded = typeof data.qr_url === 'string' ? data.qr_url.trim() : '';
     var qrArtwork = typeof data.qr_image_url === 'string' ? data.qr_image_url.trim() : '';
     var showQr = (data.show_qr === undefined ? true : Boolean(data.show_qr)) && Boolean(qrEncoded || qrArtwork);

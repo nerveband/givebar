@@ -48,6 +48,7 @@
   function saveOutbox() {
     localStorage.setItem('givebar_outbox', JSON.stringify(outbox));
     $('outbox-count').textContent = outbox.length;
+    $('outbox-noun').textContent = outbox.length === 1 ? 'gift' : 'gifts';
     outboxStatus.hidden = !outbox.length;
   }
 
@@ -60,6 +61,7 @@
       stageDelayMs = data.stage_delay_ms;
       $('field-card-number-wrap').hidden = !data.feature_card_number;
       $('field-table-number-wrap').hidden = !data.feature_table_number;
+      $('optional-fields').hidden = !data.feature_card_number && !data.feature_table_number;
       $('preset-grid').replaceChildren(...[...data.ask_tiers].sort((a, b) => a.cents - b.cents).map(tier => {
         const button = document.createElement('button');
         button.type = 'button'; button.className = 'btn-secondary'; button.textContent = fmt.money(tier.cents);
@@ -237,8 +239,10 @@
     finally { flushing = false; }
   }
   $('btn-retry-outbox').addEventListener('click', flushOutbox);
-  $('btn-discard-outbox').addEventListener('click', () => {
-    if (!outbox.length || !window.confirm(`Discard ${outbox.length} waiting gift(s)? They were never counted and will need to be entered again if they are real.`)) return;
+  $('btn-discard-outbox').addEventListener('click', async () => {
+    if (!outbox.length) return;
+    const ok = await GivebarSession.confirm({ title: `Discard ${outbox.length} waiting ${outbox.length === 1 ? 'gift' : 'gifts'}?`, body: 'They were never counted and will need to be entered again if they are real.', confirmLabel: 'Discard', danger: true });
+    if (!ok) return;
     outbox = [];
     saveOutbox();
     announce('Waiting gifts discarded.');

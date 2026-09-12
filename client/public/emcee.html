@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
   <link rel="stylesheet" href="/css/base.css?v=7.0.0">
   <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.2.1">
+  <link rel="stylesheet" href="/css/app.css?v=7.3.1">
   <link rel="preload" href="/assets/fonts/brandon-regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/brandon-black.woff2" as="font" type="font/woff2" crossorigin>
@@ -88,7 +88,7 @@
       border-bottom: 1px solid var(--pv-hairline-soft);
     }
 
-    .presenter-title {
+    .presenter-title { margin: 0;
       font-size: clamp(0.75rem, 1.5vw, 0.9375rem);
       font-weight: 700;
       color: var(--pv-ink-dim);
@@ -532,11 +532,11 @@
 
     <!-- Minimal Header -->
     <header class="presenter-top-bar">
-      <div class="presenter-title">
+      <h1 class="presenter-title">
         <span class="pulse-dot"></span>
         <span>Presenter View</span>
         <span id="presenter-event-title" class="presenter-event-title" hidden></span>
-      </div>
+      </h1>
       <div id="presenter-degraded-banner" class="degraded-banner" style="display: none;">
         <span>Reconnecting...</span>
       </div>

@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
   <link rel="stylesheet" href="/css/base.css?v=7.0.0">
   <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.2.1">
+  <link rel="stylesheet" href="/css/app.css?v=7.3.1">
 </head>
 <body>
   <div class="ops-shell">
@@ -24,6 +24,7 @@
         <a href="/donations" class="ops-nav-item active">Manage Donations</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item">Settings</a>
+        <a href="/team" class="ops-nav-item">Team and backups</a>
         <a href="/testing" class="ops-nav-item">Testing</a>
         <a href="/history" class="ops-nav-item">History</a>
         <a href="/stats" class="ops-nav-item">Stats</a>
@@ -51,42 +52,16 @@
         </div>
       </header>
 
-      <section class="summary-grid" aria-label="Totals">
+      <section class="summary-grid" aria-label="Totals" aria-live="polite">
         <div class="summary-cell"><div class="summary-strip-label">Total raised</div><div class="summary-strip-val" id="summary-total-raised">—</div></div>
         <div class="summary-cell"><div class="summary-strip-label">On the screen</div><div class="summary-strip-val muted" id="summary-stage-total">—</div></div>
         <div class="summary-cell"><div class="summary-strip-label">Gifts</div><div class="summary-strip-val muted" id="summary-gift-count">—</div></div>
         <div class="summary-cell"><div class="summary-strip-label">Waiting to appear</div><div class="summary-strip-val muted" id="summary-pending-count">—</div></div>
       </section>
+      <p id="gap-notice" class="form-hint gap-notice" role="status" hidden></p>
       <p id="paused-notice" class="paused-notice" role="status" hidden>The ballroom screen is paused. The figure is held and new gifts are not shown until you resume.</p>
       <p id="add-donation-status" role="status" hidden></p>
-      <div id="outbox-status" role="status" hidden><span id="outbox-count">0</span> gifts waiting to sync. Keep this browser open. <button type="button" id="btn-retry-outbox" class="btn-secondary">Retry now</button> <button type="button" id="btn-discard-outbox" class="btn-ghost">Discard waiting gifts</button></div>
-
-      <section class="stage-message-controls" aria-labelledby="stage-message-title">
-        <div class="donation-dialog-heading"><h2 id="stage-message-title">On the ballroom screen</h2><a href="/preview" class="btn-secondary">View screen</a></div>
-        <p class="form-hint">Send a live announcement, or let short impact messages rotate every 12 seconds.</p>
-        <label class="form-label" for="live-stage-message">Stage message <span id="stage-message-count" class="form-hint" style="font-weight:400;float:right"></span></label>
-        <input id="live-stage-message" class="form-input-text" maxlength="160" placeholder="Your announcement for the room">
-        <div class="stage-message-actions"><button type="button" id="publish-stage-message" class="btn-primary">Show message now</button><button type="button" id="hide-stage-message" class="btn-secondary">Return to impact messages</button></div>
-        <p id="stage-message-status" role="status"></p>
-        <details><summary>Edit rotating impact messages</summary>
-          <p class="form-hint">Keep each point short enough to read from across the ballroom. Remove every point to leave the message area blank.</p>
-          <div id="impact-message-list"></div>
-          <div class="stage-message-actions"><button type="button" id="add-impact-message" class="btn-secondary">Add point</button><button type="button" id="save-impact-messages" class="btn-primary">Save rotation</button></div>
-        </details>
-      </section>
-
-      <section class="team-notes" aria-labelledby="team-notes-title">
-        <details id="team-notes-details">
-          <summary><span id="team-notes-title">Team notes</span> <span id="team-notes-count" class="team-notes-count">0</span></summary>
-          <p class="form-hint">Shared with every signed-in operator. Use it for handoffs, pledge-card questions, and anything the finance team should see later.</p>
-          <div id="team-notes-list" class="team-notes-list"></div>
-          <form id="team-note-form" class="team-note-form">
-            <label class="form-label" for="team-note-input">New note</label>
-            <textarea id="team-note-input" class="form-input-text" rows="2" maxlength="1000" placeholder="Example: Table 12 pledge card unreadable, checking with the host"></textarea>
-            <div class="stage-message-actions"><button type="submit" class="btn-primary">Post note</button></div>
-          </form>
-        </details>
-      </section>
+      <div id="outbox-status" role="status" hidden><span id="outbox-count">0</span> <span id="outbox-noun">gifts</span> waiting to sync. Keep this browser open. <button type="button" id="btn-retry-outbox" class="btn-secondary">Retry now</button> <button type="button" id="btn-discard-outbox" class="btn-ghost">Discard waiting gifts</button></div>
 
       <div id="undo-banner" class="undo-bar" style="display: none;" role="status" aria-live="polite">
         <span id="undo-message">Donation removed.</span>
@@ -120,56 +95,91 @@
         <p class="empty-state-text" id="empty-state-text">Gifts appear here as they are recorded.</p>
         <button type="button" id="empty-state-btn" class="btn-primary">Add first donation</button>
       </div>
+
+      <section class="stage-message-controls" aria-labelledby="stage-message-title">
+        <div class="donation-dialog-heading"><h2 id="stage-message-title">On the ballroom screen</h2><a href="/preview" class="btn-secondary">View screen</a></div>
+        <p class="form-hint">Send a live announcement, or let short impact messages rotate every 12 seconds.</p>
+        <label class="form-label" for="live-stage-message">Stage message <span id="stage-message-count" class="form-hint" style="font-weight:400;float:right"></span></label>
+        <input id="live-stage-message" class="form-input-text" maxlength="160" placeholder="Your announcement for the room">
+        <div class="stage-message-actions"><button type="button" id="publish-stage-message" class="btn-primary">Show message now</button><button type="button" id="hide-stage-message" class="btn-secondary">Return to impact messages</button></div>
+        <p id="stage-message-status" role="status"></p>
+        <details><summary>Edit rotating impact messages</summary>
+          <p class="form-hint">Keep each point short enough to read from across the ballroom. Remove every point to leave the message area blank.</p>
+          <div id="impact-message-list"></div>
+          <div class="stage-message-actions"><button type="button" id="add-impact-message" class="btn-secondary">Add point</button><button type="button" id="save-impact-messages" class="btn-primary">Save rotation</button></div>
+        </details>
+      </section>
+
+      <section class="team-notes" aria-labelledby="team-notes-title">
+        <details id="team-notes-details">
+          <summary><span id="team-notes-title">Team notes</span> <span id="team-notes-count" class="team-notes-count">0</span></summary>
+          <p class="form-hint">Shared with every signed-in operator. Use it for handoffs, pledge-card questions, and anything the finance team should see later.</p>
+          <div id="team-notes-list" class="team-notes-list"></div>
+          <form id="team-note-form" class="team-note-form">
+            <label class="form-label" for="team-note-input">New note</label>
+            <textarea id="team-note-input" class="form-input-text" rows="2" maxlength="1000" placeholder="Example: Table 12 pledge card unreadable, checking with the host"></textarea>
+            <div class="stage-message-actions"><button type="submit" class="btn-primary">Post note</button></div>
+          </form>
+        </details>
+      </section>
+
     </main>
   </div>
 
   <dialog id="add-donation-dialog" class="operator-dialog donation-dialog" aria-labelledby="add-dialog-title">
     <form id="add-donation-form" novalidate>
-      <div class="donation-dialog-heading"><h2 id="add-dialog-title">Add donation</h2><button type="button" id="btn-close-add" class="btn-secondary">Close</button></div>
-      <p id="add-dialog-intro">Record a pledge or offline gift. Online gifts are imported automatically; do not enter them again.</p>
-      <label for="donor-name-input">Donor name (required)</label>
-      <input id="donor-name-input" autocomplete="off" required>
-      <label for="amount-numeric-input">Amount in dollars (required)</label>
-      <input id="amount-numeric-input" inputmode="decimal" required>
-      <div id="preset-grid" class="choice-options" role="group" aria-label="Quick amounts"></div>
-      <label class="donation-check"><input id="donation-anonymous" type="checkbox">Anonymous on public screens</label>
-      <p class="form-hint">The team keeps the donor name. The audience sees “Anonymous Supporter.”</p>
-      <label for="donation-notes-input">Note for the team <span>(optional, never shown to the audience)</span></label>
-      <textarea id="donation-notes-input" rows="2" maxlength="1000" placeholder="Table number, pledge terms, who to thank"></textarea>
-      <details><summary>Pronunciation and optional details</summary>
-        <label for="donor-phonetic-input">Name pronunciation</label><input id="donor-phonetic-input" autocomplete="off">
-        <div id="field-card-number-wrap" hidden><label for="card-number-input">Card number</label><input id="card-number-input" inputmode="numeric"></div>
-        <div id="field-table-number-wrap" hidden><label for="table-number-input">Table number</label><input id="table-number-input"></div>
-      </details>
-      <p id="add-error-banner" role="alert" hidden></p>
-      <div id="major-gift-confirmation" class="confirm-box" hidden>
-        <h3>Confirm large donation</h3><p id="guardrail-body"></p>
-        <label class="donation-check"><input id="major-gift-confirmed" type="checkbox">I checked the amount and donor name.</label>
+      <div class="dialog-head">
+        <div class="donation-dialog-heading"><h2 id="add-dialog-title">Add donation</h2><button type="button" id="btn-close-add" class="btn-secondary">Close</button></div>
+        <p id="add-dialog-intro">Record a pledge or offline gift. Online gifts are imported automatically; do not enter them again.</p>
       </div>
-      <div id="duplicate-confirmation" class="confirm-box" hidden>
-        <h3>This looks like a repeat</h3><p id="duplicate-body"></p>
-        <label class="donation-check"><input id="duplicate-confirmed" type="checkbox">This is a separate gift. Record it anyway.</label>
+      <div class="dialog-body">
+        <div>
+          <label for="donor-name-input">Donor name (required)</label>
+          <input id="donor-name-input" autocomplete="off" required>
+        </div>
+        <div>
+          <label for="donor-phonetic-input">How to say it <span>(optional, for the presenter)</span></label>
+          <input id="donor-phonetic-input" autocomplete="off" placeholder="Example: see-oh-MAH-rah">
+        </div>
+        <div>
+          <label for="amount-numeric-input">Amount in dollars (required)</label>
+          <input id="amount-numeric-input" inputmode="decimal" required>
+        </div>
+        <div id="preset-grid" class="choice-options" role="group" aria-label="Quick amounts"></div>
+        <label class="donation-check"><input id="donation-anonymous" type="checkbox">Anonymous on public screens</label>
+        <p class="form-hint">The team keeps the donor name. The audience sees “Anonymous Supporter.”</p>
+        <div>
+          <label for="donation-notes-input">Note for the team <span>(optional, never shown to the audience)</span></label>
+          <textarea id="donation-notes-input" rows="2" maxlength="1000" placeholder="Table number, pledge terms, who to thank"></textarea>
+        </div>
+        <details id="optional-fields" hidden><summary>Card and table</summary>
+          <div id="field-card-number-wrap" hidden><label for="card-number-input">Card number</label><input id="card-number-input" inputmode="numeric"></div>
+          <div id="field-table-number-wrap" hidden><label for="table-number-input">Table number</label><input id="table-number-input"></div>
+        </details>
+        <p id="add-error-banner" role="alert" hidden></p>
+        <div id="major-gift-confirmation" class="confirm-box" hidden>
+          <h3>Confirm large donation</h3><p id="guardrail-body"></p>
+          <label class="donation-check"><input id="major-gift-confirmed" type="checkbox">I checked the amount and donor name.</label>
+        </div>
+        <div id="duplicate-confirmation" class="confirm-box" hidden>
+          <h3>This looks like a repeat</h3><p id="duplicate-body"></p>
+          <label class="donation-check"><input id="duplicate-confirmed" type="checkbox">This is a separate gift. Record it anyway.</label>
+        </div>
       </div>
-      <button id="btn-submit-add" type="submit" class="btn-primary">Record donation</button>
+      <div class="dialog-foot">
+        <button id="btn-submit-add" type="submit" class="btn-primary">Record donation</button>
+      </div>
     </form>
   </dialog>
 
-  <div id="delete-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-body">
-    <div class="modal-dialog">
-      <h2 id="delete-dialog-title" class="modal-title">Delete this donation?</h2>
-      <p id="delete-dialog-body" class="modal-body"></p>
-      <div class="modal-actions">
-        <button type="button" id="btn-cancel-delete" class="btn-secondary">Cancel</button>
-        <button type="button" id="btn-confirm-delete" class="btn-danger">Delete donation</button>
-      </div>
     </div>
   </div>
 
-  <script src="/js/session.js?v=7.0.0"></script>
+  <script src="/js/session.js?v=7.3.0"></script>
   <script src="/js/live.js?v=7.0.0"></script>
   <script src="/js/presence.js?v=7.0.0"></script>
-  <script src="/js/control.js?v=7.2.0"></script>
-  <script src="/js/entry.js?v=7.2.0"></script>
+  <script src="/js/control.js?v=7.3.0"></script>
+  <script src="/js/entry.js?v=7.3.0"></script>
   <script src="/js/linkhub.js?v=7.0.0"></script>
   <script src="/js/stage-messages.js?v=7.2.0"></script>
 </body>

@@ -42,8 +42,11 @@
       message.style.color = '#fca5a5';
     } finally { busy = false; save.disabled = false; sync.disabled = !connected; }
   }
-  save.addEventListener('click', () => {
-    if (!window.confirm(enabled.checked ? 'Import accepted gifts from this gala form and date into the live ledger? Do not enter the same online gifts manually.' : 'Pause automatic Fundraising import? Existing gifts remain in the ledger.')) return;
+  save.addEventListener('click', async () => {
+    const ok = await GivebarSession.confirm(enabled.checked
+      ? { title: 'Import online gifts into the live ledger?', body: 'Accepted gifts from this gala form and date arrive automatically. Do not enter the same online gifts by hand.', confirmLabel: 'Save and import' }
+      : { title: 'Pause automatic import?', body: 'Existing online gifts remain in the ledger. New ones stop arriving until you turn it back on.', confirmLabel: 'Pause import', danger: true });
+    if (!ok) return;
     request({ action: 'configure', form_id: formId.value.trim(), start_date: startDate.value, enabled: enabled.checked });
   });
   sync.addEventListener('click', () => request({ action: 'sync' }));

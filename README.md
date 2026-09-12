@@ -6,7 +6,7 @@ Live fundraising bar chart and stage suite for nonprofit galas and benefit appea
 - **Presenter View** `/presenter` for the podium: current donor with pronunciation, total, next milestone, full gift list.
 - **Manage Donations** `/donations` for operators: add, edit, delete, undo, team notes, stage messages, pause switch, CSV.
 - **Stats** `/stats` for the team: raised over time with milestones, gifts per period, sources, payment methods, gift sizes, time of day, largest gifts, operator activity, plus donation-page visits, QR/UTM arrivals, referrers, and devices from the website analytics. Filter by range, source, and method.
-- **Settings** `/settings`, **Testing** `/testing`, **History** `/history`, **Home** `/` with links, presence, and the team briefing.
+- **Settings** `/settings` (event, goal, branding, QR, quick amounts, matching, online import), **Team and backups** `/team` (accounts, sign-in links, invites, snapshots, restore), **Testing** `/testing`, **History** `/history`, **Home** `/` with links, presence, and the team briefing.
 
 ---
 
@@ -27,16 +27,16 @@ Live fundraising bar chart and stage suite for nonprofit galas and benefit appea
 
 ## Accounts and roles
 
-Administrators create one account per person in Settings → Operator accounts, then hand over the name and PIN, copy a one-time **Sign-in link** to text them, or send an **Email invite**. Links work once and expire after 7 days; the email also carries the sign-in name and the steps for the night. Home → **Copy briefing** gives the same steps plus every link as plain text for a group chat.
+Administrators create one account per person in **Team and backups**, then hand over the name and PIN, copy a one-time **Sign-in link** to text them, or send an **Email invite**. Links work once and expire after 7 days; the email also carries the sign-in name and the steps for the night. Home → **Copy briefing** gives the same steps plus every link as plain text for a group chat.
 
 | | Operator | Administrator |
 | :--- | :---: | :---: |
 | Record, edit, delete, restore gifts; team notes | yes | yes |
 | Stage message, impact rotation, pause/resume chart | yes | yes |
 | CSV export, History, Stats, Home presence | yes | yes |
-| Settings, milestones, appearance, QR, ask tiers, matching | | yes |
-| Rehearsal gifts and purge, full reset | | yes |
-| Backups, restore, accounts, invites, Fundraising import setup | | yes |
+| Settings: goal, milestones, appearance, QR, quick amounts, matching, online import | | yes |
+| Team and backups: accounts, sign-in links, invites, snapshots, restore | | yes |
+| Testing: rehearsal gifts, purge, chart re-sync; full reset | | yes |
 
 Sessions last 12 hours. Disabling an account ends its session immediately. Five wrong PINs lock a name for 15 minutes.
 
@@ -56,25 +56,25 @@ The Fundraising token lives in a mode-600 file on the server (`GIVEBAR_FUNDRAISI
 | :--- | :--- |
 | Typo just entered | Manage Donations → **Delete** on that row inside 8 seconds. Nobody in the room sees it. |
 | Typo noticed later | **Edit** the row (amount, name, note, anonymous) or **Delete** it. The wall figure holds; the total and the presenter update immediately. |
-| Deleted the wrong gift | Press **Undo** in the banner (30 s) or History → **Restore**. |
+| Deleted the wrong gift | Press **Undo** in the banner (30 s, it stays on screen while you scroll) or History → **Restore gift**. |
 | Two people entered the same gift | The second entry is challenged. If it slipped through, delete one; History keeps the record. |
 | Operator's laptop drops off Wi-Fi | Keep the page open. Gifts recorded offline wait in the browser ("waiting to sync") and send when the network returns, without creating duplicates. The banner reads "Connection lost" until then. |
 | Chart shows something wrong | Manage Donations → **Pause chart**. Fix the ledger. **Resume chart**. Before doors only: Testing → **Re-sync chart to the real total** after deleting test entries. |
-| Someone changed settings mid-appeal | Only administrators can; Settings warns when another session saved first. Settings → Backups → restore the last snapshot if needed. |
-| Serious data mistake | Settings → Backups and restore → **Restore** on the snapshot before the mistake. A pre-restore snapshot is taken first. Accounts and sessions are untouched. |
+| Someone changed settings mid-appeal | Only administrators can; Settings warns when another session saved first. Team and backups → restore the last snapshot if needed. |
+| Serious data mistake | Team and backups → **Restore** on the snapshot before the mistake. A pre-restore snapshot is taken first. Accounts and sessions are untouched. |
 | Server restart | Everything is in `data/givebar.sqlite`. Presence rebuilds in 5 seconds; open pages reconnect on their own. |
 
 ---
 
 ## Launch checklist
 
-1. **Accounts**: create every operator, send invites or hand out PINs, disable test accounts. Have each person sign in once before doors.
+1. **Accounts** (Team and backups): create every operator, send invites or hand out PINs, disable test accounts. Have each person sign in once before doors.
 2. **Rehearsal**: Testing → inject sample gifts, delete one inside 8 seconds and watch the chart never show it, practise Edit and Undo, check the presenter reads names correctly.
-3. **Purge**: Testing → **Purge Sample Data**. Confirm Home shows the real total (online gifts already imported) and the chart resets.
+3. **Purge**: Testing → **Purge Sample Data**, then **Re-sync chart to the real total**. Confirm Home shows the real total (online gifts already imported) and the chart restarts from it.
 4. **Settings**: goal, milestones, event title, QR target and printed URL, ask tiers, major-gift threshold, staging delay. Scan the QR on the real projector.
 5. **Room screens**: open `/chart?fullscreen=1` on the projector machine and `/presenter` on the podium tablet. Both are public URLs; nobody signs in on them.
 6. **Bloomerang**: Settings → Connections shows "Automatic import on" with a recent sync time. Make a $1 test gift online if you want to see it arrive (then delete it).
-7. **Backups**: Settings → Backups → **Snapshot now**, then **Download a fresh copy** and keep it on a laptop.
+7. **Backups**: Team and backups → **Snapshot now**, then **Download a fresh copy** and keep it on a laptop.
 8. **During the appeal**: one person watches Manage Donations for "Waiting to appear" and the stale banner; the emcee keeps `/presenter` open; nobody opens Settings or Testing.
 9. **After**: CSV export for finance; a final download of the database.
 

@@ -84,6 +84,7 @@ const OPERATOR_PAGES: Record<string, { file: string; roles: OperatorRole[] }> = 
   "/history": { file: "public/history.html", roles: ["admin", "operator"] },
   "/stats": { file: "public/stats.html", roles: ["admin", "operator"] },
   "/settings": { file: "public/settings.html", roles: ["admin"] },
+  "/team": { file: "public/team.html", roles: ["admin"] },
   "/testing": { file: "public/testing.html", roles: ["admin"] }
 };
 

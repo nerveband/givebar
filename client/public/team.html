@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team and backups — Givebar</title>
+  <meta name="color-scheme" content="dark">
+  <style>html{background:#070603;color-scheme:dark}</style>
+  <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/base.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/components.css?v=7.0.0">
+  <link rel="stylesheet" href="/css/app.css?v=7.3.1">
+</head>
+<body>
+  <div class="ops-shell">
+    <aside class="ops-sidebar">
+      <div class="ops-brand">
+        <div>
+          <div class="ops-brand-title">Givebar</div>
+          <div class="ops-brand-sub">Live Gala Fundraising</div>
+        </div>
+      </div>
+      <nav class="ops-nav" aria-label="Main Navigation">
+        <a href="/" class="ops-nav-item">Home</a>
+        <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
+        <a href="/donations" class="ops-nav-item">Manage Donations</a>
+        <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
+        <a href="/settings" class="ops-nav-item">Settings</a>
+        <a href="/team" class="ops-nav-item active" aria-current="page">Team and backups</a>
+        <a href="/testing" class="ops-nav-item">Testing</a>
+        <a href="/history" class="ops-nav-item">History</a>
+        <a href="/stats" class="ops-nav-item">Stats</a>
+      </nav>
+    </aside>
+
+    <main class="ops-main">
+      <header class="page-header">
+        <div>
+          <h1>Team and backups</h1>
+          <p class="form-hint">Who can sign in, how they get in, and the snapshots that protect the ledger. Administrators only.</p>
+        </div>
+      </header>
+
+      <section class="stage-message-controls" aria-labelledby="accounts-title">
+        <h2 id="accounts-title">Operator accounts</h2>
+        <p class="form-hint">Create one account per person. Then either tell them the name and PIN, copy a one-time <strong>Sign-in link</strong> to text them, or send an <strong>Email invite</strong> with the link and the steps for the night. Links work once and expire after 7 days. Disabling an account ends their session immediately.</p>
+        <form id="operator-form" class="team-form" novalidate>
+          <div class="team-form-grid">
+            <div><label class="form-label" for="operator-username">Sign-in name</label><input id="operator-username" class="form-input-text" autocomplete="off" autocapitalize="none" maxlength="64" placeholder="sara"></div>
+            <div><label class="form-label" for="operator-display">Display name</label><input id="operator-display" class="form-input-text" autocomplete="off" maxlength="80" placeholder="Sara Khan"></div>
+            <div><label class="form-label" for="operator-pin">PIN <span class="form-hint" style="font-weight:400">(4 to 12 characters)</span></label><input id="operator-pin" type="password" class="form-input-text" inputmode="numeric" autocomplete="new-password" minlength="4" maxlength="12"></div>
+            <div><label class="form-label" for="operator-role">Role</label><select id="operator-role" class="form-input-text"><option value="operator">Operator</option><option value="admin">Administrator</option></select></div>
+          </div>
+          <div class="field-error" id="operator-error" role="alert" aria-live="polite"></div>
+          <div class="stage-message-actions"><button type="submit" id="btn-create-operator" class="btn-primary">Create account</button></div>
+        </form>
+        <div class="stats-table"><table class="donations-table"><thead><tr><th>Sign-in name</th><th>Display</th><th>Role</th><th>Status</th><th class="text-right"><span class="sr-only">Actions</span></th></tr></thead><tbody id="operator-tbody"></tbody></table></div>
+      </section>
+
+      <section class="stage-message-controls" aria-labelledby="backups-title">
+        <div class="donation-dialog-heading"><h2 id="backups-title">Backups and restore</h2><button type="button" id="btn-backup-now" class="btn-primary">Snapshot now</button></div>
+        <p class="form-hint" id="backup-summary" aria-live="polite">Loading snapshots…</p>
+        <p class="form-hint">Each snapshot is a complete copy of the database, safe to download while the event runs. Restore replaces every gift, setting, and team note with the snapshot (a pre-restore snapshot is taken first); operator accounts are never touched. The per-gift Delete and Restore on History are usually the better tool; use a full restore only after a serious mistake.</p>
+        <div class="stage-message-actions">
+          <a class="btn-secondary" href="/api/export/backup">Download a fresh copy</a>
+          <a class="btn-secondary" href="/api/export/csv">Download CSV ledger</a>
+        </div>
+        <div id="backup-list" class="backup-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="invite-dialog" class="operator-dialog" aria-labelledby="invite-dialog-title">
+    <form id="invite-form" novalidate>
+      <div class="donation-dialog-heading"><h2 id="invite-dialog-title">Email invite</h2><button type="button" id="btn-close-invite" class="btn-secondary">Close</button></div>
+      <p>The email comes from Givebar with a one-time sign-in link (valid 7 days), the sign-in name, and what to do on the night.</p>
+      <input type="hidden" id="invite-account-id">
+      <label for="invite-email">Email address</label>
+      <input id="invite-email" type="email" autocomplete="off" required>
+      <div id="invite-error" class="field-error" role="alert"></div>
+      <div id="invite-result" hidden>
+        <p>Sent. If their inbox is slow, this is the same link; it works once.</p>
+        <input id="invite-link" readonly>
+        <div class="operator-dialog-actions"><button type="button" id="btn-copy-invite" class="btn-secondary" data-copy-label="Copy link">Copy link</button></div>
+      </div>
+      <button id="btn-send-invite" type="submit" class="btn-primary">Send invite email</button>
+    </form>
+  </dialog>
+
+  <dialog id="link-dialog" class="operator-dialog" aria-labelledby="link-dialog-title">
+    <form method="dialog" novalidate>
+      <div class="donation-dialog-heading"><h2 id="link-dialog-title">Sign-in link</h2><button type="button" id="btn-close-link" class="btn-secondary">Close</button></div>
+      <p id="link-dialog-body"></p>
+      <input id="link-value" readonly>
+      <div class="operator-dialog-actions"><button type="button" id="btn-copy-link" class="btn-primary" data-copy-label="Copy link">Copy link</button></div>
+    </form>
+  </dialog>
+
+  <script src="/js/session.js?v=7.3.0"></script>
+  <script src="/js/presence.js?v=7.0.0"></script>
+  <script src="/js/team.js?v=7.3.0"></script>
+</body>
+</html>

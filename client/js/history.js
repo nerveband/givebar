@@ -87,46 +87,24 @@
     }).join('');
   }
 
-  // Every ledger change from this page goes through one confirmation modal.
-  const modal = document.getElementById('history-modal');
-  let pendingAction = null;
-  function openModal(action) {
-    pendingAction = action;
-    document.getElementById('history-dialog-title').textContent = action.verb === 'void' ? 'Delete this gift?' : 'Restore this gift?';
-    document.getElementById('history-dialog-body').textContent = action.verb === 'void'
-      ? `Delete ${fmt.money(action.amount)} from ${action.donor}? It leaves the total and the list; the ballroom figure never rolls backward. You can restore it from here.`
-      : `Restore ${fmt.money(action.amount)} from ${action.donor}? It returns to the total and the list, and appears on the ballroom screen after the staging delay.`;
-    const confirm = document.getElementById('btn-history-confirm');
-    confirm.textContent = action.verb === 'void' ? 'Delete gift' : 'Restore gift';
-    confirm.className = action.verb === 'void' ? 'btn-danger' : 'btn-primary';
-    modal.style.display = 'flex';
-    document.getElementById('btn-history-cancel').focus();
-  }
-  function closeModal() {
-    modal.style.display = 'none';
-    const target = pendingAction && pendingAction.button;
-    pendingAction = null;
-    if (target && document.contains(target)) target.focus();
-  }
-  document.getElementById('btn-history-cancel').addEventListener('click', closeModal);
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && modal.style.display !== 'none') closeModal(); });
-  document.getElementById('btn-history-confirm').addEventListener('click', async () => {
-    const action = pendingAction;
-    closeModal();
-    if (!action) return;
-    const response = await GivebarSession.api(`/api/donation/${action.id}/${action.verb}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: action.verb === 'restore' ? 'Restored from History' : 'Deleted from History' }) });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      window.alert(data.message || 'The change could not be made.');
-    }
-    await sync();
-  });
-  timeline.addEventListener('click', event => {
+  timeline.addEventListener('click', async event => {
     const restore = event.target.closest('[data-restore-id]');
     const undo = event.target.closest('[data-void-id]');
     const button = restore || undo;
     if (!button) return;
-    openModal({ button, id: restore ? restore.dataset.restoreId : undo.dataset.voidId, verb: restore ? 'restore' : 'void', donor: button.dataset.donor, amount: Number(button.dataset.amount) });
+    const verb = restore ? 'restore' : 'void';
+    const amount = fmt.money(Number(button.dataset.amount));
+    const ok = await GivebarSession.confirm(verb === 'void'
+      ? { title: 'Delete this gift?', body: `Delete ${amount} from ${button.dataset.donor}? It leaves the total and the list; the ballroom figure never rolls backward. You can restore it from here.`, confirmLabel: 'Delete gift', danger: true }
+      : { title: 'Restore this gift?', body: `Restore ${amount} from ${button.dataset.donor}? It returns to the total and the list, and appears on the ballroom screen after the staging delay.`, confirmLabel: 'Restore gift' });
+    if (!ok) return;
+    const id = restore ? restore.dataset.restoreId : undo.dataset.voidId;
+    const response = await GivebarSession.api(`/api/donation/${id}/${verb}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: verb === 'restore' ? 'Restored from History' : 'Deleted from History' }) });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      GivebarSession.toast(data.message || 'The change could not be made.', 'error');
+    } else GivebarSession.toast(`${amount} from ${button.dataset.donor} ${verb === 'restore' ? 'restored' : 'deleted'}.`);
+    await sync();
   });
 
   chips.forEach(chip => chip.addEventListener('click', () => {

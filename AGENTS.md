@@ -19,13 +19,14 @@ Givebar is a live fundraising bar chart and stage presentation suite for high-st
 ## 2. Access Model
 * Named operator accounts only (`operator_account`, roles `admin` and `operator`), HttpOnly session cookies, single-use email invites. No shared PINs.
 * Operators: record, edit, delete, and restore gifts; stage messages; pause/resume the chart; team notes; CSV.
-* Administrators additionally: Settings, Testing (rehearsal gifts and purge), reset, backups and restore, accounts and invites, Fundraising import configuration.
+* Administrators additionally: Settings, Team and backups (`/team`: accounts, sign-in links, invites, snapshots, restore), Testing (rehearsal gifts, purge, chart re-sync), reset, Fundraising import configuration.
 * Presence identity comes from the session; heartbeats require a session.
 
 ---
 
 ## 3. Design System
 1. **Phosphor icon paths, never emoji** in UI buttons, badges, tables, or modals.
+5. **No native dialogs**: every confirmation, prompt, and notice goes through `GivebarSession.confirm`, `prompt`, and `toast` in `client/js/session.js`. `window.confirm`/`prompt`/`alert` are prohibited.
 2. **OKLCH token architecture** with a brand layer (`--brand-hue`, `--brand-chroma`, `--brand-accent`, `--brand-radius`).
 3. **≥ 44 px touch targets** on operator surfaces; **56 px** in the donation dialog.
 4. **Tabular numerals** on the odometer and every financial figure.
@@ -33,7 +34,7 @@ Givebar is a live fundraising bar chart and stage presentation suite for high-st
 ---
 
 ## 4. Zero-Code In-App Settings Rules
-* Non-developers configure titles, goals, milestones, appearance, quick amounts, matching grants, Fundraising import, backups, and accounts in **Settings** (`/settings`).
+* Non-developers configure titles, goals, milestones, appearance, quick amounts, matching grants, and Fundraising import in **Settings** (`/settings`); accounts and backups live in **Team and backups** (`/team`).
 * Never introduce external JSON configuration files for event settings. Settings persist in SQLite (`event_state`, `milestone`, `ask_tier`, `fundraising_sync`) and propagate live.
 
 ---

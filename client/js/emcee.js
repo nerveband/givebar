@@ -256,7 +256,7 @@
     if (recentListEl) {
       const displayRecent = recentGifts.slice(0, 5);
       if (recentCountEl) {
-        recentCountEl.textContent = pluralGifts(displayRecent.length);
+        recentCountEl.textContent = `${data.active_donation_count || 0} total`;
       }
 
       if (displayRecent.length === 0) {
@@ -287,8 +287,8 @@
     if (milestoneTextEl) {
       if (data.next_milestone) {
         const remaining = formatShortCurrency(data.next_milestone.remaining_cents);
-        const target = formatShortCurrency(data.next_milestone.target_cents);
-        milestoneTextEl.textContent = `${remaining} to ${target}`;
+        const name = (data.next_milestone.label || '').trim() || formatShortCurrency(data.next_milestone.target_cents);
+        milestoneTextEl.textContent = `${remaining} to ${name}`;
       } else if (data.goal_cents && data.total_raised_cents >= data.goal_cents) {
         milestoneTextEl.textContent = 'Goal Reached';
       } else {

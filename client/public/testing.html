@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
   <link rel="stylesheet" href="/css/base.css?v=7.0.0">
   <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.2.1">
+  <link rel="stylesheet" href="/css/app.css?v=7.3.1">
   <style>
     .testing-workbench { display: grid; gap: 24px; align-items: start; margin-bottom: 28px; }
     .testing-chart-preview, .testing-controls { min-width: 0; }
@@ -131,6 +131,7 @@
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item">Settings</a>
+        <a href="/team" class="ops-nav-item">Team and backups</a>
         <a href="/testing" class="ops-nav-item active">Testing</a>
         <a href="/history" class="ops-nav-item">History</a>
         <a href="/stats" class="ops-nav-item">Stats</a>
@@ -160,7 +161,7 @@
         <div>
           <div class="test-banner-title">
             <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d4a359;"></span>
-            Test Mode Active
+            Sample data
           </div>
           <div style="font-size: var(--text-xs); color: #c4c6cc; margin-top: 2px;" id="test-banner-desc">
             3 sample records active. Purging removes only sample data.
@@ -260,9 +261,9 @@
     </main>
   </div>
 
-  <script src="/js/session.js?v=7.0.0"></script>
+  <script src="/js/session.js?v=7.3.0"></script>
   <script src="/js/presence.js?v=7.0.0"></script>
-  <script src="/js/testing.js?v=7.0.1"></script>
+  <script src="/js/testing.js?v=7.3.0"></script>
   <script>
     const previewFrame = document.getElementById('testing-preview-frame');
     const previewChart = document.getElementById('testing-chart-preview');

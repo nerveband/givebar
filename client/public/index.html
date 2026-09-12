@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
   <link rel="stylesheet" href="/css/base.css?v=7.0.0">
   <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.2.1">
+  <link rel="stylesheet" href="/css/app.css?v=7.3.1">
   <style>
     /* Home landing surface — lives inside the same operational shell as every
        other operator page. Presentation Contrast: near-black surfaces, amber
@@ -365,6 +365,7 @@
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item">Settings</a>
+        <a href="/team" class="ops-nav-item">Team and backups</a>
         <a href="/testing" class="ops-nav-item">Testing</a>
         <a href="/history" class="ops-nav-item">History</a>
         <a href="/stats" class="ops-nav-item">Stats</a>
@@ -520,7 +521,7 @@
               <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M120,40a8,8,0,0,0-8,8V80H40a8,8,0,0,0,0,16h72v32a8,8,0,0,0,16,0V48A8,8,0,0,0,120,40Zm96,48H152a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16ZM40,168h64a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16Zm176-24H184V112a8,8,0,0,0-16,0v80a8,8,0,0,0,16,0V160h32a8,8,0,0,0,0-16Z"/></svg>
               Settings
             </div>
-            <div class="link-purpose">Event, branding, links, backups, operator accounts. Administrators only.</div>
+            <div class="link-purpose">Event, goal, branding, QR, quick amounts, matching, online import. Administrators only.</div>
           </div>
           <div>
             <div class="link-url-wrap">
@@ -534,6 +535,28 @@
           </div>
           <div class="link-actions">
             <a class="btn-open" data-open href="/settings">Open</a>
+          </div>
+
+        <div class="link-row" data-path="/team">
+          <div class="link-meta">
+            <div class="link-name">
+              <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M120,40a8,8,0,0,0-8,8V80H40a8,8,0,0,0,0,16h72v32a8,8,0,0,0,16,0V48A8,8,0,0,0,120,40Zm96,48H152a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16ZM40,168h64a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16Zm176-24H184V112a8,8,0,0,0-16,0v80a8,8,0,0,0,16,0V160h32a8,8,0,0,0,0-16Z"/></svg>
+              Team and backups
+            </div>
+            <div class="link-purpose">Operator accounts, sign-in links, invites, database snapshots and restore. Administrators only.</div>
+          </div>
+          <div>
+            <div class="link-url-wrap">
+              <input type="text" class="link-url" readonly aria-label="Team and backups URL">
+              <button type="button" class="btn-copy" data-copy>
+                <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" style="width:14px;height:14px;"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg>
+                <span data-copy-label>Copy Link</span>
+              </button>
+            </div>
+            <span class="copy-status" data-copy-status aria-live="polite"></span>
+          </div>
+          <div class="link-actions">
+            <a class="btn-open" data-open href="/team">Open</a>
           </div>
         </div>
 
@@ -586,7 +609,7 @@
     </main>
   </div>
 
-  <script src="/js/session.js?v=7.0.0"></script>
+  <script src="/js/session.js?v=7.3.0"></script>
   <script src="/js/presence.js?v=7.0.0"></script>
   <script>
     (function () {

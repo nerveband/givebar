@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
   <link rel="stylesheet" href="/css/base.css?v=7.0.0">
   <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.2.1">
+  <link rel="stylesheet" href="/css/app.css?v=7.3.1">
 </head>
 <body>
   <div class="ops-shell">
@@ -24,6 +24,7 @@
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item">Settings</a>
+        <a href="/team" class="ops-nav-item">Team and backups</a>
         <a href="/testing" class="ops-nav-item">Testing</a>
         <a href="/history" class="ops-nav-item">History</a>
         <a href="/stats" class="ops-nav-item active" aria-current="page">Stats</a>
@@ -61,7 +62,8 @@
           <button type="button" data-method="check" role="radio" aria-checked="false">Check</button>
           <button type="button" data-method="cash" role="radio" aria-checked="false">Cash</button>
         </div>
-        <span class="form-hint" id="stats-updated"></span>
+        <button type="button" id="btn-clear-filters" class="btn-ghost" hidden>Clear filters</button>
+        <span class="form-hint" id="stats-updated" aria-live="polite"></span>
       </div>
 
       <section class="stats-tiles" aria-label="Totals">
@@ -130,8 +132,8 @@
     </main>
   </div>
 
-  <script src="/js/session.js?v=7.0.0"></script>
+  <script src="/js/session.js?v=7.3.0"></script>
   <script src="/js/presence.js?v=7.0.0"></script>
-  <script src="/js/stats.js?v=7.1.0"></script>
+  <script src="/js/stats.js?v=7.3.0"></script>
 </body>
 </html>

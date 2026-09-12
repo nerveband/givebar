@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.0.0">
   <link rel="stylesheet" href="/css/base.css?v=7.0.0">
   <link rel="stylesheet" href="/css/components.css?v=7.0.0">
-  <link rel="stylesheet" href="/css/app.css?v=7.2.1">
+  <link rel="stylesheet" href="/css/app.css?v=7.3.1">
   <style>
     /* =========================================================================
        Fullscreen Bar Chart (Direction B — Presentation Contrast)
@@ -864,6 +864,12 @@
     #stage-logo-img { filter: brightness(0) invert(1); }
     .milestones-h .mtick[data-edge="end"] .mtick-line { visibility: hidden; }
     .stage-message { min-height: 2.5em; }
+    /* Narrow screens: milestone labels wrap instead of overprinting each other. */
+    @media (max-width: 560px) {
+      .milestones-h .mtick-label { white-space: normal; max-width: 5.5em; text-align: center; line-height: 1.15; font-size: clamp(0.7rem, 2.6vw, 0.95rem); }
+      .milestones-h .mtick[data-edge="start"] .mtick-label { text-align: left; }
+      .milestones-h .mtick[data-edge="end"] .mtick-label { text-align: right; }
+    }
     @media (min-aspect-ratio: 1/1) {
       body[data-orientation="vertical"] #stage-canvas {
         grid-template-columns: minmax(0, 1fr) clamp(150px, 16vw, 300px) minmax(0, 1fr);
@@ -983,6 +989,6 @@
 
   <script src="/js/live.js?v=7.0.0"></script>
   <script src="/js/odometer.js?v=7.0.0"></script>
-  <script src="/js/stage.js?v=7.2.0"></script>
+  <script src="/js/stage.js?v=7.3.0"></script>
 </body>
 </html>
