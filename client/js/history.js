@@ -13,6 +13,7 @@
   const fmt = GivebarSession.format;
   let events = [];
   let status = {};
+  let canEdit = false;
   let filterType = 'all';
   let searchQuery = '';
 
@@ -29,6 +30,7 @@
       const data = await response.json();
       events = data.events;
       status = data.status;
+      canEdit = data.can_edit === true;
       if (summary) summary.textContent = `${data.active_donation_count} active gifts · ${fmt.money(data.total_raised_cents)} · ${data.void_count} deleted`;
       render();
     } catch (_) { /* next poll retries */ }
@@ -61,6 +63,7 @@
       let action = '';
       if (current && current.is_voided && event.event_type === 'void') action = `<button type="button" class="btn-timeline-action" data-restore-id="${fmt.escape(event.donation_id)}" data-donor="${fmt.escape(event.donor_name)}" data-amount="${current.amount_cents}">Restore gift</button>`;
       else if (current && !current.is_voided && (event.event_type === 'create' || event.event_type === 'restore' || event.event_type === 'amend')) action = `<button type="button" class="btn-timeline-action danger" data-void-id="${fmt.escape(event.donation_id)}" data-donor="${fmt.escape(event.donor_name)}" data-amount="${current.amount_cents}">Delete gift</button>`;
+      if (!canEdit && action) action = '<a class="btn-secondary" href="/signin?next=/history">Sign in to edit</a>';
       const note = event.notes && event.event_type !== 'void' && event.event_type !== 'restore' ? `<div class="donation-note">${fmt.escape(event.notes)}</div>` : '';
       const reason = (event.event_type === 'void' || event.event_type === 'restore') && event.notes ? ` &bull; <span>${fmt.escape(event.notes)}</span>` : '';
       return `

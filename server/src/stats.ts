@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { SQL } from "bun";
 import { foldLedger, getEventState, type LedgerEvent } from "./ledger";
 import { getMilestones } from "./projection";
-import { requireRole } from "./authz";
+import { getSession } from "./authz";
 
 /**
  * Stats projection (/stats): what came in, from where, and how the room found the donation page.
@@ -10,8 +10,8 @@ import { requireRole } from "./authz";
  * Ledger figures are folded from SQLite on every request. Website figures come from the
  * Umami database for the configured website when GIVEBAR_UMAMI_DATABASE_URL and
  * GIVEBAR_UMAMI_WEBSITE_ID are set; they are cached briefly because the page refreshes
- * itself and the event table is large. Everything here is operator-only: top gifts carry
- * donor names.
+ * itself and the event table is large. Public responses mask anonymous names and
+ * omit operator identities; signed-in operators retain their detailed view.
  */
 
 export type StatsRange = "today" | "24h" | "7d" | "30d" | "all";
@@ -272,8 +272,7 @@ export function summarizeWeb(rows: WebEventRow[], from: number, to: number, buck
 
 /** GET /api/stats?range=today|24h|7d|30d|all&source=&method= */
 export async function handleStatsRequest(req: Request, db: Database, web: WebStatsSource): Promise<Response> {
-  const auth = requireRole(db, req, ["admin", "operator"]);
-  if (auth instanceof Response) return auth;
+  const session = getSession(req, db);
   if (req.method !== "GET") return Response.json({ error: "METHOD_NOT_ALLOWED", message: "GET required" }, { status: 405 });
   const url = new URL(req.url);
   const rangeParam = url.searchParams.get("range") || "all";
@@ -285,5 +284,14 @@ export async function handleStatsRequest(req: Request, db: Database, web: WebSta
   if (method && !METHOD_LABEL[method]) return Response.json({ error: "INVALID_METHOD", message: "method must be pledge, card, check, or cash" }, { status: 400 });
   const now = Date.now();
   const [ledger, website] = await Promise.all([ledgerStats(db, range, source, method, now), web.query(range, now)]);
-  return Response.json({ ...ledger, website, server_time: now }, { headers: { "Cache-Control": "no-store" } });
+  if (!session) {
+    const records = foldLedger(db).active_donations;
+    ledger.top_gifts = ledger.top_gifts.map(gift => ({
+      ...gift, donation_id: Bun.hash(gift.donation_id).toString(36),
+      donor_name: gift.is_anonymous ? "Anonymous Supporter" : records.get(gift.donation_id)!.display_name
+    }));
+    ledger.operators = [];
+    if (!website.connected) website.message = "Website analytics are currently unavailable.";
+  }
+  return Response.json({ ...ledger, website, can_view_private: !!session, server_time: now }, { headers: { "Cache-Control": "no-store" } });
 }

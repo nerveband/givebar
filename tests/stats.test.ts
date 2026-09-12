@@ -92,10 +92,10 @@ describe("Website stats", () => {
     expect(web.pages[0].path).toBe("/gala2026donate/");
   });
 
-  test("the stats endpoint is operator-only and reports when analytics are not connected", async () => {
+  test("the stats endpoint is public and reports unavailable analytics", async () => {
     const backups = backupsFor(db);
     const web = { query: async () => ({ connected: false, message: "Website analytics are not connected on this server." }), close() {} };
-    expect((await handleStatsRequest(get("/api/stats"), db, web)).status).toBe(401);
+    expect((await handleStatsRequest(get("/api/stats"), db, web)).status).toBe(200);
     const cookie = await sessionCookie(db, backups, "sara", "operator");
     expect((await handleStatsRequest(get("/api/stats?range=lastyear", cookie), db, web)).status).toBe(400);
     const body = await (await handleStatsRequest(get("/api/stats?range=today", cookie), db, web)).json();

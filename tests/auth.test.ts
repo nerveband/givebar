@@ -17,10 +17,10 @@ beforeEach(() => { db = initDatabase(":memory:"); backups = backupsFor(db); rese
 afterEach(() => db.close());
 
 describe("Sessions", () => {
-  test("room screens are public; operator projections, ledger writes, and exports need a session", async () => {
+  test("viewing is public; editing, private form configuration, and exports need a session", async () => {
     expect(handleStateRequest(get("/api/state?role=stage"), db).status).toBe(200);
     expect(handleStateRequest(get("/api/state?role=emcee"), db).status).toBe(200);
-    expect(handleStateRequest(get("/api/state?role=control"), db).status).toBe(401);
+    expect((await handleStateRequest(get("/api/state?role=control"), db).json()).can_edit).toBe(false);
     expect(handleStateRequest(get("/api/state?role=entry"), db).status).toBe(401);
     expect(handleStateRequest(get("/api/state?role=bogus"), db).status).toBe(400);
     expect((await handleDonationRequest(json("/api/donation/x", { donor_name: "A", amount_cents: 100 }, undefined, "PUT"), db, ["api", "donation", "x"])).status).toBe(401);
@@ -50,7 +50,7 @@ describe("Sessions", () => {
     const accounts = await (await handleControlRequest(control({ action: "list_accounts" }, admin), db, backups)).json();
     const sara = accounts.accounts.find((a: { username: string }) => a.username === "sara");
     expect((await handleControlRequest(control({ action: "update_account", id: sara.id, disabled: true }, admin), db, backups)).status).toBe(200);
-    expect(handleStateRequest(get("/api/state?role=control", operator), db).status).toBe(401);
+    expect(handleStateRequest(get("/api/state?role=entry", operator), db).status).toBe(401);
     expect((await handleControlRequest(control({ action: "login", username: "sara", pin: "2468" }), db, backups)).status).toBe(401);
   });
 
@@ -96,13 +96,13 @@ describe("Sessions", () => {
     const operator = await sessionCookie(db, backups, "sara", "operator");
     const changed = await handleControlRequest(control({ action: "change_pin", current_pin: "2468", pin: "9999" }, operator), db, backups);
     expect(changed.status).toBe(200);
-    expect(handleStateRequest(get("/api/state?role=control", operator), db).status).toBe(401);
+    expect(handleStateRequest(get("/api/state?role=entry", operator), db).status).toBe(401);
     const fresh = changed.headers.get("set-cookie")!.split(";")[0];
     expect(handleStateRequest(get("/api/state?role=control", fresh), db).status).toBe(200);
     const accounts = await (await handleControlRequest(control({ action: "list_accounts" }, admin), db, backups)).json();
     const sara = accounts.accounts.find((a: { username: string }) => a.username === "sara");
     await handleControlRequest(control({ action: "update_account", id: sara.id, pin: "5555" }, admin), db, backups);
-    expect(handleStateRequest(get("/api/state?role=control", fresh), db).status).toBe(401);
+    expect(handleStateRequest(get("/api/state?role=entry", fresh), db).status).toBe(401);
     expect((await handleControlRequest(control({ action: "login", username: "sara", pin: "5555" }), db, backups)).status).toBe(200);
   });
 });

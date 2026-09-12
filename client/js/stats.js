@@ -243,6 +243,7 @@
       { title: 'Edited', value: r => r.edits, align: 'text-right' },
       { title: 'Deleted', value: r => r.deletes, align: 'text-right' }
     ], 'No activity in this range.');
+    if (!data.can_view_private) $('table-operators').innerHTML = '<a class="btn-secondary" href="/signin?next=/stats">Sign in to view private operator activity</a>';
     $('stats-updated').textContent = `Updated ${eastern({ hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(data.server_time))}`;
   }
 

@@ -56,6 +56,7 @@
     if (gap > 0) gapNotice.textContent = `The screen shows ${fmt.money(gap)} more than the ledger because a gift was deleted or lowered after it appeared. The ballroom figure never rolls backward; the next ${fmt.money(gap)} of gifts closes the gap.`;
     const paused = data.stage_preview.is_frozen;
     const pauseButton = $('btn-pause-chart');
+    pauseButton.style.display = data.can_edit ? '' : 'none';
     pauseButton.textContent = paused ? 'Resume chart' : 'Pause chart';
     pauseButton.setAttribute('aria-pressed', String(paused));
     pauseButton.classList.toggle('btn-danger', paused);
@@ -96,8 +97,8 @@
     if (empty) {
       $('empty-state-title').textContent = 'No donations yet';
       $('empty-state-text').textContent = 'Gifts appear here as they are recorded.';
-      $('empty-state-btn').textContent = 'Add first donation';
-      $('empty-state-btn').onclick = () => $('btn-open-add').click();
+      $('empty-state-btn').textContent = state.can_edit ? 'Add first donation' : 'Sign in to add a donation';
+      $('empty-state-btn').onclick = () => state.can_edit ? $('btn-open-add').click() : location.assign('/signin?next=/donations');
       return;
     }
     if (list.length === 0) {
@@ -129,8 +130,8 @@
         <td class="text-center time-cell">${fmt.escape(fmt.time(item.created_at))}</td>
         <td class="text-center"><span class="status-badge ${status.key}">${status.label}</span></td>
         <td class="text-right row-actions">
-          <button type="button" class="btn-secondary btn-row" data-edit="${fmt.escape(item.donation_id)}">Edit</button>
-          <button type="button" class="btn-delete-row" data-delete="${fmt.escape(item.donation_id)}">Delete</button>
+          ${state.can_edit ? `<button type="button" class="btn-secondary btn-row" data-edit="${fmt.escape(item.donation_id)}">Edit</button>
+          <button type="button" class="btn-delete-row" data-delete="${fmt.escape(item.donation_id)}">Delete</button>` : '<a class="btn-secondary" href="/signin?next=/donations">Sign in to edit</a>'}
         </td>`;
       if (tr.innerHTML !== html) tr.innerHTML = html;
       const expectedNext = previous ? previous.nextSibling : tbody.firstChild;

@@ -8,8 +8,9 @@
  * response can be retried without ever creating a second gift; while the
  * network is down the gift waits in a local outbox and is sent later.
  */
-(() => {
+(async () => {
   'use strict';
+  if (!(await GivebarSession.whoami()).authenticated) return;
   const fmt = GivebarSession.format;
   const $ = id => document.getElementById(id);
   const dialog = $('add-donation-dialog');

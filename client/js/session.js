@@ -58,7 +58,7 @@
 
   const format = {
     time: value => value ? easternTime.format(new Date(value)) : 'Time unavailable',
-    money: cents => currency.format((cents || 0) / 100),
+    money: cents => typeof cents === 'number' && Number.isFinite(cents) ? currency.format(cents / 100) : 'Unavailable',
     source: value => SOURCE_LABEL[value] || value || 'Source unavailable',
     escape: value => String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch])
   };
@@ -188,7 +188,34 @@
     });
 
     const me = await whoami();
-    if (!me.authenticated) return;
+    if (!me.authenticated) {
+      const signIn = document.createElement('a');
+      signIn.className = 'btn-primary';
+      signIn.href = '/signin?next=' + encodeURIComponent(location.pathname);
+      signIn.textContent = 'Sign in to edit';
+      sidebar.append(signIn);
+      const notice = document.createElement('p');
+      notice.className = 'form-hint';
+      notice.append('Public view. You can browse live data without an account. ');
+      notice.append(signIn.cloneNode(true));
+      main.prepend(notice);
+      document.querySelectorAll('.stage-message-controls, .team-notes').forEach(section => {
+        section.hidden = true;
+        section.inert = true;
+      });
+      document.querySelectorAll('a[href="/api/export/csv"]').forEach(csv => {
+        csv.href = signIn.href;
+        csv.textContent = 'Sign in for private CSV';
+      });
+      const add = document.getElementById('btn-open-add');
+      if (add) {
+        add.textContent = 'Sign in to add a donation';
+        add.addEventListener('click', () => location.assign(signIn.href));
+      }
+      const pause = document.getElementById('btn-pause-chart');
+      if (pause) pause.style.display = 'none';
+      return;
+    }
     if (me.role !== 'admin') {
       document.querySelectorAll('.ops-nav a[href="/settings"], .ops-nav a[href="/testing"], .ops-nav a[href="/team"]').forEach(link => link.remove());
     }

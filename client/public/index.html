@@ -610,7 +610,7 @@
     </main>
   </div>
 
-  <script src="/js/session.js?v=7.5.1"></script>
+  <script src="/js/session.js?v=7.5.3"></script>
   <script src="/js/presence.js?v=7.5.1"></script>
   <script>
     (function () {
@@ -701,16 +701,20 @@
 
       async function loadGlance() {
         try {
-          const res = await fetch('/api/state?role=' + (signedIn ? 'control' : 'stage'), { credentials: 'same-origin', headers: { 'Cache-Control': 'no-cache' } });
+          const res = await fetch('/api/state?role=emcee', { credentials: 'same-origin', headers: { 'Cache-Control': 'no-cache' } });
           if (!res.ok) {
             showGlanceNotice('Could not read live figures. Links still work.');
             return;
           }
           const data = await res.json();
-          const total = signedIn ? data.folded.total_raised_cents : data.true_total_raised_cents;
-          const goal = signedIn ? data.event_state.goal_cents : data.goal_cents;
-          const gifts = signedIn ? data.folded.active_donation_count : null;
-          const title = (signedIn ? data.event_state.event_title : data.event_title || '').trim();
+          const total = data.total_raised_cents;
+          const goal = data.goal_cents;
+          const gifts = data.active_donation_count;
+          if (![total, goal, gifts].every(Number.isSafeInteger) || total < 0 || goal < 0 || gifts < 0) {
+            showGlanceNotice('Live figures are unavailable. Retrying automatically.');
+            return;
+          }
+          const title = (data.event_title || data.event_name || '').trim();
           if (title) document.getElementById('home-event-title').textContent = title;
           document.getElementById('home-live-tag').style.display = 'inline-flex';
           document.getElementById('glance-notice').style.display = 'none';
@@ -718,7 +722,7 @@
           document.getElementById('glance-total').textContent = fmt.money(total);
           document.getElementById('glance-goal').textContent = goal > 0 ? fmt.money(goal) : 'Not set';
           document.getElementById('glance-progress').textContent = goal > 0 ? Math.round((total / goal) * 100) + '%' : '—';
-          document.getElementById('glance-gifts').textContent = gifts === null ? 'Sign in' : gifts.toLocaleString('en-US');
+          document.getElementById('glance-gifts').textContent = gifts.toLocaleString('en-US');
         } catch (err) {
           showGlanceNotice('Cannot reach the server. Links still work.');
         }

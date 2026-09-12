@@ -91,13 +91,13 @@ const PUBLIC_PAGES: Record<string, string> = {
   "/presenter": "public/emcee.html",
   "/preview": "public/preview.html",
   "/presenter-preview": "public/preview.html",
+  "/donations": "public/control.html",
+  "/history": "public/history.html",
+  "/stats": "public/stats.html",
   "/signin": "public/signin.html"
 };
 
 const OPERATOR_PAGES: Record<string, { file: string; roles: OperatorRole[] }> = {
-  "/donations": { file: "public/control.html", roles: ["admin", "operator"] },
-  "/history": { file: "public/history.html", roles: ["admin", "operator"] },
-  "/stats": { file: "public/stats.html", roles: ["admin", "operator"] },
   "/settings": { file: "public/settings.html", roles: ["admin"] },
   "/team": { file: "public/team.html", roles: ["admin"] },
   "/testing": { file: "public/testing.html", roles: ["admin"] }
@@ -136,6 +136,9 @@ export const server = Bun.serve({
       return withSecurity(Response.json({ error: "NOT_FOUND", message: `API route ${pathname} not found` }, { status: 404 }));
     }
 
+    if (pathname === "/projector" && ["1", "true"].includes(url.searchParams.get("edit") || "")) {
+      return withSecurity(serveOperatorPage(req, db, "public/stage.html", ["admin"]));
+    }
     if (PUBLIC_PAGES[pathname]) return withSecurity(serveStaticFile(PUBLIC_PAGES[pathname]));
     const operatorPage = OPERATOR_PAGES[pathname];
     if (operatorPage) return withSecurity(serveOperatorPage(req, db, operatorPage.file, operatorPage.roles));

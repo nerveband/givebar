@@ -1,4 +1,5 @@
-(() => {
+(async () => {
+  if (!(await GivebarSession.whoami()).authenticated) return;
   const input = document.getElementById('live-stage-message');
   const list = document.getElementById('impact-message-list');
   const status = document.getElementById('stage-message-status');

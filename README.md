@@ -20,7 +20,7 @@ Live fundraising bar chart and stage suite for nonprofit galas and benefit appea
 | Duplicate guards | The same donor and amount entered twice within 10 minutes is challenged before it counts. Pledge card numbers are unique. Online gifts import once, keyed by their Bloomerang transaction ID. |
 | No-backward chart | Once a figure is on the wall it never rolls back. A later delete is absorbed by the next gifts. |
 | Pause | Operators can hold the ballroom chart figure and hide its feed during an emergency, then resume. The presenter keeps updating so the podium always has the true total. |
-| Privacy shield | The audience feed carries a display name, amount, and time. Team notes, operator names, card numbers, and the legal names of anonymous donors stay inside the operator pages. |
+| Privacy shield | Public views show display names and financial data. Team notes, operator identities, card numbers, and anonymous donors' legal names require a signed-in operator. History also masks earlier names when a gift becomes anonymous. |
 | Backups | A consistent snapshot of the whole database is taken every 5 minutes when anything changed, and before any purge, reset, restore, or deploy. Administrators can download any snapshot or restore one. |
 
 ---
@@ -29,11 +29,13 @@ Live fundraising bar chart and stage suite for nonprofit galas and benefit appea
 
 Administrators create one account per person in **Team and backups**, then hand over the name and PIN, copy a one-time **Sign-in link** to text them, or send an **Email invite**. Links work once and expire after 7 days; the email also carries the sign-in name and the steps for the night. Home → **Copy briefing** gives the same steps plus every link as plain text for a group chat.
 
+Viewing does not require sign-in: Home totals, gift count and progress, Donations, History, Stats, the projector, and the presenter are public. Editing requires a named account. Public data pages offer **Sign in to edit** links rather than exposing edit controls. Settings, Team and backups, and Testing are administrative tools and require sign-in. Private CSV exports, team notes, and operator activity also require sign-in. Home uses the live ledger total, not the projector's held figure; an unavailable or invalid total is never displayed as zero or `NaN%`.
+
 | | Operator | Administrator |
 | :--- | :---: | :---: |
 | Record, edit, delete, restore gifts; team notes | yes | yes |
 | Stage message, impact rotation, pause/resume chart | yes | yes |
-| CSV export, History, Stats, Home presence | yes | yes |
+| Private CSV export, operator activity, Home presence | yes | yes |
 | Settings: goal, milestones, appearance, QR, quick amounts, matching, online import | | yes |
 | Team and backups: accounts, sign-in links, invites, snapshots, restore | | yes |
 | Testing: rehearsal gifts, purge, chart re-sync; full reset | | yes |
