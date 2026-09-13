@@ -1,0 +1,52 @@
+# End-of-night donor report
+
+Three outputs from one build, all in `reports/out/` (gitignored):
+
+| File | What it is |
+|---|---|
+| `<basename>.xlsx` | Full detail: every gift, every donor household, event log, online (Qgiv) detail, prospects vs actual, sponsors, ticket buyers, tables, declined attempts, timeline. Internal: legal names of anonymous donors and staff names are included. |
+| `<basename>.html` | Single-file interactive report (search, sort, filters, CSV of the current view, charts, QR codes). Fonts and logos are inlined; works offline. |
+| `<basename>.pdf` | Print of the HTML through headless Chromium (letter, booklet styling). Long tables are cut at 40 rows with a note. |
+| `<basename>.json` | Stats and takeaways only, for diffing between refreshes. |
+
+`<basename>` comes from `output_basename` in `reports/report.config.json`.
+
+## Refresh in four commands
+
+```bash
+reports/pull-givebar.sh                                  # 1. snapshot the live ledger (Secret Gate SSH, Telegram approval)
+secret-gate exec --item "CAIR-Georgia Givebar Fundraising API" --field credential --env QGIV_TOKEN -- bun reports/pull-qgiv.ts
+                                                         # 2. online transactions since Jan 1 (token is form-scoped)
+bun reports/build-report.ts                              # 3. xlsx + html + pdf (add --no-pdf to skip Chromium)
+reports/publish.sh                                       # 4. re-publish to the same password-protected share link (--password X to change it)
+```
+
+Step 2 can be skipped when nothing new came in online; the previous `reports/data/qgiv-history.json` is reused.
+
+## Inputs
+
+| Input | Path (config key) | Produced by |
+|---|---|---|
+| Givebar snapshot | `reports/data/givebar-prod.sqlite` (`inputs.givebar_sqlite`) | `reports/pull-givebar.sh`: `VACUUM INTO` on the host through `secret-gate ssh`, base64 over SSH, mode 600 locally. |
+| Qgiv history | `reports/data/qgiv-history.json` (`inputs.qgiv_history`) | `reports/pull-qgiv.ts`: the reporting API, one request per calendar year. The current token only sees the 2026 gala form; an organisation-level token would add previous years. |
+| Bloomerang CRM | `reports/data/bloomerang.json` (`inputs.bloomerang`), optional | `reports/pull-bloomerang.ts` with `BLOOMERANG_API_KEY` in the environment (use `secret-gate exec`). Not yet run: the vault has no CAIR-Georgia Bloomerang API key. When the file exists the build fills repeat/first-time status, lifetime giving, last gift, years active, and the gift at last year's gala (`previous_event_date`, two weeks before to three weeks after, or a campaign/appeal named Gala). |
+| Staff MASTER workbook | `master_workbook` + `master_sheets` | Read directly from the gala project checkout. Sheets: prospects (Donors 2026: name, gave earlier in 2026, ask, assumed gift, notes; rows stop at "Matches"), sponsors (Active Sponsors), tickets (Ticket Tailor export), tables (Final Tables). |
+
+`reports/data/` and `reports/out/` are gitignored; the snapshot contains the full ledger and sessions table.
+
+## Code map
+
+- `reports/lib/names.ts`: name normalisation and the `NameIndex` used for every cross-reference (titles stripped, couples split, first+last key, email match for online gifts).
+- `reports/lib/data.ts`: loads everything, folds the ledger with the server's own `foldLedger`, builds `Gift`, `Donor`, `Stats`, and the generated takeaways (`buildTakeaways`). Change thresholds, bands, or the wording of takeaways here.
+- `reports/lib/xlsx.ts`: workbook sheets (ExcelJS). Add a column by extending the sheet's column list and row mapper.
+- `reports/lib/html.ts`: the HTML template, CSS (screen and print), inline charts, and the browser-side table code. The payload sent to the browser is built in `viewPayload`; anything new for the interactive tables goes there first.
+- `reports/build-report.ts`: orchestration and the Chromium print (`~/.cache/ms-playwright/chromium-*` or a `chromium`/`google-chrome` on PATH).
+- `reports/theme/`: Brandon Grotesque, Plus Jakarta Sans, Space Mono, the CAIR-Georgia logo, and the wavedepth logo, copied from the gala booklet release (`/home/nerveband/state/booklet-r22-spacing-release/versions/r16/assets`).
+
+## Config (`reports/report.config.json`)
+
+Event name and date, time zone, previous gala date (Bloomerang window), output basename, links for the QR page, share slug/URL, workbook path and sheet names, input paths, and `extra_takeaways` (strings appended to the takeaways cards).
+
+## Privacy
+
+Everything in `reports/out/` is operator-level data: anonymous donors' legal names, staff names, team notes, pledges. Share only with the client team, only through the password-protected link, never in the public repo or by email attachment to a wide list. The HTML hides anonymous legal names and team notes by default (toggles above the donor table).

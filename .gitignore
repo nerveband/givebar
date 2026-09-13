@@ -6,3 +6,8 @@ dist/
 *.sqlite-shm
 *.log
 .DS_Store
+
+reports/data/
+reports/out/
+
+reports/theme/fonts/

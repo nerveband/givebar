@@ -1,0 +1,30 @@
+{
+  "client": "CAIR-Georgia",
+  "event_name": "CAIR-Georgia 10th Annual Gala Fundraiser",
+  "event_short": "10th Annual Gala",
+  "event_date": "2026-09-12",
+  "timezone": "America/New_York",
+  "previous_event_date": "2025-09-06",
+  "output_basename": "CAIR-Georgia-Gala-2026-Donor-Report",
+  "prepared_by": "wavedepth",
+  "prepared_by_url": "https://wavedepth.com",
+  "givebar_url": "https://givebar.wavedepth.com",
+  "donate_url": "https://cairgeorgia.org/gala2026donate/",
+  "org_url": "https://cairgeorgia.org",
+  "share_mount": "cair-ga-gala-2026-donors",
+  "share_slug": "fern-unity-eg3f",
+  "share_url": "https://share.wavedepth.com/cair-ga-gala-2026-donors/",
+  "master_workbook": "/home/nerveband/src/client/cair-ga-gala-10-anniversary/resources/2026 10th Anniversary MASTER.xlsx",
+  "master_sheets": {
+    "prospects": "Donors 2026",
+    "sponsors": "Active Sponsors",
+    "tickets": "Ticket Tailor",
+    "tables": "Final Tables (Azka)"
+  },
+  "inputs": {
+    "givebar_sqlite": "reports/data/givebar-prod.sqlite",
+    "qgiv_history": "reports/data/qgiv-history.json",
+    "bloomerang": "reports/data/bloomerang.json"
+  },
+  "extra_takeaways": []
+}
