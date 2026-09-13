@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.5.1">
   <link rel="stylesheet" href="/css/base.css?v=7.5.1">
   <link rel="stylesheet" href="/css/components.css?v=7.5.1">
-  <link rel="stylesheet" href="/css/app.css?v=7.5.9">
+  <link rel="stylesheet" href="/css/app.css?v=7.5.11">
 </head>
 <body>
   <div class="ops-shell">
@@ -44,12 +44,13 @@
 
       <div class="stats-filters" role="group" aria-label="Filters">
         <div class="seg" id="range-seg" role="radiogroup" aria-label="Time range">
-          <button type="button" data-range="1h" role="radio" aria-checked="true">Last hour</button>
-          <button type="button" data-range="today" role="radio" aria-checked="false">Today</button>
+          <button type="button" data-range="today" role="radio" aria-checked="true">Today</button>
+          <button type="button" data-range="1h" role="radio" aria-checked="false">Last hour</button>
           <button type="button" data-range="24h" role="radio" aria-checked="false">24 hours</button>
           <button type="button" data-range="7d" role="radio" aria-checked="false">7 days</button>
           <button type="button" data-range="30d" role="radio" aria-checked="false">30 days</button>
           <button type="button" data-range="all" role="radio" aria-checked="false">All</button>
+          <button type="button" data-range="custom" role="radio" aria-checked="false">Custom</button>
         </div>
         <div class="seg" id="source-seg" role="radiogroup" aria-label="Source">
           <button type="button" data-source="" role="radio" aria-checked="true">All sources</button>
@@ -68,6 +69,11 @@
       </div>
 
       <form id="stats-detail-filters" class="stats-detail-filters">
+        <div id="stats-custom-range" class="stats-custom-range" hidden>
+          <label>Start (Eastern)<input id="stats-from" type="datetime-local" step="1" class="input-dark"></label>
+          <label>End (Eastern)<input id="stats-to" type="datetime-local" step="1" class="input-dark"></label>
+          <span class="form-hint">Select any past date and time, then apply filters. Times use America/New_York.</span>
+        </div>
         <label>Search donations<input id="stats-search" type="search" maxlength="200" placeholder="Search donor name" class="input-dark"></label>
         <label>Minimum gift ($)<input id="stats-min" type="number" min="0" step="0.01" class="input-dark"></label>
         <label>Maximum gift ($)<input id="stats-max" type="number" min="0" step="0.01" class="input-dark"></label>
@@ -89,6 +95,7 @@
       <section class="stats-card">
         <div class="stats-card-head"><h2>Total raised over time</h2><span class="form-hint" id="timeline-hint"></span></div>
         <p class="form-hint">Blue dots mark intervals with gifts. Hover or tap for details; use arrow keys when focused.</p>
+        <p class="form-hint" id="timeline-range"></p>
         <div id="chart-timeline" class="chart"></div>
       </section>
 
@@ -161,6 +168,6 @@
 
   <script src="/js/session.js?v=7.5.3"></script>
   <script src="/js/presence.js?v=7.5.1"></script>
-  <script src="/js/stats.js?v=7.5.7"></script>
+  <script src="/js/stats.js?v=7.5.9"></script>
 </body>
 </html>

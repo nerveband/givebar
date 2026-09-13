@@ -14,8 +14,8 @@ import { getSession } from "./authz";
  * omit operator identities; signed-in operators retain their detailed view.
  */
 
-export type StatsRange = "1h" | "today" | "24h" | "7d" | "30d" | "all";
-const RANGES: Record<string, true> = { "1h": true, today: true, "24h": true, "7d": true, "30d": true, all: true };
+export type StatsRange = "custom" | "1h" | "today" | "24h" | "7d" | "30d" | "all";
+const RANGES: Record<string, true> = { custom: true, "1h": true, today: true, "24h": true, "7d": true, "30d": true, all: true };
 const WEB_CACHE_MS = 30_000;
 const WEB_MAX_DAYS = 90;
 const DONATE_PATHS = /donat|gala|give|pledge/i;
@@ -35,9 +35,10 @@ function startOfEasternDay(now: number): number {
   return now - secondsIntoDay * 1000 - (now % 1000);
 }
 
-export function rangeBounds(range: StatsRange, now: number, earliest: number): { from: number; to: number; bucket_ms: number } {
+export function rangeBounds(range: StatsRange, now: number, earliest: number, custom?: { from: number; to: number }): { from: number; to: number; bucket_ms: number } {
   const day = 86_400_000;
-  const bounds = range === "1h" ? { from: now - 3_600_000, to: now }
+  const bounds = range === "custom" && custom ? custom
+    : range === "1h" ? { from: now - 3_600_000, to: now }
     : range === "today" ? { from: startOfEasternDay(now), to: now }
     : range === "24h" ? { from: now - day, to: now }
     : range === "7d" ? { from: now - 7 * day, to: now }
@@ -59,11 +60,11 @@ function tally(map: Map<string, KeyCount>, key: string, label: string, cents: nu
   map.set(key, row);
 }
 
-export function ledgerStats(db: Database, range: StatsRange, source: string, method: string, now = Date.now(), filters: { q?: string; min?: number; max?: number; bucket?: number; private?: boolean; sort?: string } = {}) {
+export function ledgerStats(db: Database, range: StatsRange, source: string, method: string, now = Date.now(), filters: { q?: string; min?: number; max?: number; bucket?: number; private?: boolean; sort?: string; custom?: { from: number; to: number } } = {}) {
   const fold = foldLedger(db);
   const events = db.query<LedgerEvent, []>(`SELECT * FROM ledger ORDER BY seq ASC`).all();
   const earliest = events.reduce((min, event) => event.event_type === "create" && event.source !== "rehearsal" ? Math.min(min, event.created_at) : min, now);
-  const bounds = rangeBounds(range, now, earliest);
+  const bounds = rangeBounds(range, now, earliest, filters.custom);
   if (filters.bucket) bounds.bucket_ms = filters.bucket;
   const state = getEventState(db);
 
@@ -195,19 +196,19 @@ export interface WebStats {
 }
 
 export interface WebStatsSource {
-  query(range: StatsRange, now: number, bucket?: number): Promise<WebStats>;
+  query(range: StatsRange, now: number, bucket?: number, custom?: { from: number; to: number }): Promise<WebStats>;
   close(): void;
 }
 
 export function createWebStats(databaseUrl = process.env.GIVEBAR_UMAMI_DATABASE_URL || "", websiteId = process.env.GIVEBAR_UMAMI_WEBSITE_ID || ""): WebStatsSource {
   const sql = databaseUrl ? new SQL(databaseUrl, { max: 2, connectionTimeout: 5, idleTimeout: 60 }) : null;
   const cache = new Map<string, { at: number; value: WebStats }>();
-  async function query(range: StatsRange, now: number, bucket?: number): Promise<WebStats> {
+  async function query(range: StatsRange, now: number, bucket?: number, custom?: { from: number; to: number }): Promise<WebStats> {
     if (!sql || !websiteId) return { connected: false, message: "Website analytics are not connected on this server." };
-    const key = `${range}:${bucket || "auto"}:${Math.floor(now / WEB_CACHE_MS)}`;
+    const key = `${range}:${custom?.from || ""}:${custom?.to || ""}:${bucket || "auto"}:${Math.floor(now / WEB_CACHE_MS)}`;
     const hit = cache.get(key);
     if (hit) return hit.value;
-    const bounds = rangeBounds(range, now, now - WEB_MAX_DAYS * 86_400_000);
+    const bounds = rangeBounds(range, now, now - WEB_MAX_DAYS * 86_400_000, custom);
     const from = new Date(Math.max(bounds.from, now - WEB_MAX_DAYS * 86_400_000));
     const to = new Date(bounds.to);
     try {
@@ -298,7 +299,7 @@ export async function handleStatsRequest(req: Request, db: Database, web: WebSta
   if (req.method !== "GET") return Response.json({ error: "METHOD_NOT_ALLOWED", message: "GET required" }, { status: 405 });
   const url = new URL(req.url);
   const rangeParam = url.searchParams.get("range") || "all";
-  if (!RANGES[rangeParam]) return Response.json({ error: "INVALID_RANGE", message: "range must be 1h, today, 24h, 7d, 30d, or all" }, { status: 400 });
+  if (!RANGES[rangeParam]) return Response.json({ error: "INVALID_RANGE", message: "range must be custom, 1h, today, 24h, 7d, 30d, or all" }, { status: 400 });
   const range = rangeParam as StatsRange;
   const source = url.searchParams.get("source") || "";
   const method = url.searchParams.get("method") || "";
@@ -316,9 +317,14 @@ export async function handleStatsRequest(req: Request, db: Database, web: WebSta
     return Response.json({ error: "INVALID_FILTER", message: "Check the search, amount limits, interval, or sort order." }, { status: 400 });
   if (format === "csv" && !session) return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const now = Date.now();
-  const bounds = rangeBounds(range, now, db.query<{ first: number }, []>("SELECT MIN(created_at) AS first FROM ledger").get()?.first || now);
+  const from = Number(url.searchParams.get("from"));
+  const to = Number(url.searchParams.get("to"));
+  const custom = range === "custom" ? { from, to } : undefined;
+  if (custom && (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from <= 0 || from >= to || to > now))
+    return Response.json({ error: "INVALID_TIME_RANGE", message: "Choose a start before the end, with neither time in the future." }, { status: 400 });
+  const bounds = rangeBounds(range, now, db.query<{ first: number }, []>("SELECT MIN(created_at) AS first FROM ledger").get()?.first || now, custom);
   if (bucket && (bounds.to - bounds.from) / bucket > 10000) return Response.json({ error: "TOO_MANY_BUCKETS", message: "Choose a shorter time range or a larger chart interval." }, { status: 400 });
-  const ledger = ledgerStats(db, range, source, method, now, { q, min, max, bucket, sort, private: !!session });
+  const ledger = ledgerStats(db, range, source, method, now, { q, min, max, bucket, sort, custom, private: !!session });
   if (format === "csv") {
     const cell = (value: unknown) => {
       let text = String(value ?? "");
@@ -329,7 +335,7 @@ export async function handleStatsRequest(req: Request, db: Database, web: WebSta
       ...ledger.donations.map(g => [new Date(g.created_at).toISOString(), g.donor_name, (g.amount_cents / 100).toFixed(2), (g.matched_amount_cents / 100).toFixed(2), g.source, g.payment_method, g.operator])];
     return new Response("\uFEFF" + rows.map(row => row.map(cell).join(",")).join("\r\n"), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="givebar-filtered-donations.csv"', "Cache-Control": "no-store" } });
   }
-  const website = await web.query(range, now, bucket);
+  const website = await web.query(range, now, bucket, custom);
   if (!session) {
     const records = foldLedger(db).active_donations;
     ledger.top_gifts = ledger.top_gifts.map(gift => ({

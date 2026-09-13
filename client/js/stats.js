@@ -17,10 +17,10 @@
   const MUTED = '#88888e';
   const LINE = 'rgba(255,255,255,0.08)';
   const state = {
-    range: localStorage.getItem('givebar_stats_range') || '1h',
+    range: 'today',
     source: '',
     method: '',
-    q: '', min: '', max: '', bucket: '', sort: 'newest', page: 0,
+    from: '', to: '', q: '', min: '', max: '', bucket: '', sort: 'newest', page: 0,
     data: null,
     timer: null
   };
@@ -195,7 +195,7 @@
     $('stats-search').placeholder = data.can_view_private ? 'Search donor, note, or operator' : 'Search donor name';
     $('stats-csv-preview').hidden = $('stats-csv-download').hidden = !data.can_view_private;
     $('stats-csv-signin').hidden = data.can_view_private;
-    const rangeText = { '1h': 'the last hour', today: 'today', '24h': 'the last 24 hours', '7d': 'the last 7 days', '30d': 'the last 30 days', all: 'all time' }[data.range];
+    const rangeText = { custom: 'the selected period', '1h': 'the last hour', today: 'today', '24h': 'the last 24 hours', '7d': 'the last 7 days', '30d': 'the last 30 days', all: 'all time' }[data.range];
     const filters = [state.source && ({ bloomerang: 'online gifts only', manual: 'gifts entered by hand only' })[state.source], state.method && `${state.method} only`, state.q && `search: ${state.q}`, state.min !== '' && `minimum ${money(Number(state.min))}`, state.max !== '' && `maximum ${money(Number(state.max))}`].filter(Boolean);
     $('stats-subtitle').textContent = `Gifts, sources, and how people reached the donation page, ${rangeText}${filters.length ? ', ' + filters.join(', ') : ''}.`;
     $('btn-clear-filters').hidden = !filters.length && !state.bucket;
@@ -222,6 +222,8 @@
       $('t-tagged-sub').textContent = '';
     }
 
+    const periodFormat = eastern({ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    $('timeline-range').textContent = `${periodFormat.format(new Date(data.from))} to ${periodFormat.format(new Date(data.to))} Eastern${data.range === '1h' ? ' · Rolling last hour only' : ''}`;
     const bucket = data.bucket_ms;
     const giftsByBucket = new Map();
     for (const gift of data.donations) {
@@ -294,6 +296,7 @@
   function params() {
     const query = new URLSearchParams({ range: state.range, source: state.source, method: state.method, sort: state.sort });
     for (const key of ['q', 'min', 'max', 'bucket']) if (state[key] !== '') query.set(key, state[key]);
+    if (state.range === 'custom') { query.set('from', state.from); query.set('to', state.to); }
     return query;
   }
   function renderDonations(data) {
@@ -316,6 +319,7 @@
   }
   let requestNumber = 0;
   async function load() {
+    if (state.range === 'custom' && (!state.from || !state.to)) return;
     const current = ++requestNumber;
     $('btn-clear-filters').hidden = ![state.source, state.method, state.q, state.min, state.max, state.bucket].some(value => value !== '');
     const controller = new AbortController();
@@ -354,8 +358,29 @@
     } catch (error) { GivebarSession.toast(error.name === 'AbortError' ? 'CSV request timed out. Try again.' : error.message); }
     finally { clearTimeout(timeout); }
   }
+  function easternInput(timestamp) {
+    const parts = eastern({ year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(timestamp));
+    const part = type => parts.find(p => p.type === type).value;
+    return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`;
+  }
+  function parseEastern(value) {
+    if (!value) throw new Error('Choose both start and end times.');
+    const normalized = value.length === 16 ? value + ':00' : value;
+    const wall = Date.parse(normalized + 'Z');
+    let result = wall;
+    for (let i = 0; i < 3; i++) result += wall - Date.parse(easternInput(result) + 'Z');
+    if (!Number.isFinite(result) || easternInput(result) !== normalized) throw new Error('That Eastern time does not exist. Choose another time.');
+    return result;
+  }
   $('stats-detail-filters').addEventListener('submit', event => {
     event.preventDefault();
+    if (state.range === 'custom') {
+      try {
+        const from = parseEastern($('stats-from').value), to = parseEastern($('stats-to').value);
+        if (from >= to || to > Date.now()) throw new Error('Choose a start before the end, with neither time in the future.');
+        state.from = String(from); state.to = String(to);
+      } catch (error) { $('stats-error').textContent = error.message; return; }
+    }
     state.q = $('stats-search').value.trim();
     for (const key of ['min', 'max']) state[key] = $('stats-' + key).value === '' ? '' : String(Math.round(Number($('stats-' + key).value) * 100));
     state.bucket = $('stats-bucket').value;
@@ -373,10 +398,17 @@
       button.setAttribute('aria-checked', String(button.dataset[attr] === state[key]));
       button.addEventListener('click', () => {
         state[key] = button.dataset[attr];
+        if (key === 'range') {
+          $('stats-custom-range').hidden = state.range !== 'custom';
+          if (state.range === 'custom') {
+            const data = state.data;
+            $('stats-from').value ||= easternInput(data?.from || Date.now() - 3600000);
+            $('stats-to').value ||= easternInput(data?.to || Date.now());
+          }
+        }
         state.page = 0;
-        if (key === 'range') localStorage.setItem('givebar_stats_range', state.range);
         group.querySelectorAll('button').forEach(other => other.setAttribute('aria-checked', String(other === button)));
-        load();
+        if (state.range !== 'custom' || (state.from && state.to)) load();
       });
     });
   }
@@ -387,7 +419,9 @@
     state.source = '';
     state.method = '';
     state.q = state.min = state.max = state.bucket = ''; state.page = 0;
+    const fromInput = $('stats-from').value, toInput = $('stats-to').value;
     $('stats-detail-filters').reset();
+    $('stats-from').value = fromInput; $('stats-to').value = toInput;
     document.querySelectorAll('#source-seg button, #method-seg button').forEach(button => button.setAttribute('aria-checked', String(!button.dataset.source && !button.dataset.method)));
     load();
   });

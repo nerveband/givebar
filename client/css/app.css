@@ -957,3 +957,8 @@ textarea.form-input-text { min-height:80px; resize:vertical; }
   .stats-table-toolbar #stats-sort { flex: 1 1 180px; min-width: 180px; }
   .stats-pagination { justify-content: space-between; gap: 6px; }
 }
+
+.stats-custom-range { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 12px; align-items: end; padding: 14px; border: 1px solid var(--border-subtle); border-radius: var(--brand-radius); }
+.stats-custom-range .form-hint { flex-basis: 100%; }
+#range-seg { max-width: 100%; flex-wrap: wrap; }
+.stats-custom-range label { min-width: 0; }

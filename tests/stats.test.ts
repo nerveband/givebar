@@ -188,3 +188,24 @@ test('all sort orders retain the same filtered gifts and exact totals', () => {
     expect(result.summary.direct_cents).toBe(6000);
   }
 });
+
+test('custom date bounds include the full requested period in rows, charts, website query and CSV', async () => {
+  const from = Date.parse('2026-09-12T23:00:00Z'), to = Date.parse('2026-09-12T23:59:00Z');
+  const cookie = await sessionCookie(db, backupsFor(db), 'customreview', 'operator');
+  for (const [id, time] of [['before', from - 1], ['start', from], ['end', to], ['after', to + 1]] as const) {
+    recordDonation(db, { donation_id: id, donor_name: id, amount_cents: 1000 });
+    db.query('UPDATE ledger SET created_at=? WHERE donation_id=?').run(time, id);
+  }
+  let received;
+  const web = { query: async (_r, _n, _b, custom) => { received = custom; return {connected:false}; }, close() {} };
+  const query = `/api/stats?range=custom&from=${from}&to=${to}`;
+  const result = await (await handleStatsRequest(get(query, cookie), db, web)).json();
+  expect(received).toEqual({from,to});
+  expect(result.summary.gifts).toBe(2);
+  expect(result.timeline.at(-1).cumulative_cents).toBe(2000);
+  expect(result.donations.map(g => g.donor_name)).toEqual(['end','start']);
+  const csv = await (await handleStatsRequest(get(query+'&format=csv', cookie), db, web)).text();
+  expect(csv).toContain('"start"'); expect(csv).not.toContain('"before"');
+  for (const bad of ['range=custom', `range=custom&from=${to}&to=${from}`, `range=custom&from=${from}&to=${Date.now()+86400000}`])
+    expect((await handleStatsRequest(get('/api/stats?'+bad), db, web)).status).toBe(400);
+});
