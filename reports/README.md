@@ -5,7 +5,7 @@ Three outputs from one build, all in `reports/out/` (gitignored):
 | File | What it is |
 |---|---|
 | `<basename>.xlsx` | Full detail: every gift, every donor household, event log, online (Qgiv) detail, prospects vs actual, sponsors, ticket buyers, tables, declined attempts, timeline. Internal: legal names of anonymous donors and staff names are included. |
-| `site/index.html`, `site/donors.html` | Interactive report (charts, takeaways, cross-reference, follow-up) and the searchable donor list on its own page; the PDF links to the published donor page instead of printing it. Fonts and logos are inlined; works offline. |
+| `site/*.html` | Five-page interactive site: `index.html` (overview: numbers, takeaways, charts, website traffic, method), `donors.html`, `gifts.html`, `crossref.html`, `followup.html`. Paginated, searchable tables; a chapter menu top right. The PDF is the overview only and links to the online pages. |
 | `<basename>.pdf` | Print of the HTML through headless Chromium (letter, booklet styling). Long tables are cut at 40 rows with a note. |
 | `<basename>.json` | Stats and takeaways only, for diffing between refreshes. |
 
@@ -17,7 +17,10 @@ Three outputs from one build, all in `reports/out/` (gitignored):
 reports/pull-givebar.sh                                  # 1. snapshot the live ledger (Secret Gate SSH, Telegram approval)
 secret-gate exec --item "CAIR-Georgia Givebar Fundraising API" --field credential --env QGIV_TOKEN -- bun reports/pull-qgiv.ts
                                                          # 2. online transactions since Jan 1 (token is form-scoped)
-bun reports/build-report.ts                              # 3. xlsx + html + pdf (add --no-pdf to skip Chromium)
+U=$(secret-gate item read --item "Givebar administrator - givebar.wavedepth.com" --fields username --reveal | jq -r .data.fields.username)
+secret-gate exec --item "Givebar administrator - givebar.wavedepth.com" --field password --env GIVEBAR_PIN -- env GIVEBAR_USER="$U" bun reports/pull-stats.ts
+                                                         # 2b. Stats dashboard incl. website analytics (optional)
+bun reports/build-report.ts                              # 3. xlsx + site + pdf (add --no-pdf to skip Chromium)
 reports/publish.sh                                       # 4. re-publish to the same password-protected share link (--password X to change it)
 ```
 
@@ -29,7 +32,8 @@ Step 2 can be skipped when nothing new came in online; the previous `reports/dat
 |---|---|---|
 | Givebar snapshot | `reports/data/givebar-prod.sqlite` (`inputs.givebar_sqlite`) | `reports/pull-givebar.sh`: `VACUUM INTO` on the host through `secret-gate ssh`, base64 over SSH, mode 600 locally. |
 | Qgiv history | `reports/data/qgiv-history.json` (`inputs.qgiv_history`) | `reports/pull-qgiv.ts`: the reporting API, one request per calendar year. The current token only sees the 2026 gala form; an organisation-level token would add previous years. |
-| Bloomerang CRM | `reports/data/bloomerang.json` (`inputs.bloomerang`), optional | `reports/pull-bloomerang.ts` with `BLOOMERANG_API_KEY` in the environment (use `secret-gate exec`). Not yet run: the vault has no CAIR-Georgia Bloomerang API key. When the file exists the build fills repeat/first-time status, lifetime giving, last gift, years active, and the gift at last year's gala (`previous_event_date`, two weeks before to three weeks after, or a campaign/appeal named Gala). |
+| Givebar Stats | `reports/data/givebar-stats.json` (`inputs.stats`), optional | `reports/pull-stats.ts`: signs in with the admin account, pulls `/api/stats` for all/30d/7d/24h (ledger stats plus Umami website analytics), logs out. |
+| Bloomerang CRM | `reports/data/bloomerang.json` (`inputs.bloomerang`), optional | `reports/pull-bloomerang.ts` with `BLOOMERANG_API_KEY` in the environment (use `secret-gate exec`). Not yet run: the vault has no CAIR-Georgia Bloomerang API key (the Givebar fundraising token is a Qgiv form token and is rejected by api.bloomerang.co with 401). When the file exists the build fills repeat/first-time status, lifetime giving, last gift, years active, and the gift at last year's gala (`previous_event_date`, two weeks before to three weeks after, or a campaign/appeal named Gala). |
 | Staff MASTER workbook | `master_workbook` + `master_sheets` | Read directly from the gala project checkout. Sheets: prospects (Donors 2026: name, gave earlier in 2026, ask, assumed gift, notes; rows stop at "Matches"), sponsors (Active Sponsors), tickets (Ticket Tailor export), tables (Final Tables). |
 
 `reports/data/` and `reports/out/` are gitignored; the snapshot contains the full ledger and sessions table.

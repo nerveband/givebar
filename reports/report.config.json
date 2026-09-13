@@ -24,7 +24,8 @@
   "inputs": {
     "givebar_sqlite": "reports/data/givebar-prod.sqlite",
     "qgiv_history": "reports/data/qgiv-history.json",
-    "bloomerang": "reports/data/bloomerang.json"
+    "bloomerang": "reports/data/bloomerang.json",
+    "stats": "reports/data/givebar-stats.json"
   },
   "extra_takeaways": []
 }

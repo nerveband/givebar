@@ -18,7 +18,7 @@ const root = join(import.meta.dir, "..");
 process.chdir(root);
 const config = JSON.parse(readFileSync("reports/report.config.json", "utf8")) as Config;
 for (const [name, path] of Object.entries(config.inputs)) {
-  if (!existsSync(path) && name !== "bloomerang") { console.error(`Missing input ${name}: ${path}`); process.exit(1); }
+  if (!existsSync(path) && name !== "bloomerang" && name !== "stats") { console.error(`Missing input ${name}: ${path}`); process.exit(1); }
 }
 ensureFonts();
 mkdirSync("reports/out", { recursive: true });
@@ -33,9 +33,8 @@ console.log(`wrote ${base}.xlsx`);
 const site = join("reports/out", "site");
 mkdirSync(site, { recursive: true });
 const pages = renderHTML(report);
-writeFileSync(join(site, "index.html"), pages.index);
-writeFileSync(join(site, "donors.html"), pages.donors);
-console.log(`wrote ${site}/index.html and donors.html`);
+for (const [file, html] of Object.entries(pages)) writeFileSync(join(site, file), html);
+console.log(`wrote ${site}/: ${Object.keys(pages).join(", ")}`);
 
 if (!process.argv.includes("--no-pdf")) {
   const chromium = findChromium();

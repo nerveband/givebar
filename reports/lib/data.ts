@@ -13,7 +13,7 @@ export type Config = {
   client: string; event_name: string; event_short: string; event_date: string; timezone: string; previous_event_date: string;
   output_basename: string; prepared_by: string; prepared_by_url: string; givebar_url: string; donate_url: string; org_url: string;
   share_slug: string; share_url: string; master_workbook: string; master_sheets: { prospects: string; sponsors: string; tickets: string; tables: string };
-  inputs: { givebar_sqlite: string; qgiv_history: string; bloomerang: string }; extra_takeaways: string[];
+  inputs: { givebar_sqlite: string; qgiv_history: string; bloomerang: string; stats: string }; extra_takeaways: string[];
 };
 
 export type QgivTxn = {
@@ -53,7 +53,7 @@ export type Report = {
   gifts: Gift[]; donors: Donor[]; events: LedgerEventRow[]; qgiv: { all: QgivTxn[]; declined: QgivTxn[]; pre_event: QgivTxn[]; form_name: string; pulled_at: string };
   prospects: Prospect[]; sponsors: Sponsor[]; tickets: TicketOrder[]; tables: TableRow[]; milestones: { label: string; cents: number; reached_at: number | null }[]; ask_tiers: { label: string; cents: number; hits: number }[];
   bloomerang: { connected: boolean; pulled_at: string; constituents: number; matched: number; message: string };
-  stats: Stats; takeaways: Takeaway[];
+  web: WebStats; stats: Stats; takeaways: Takeaway[];
 };
 
 export type Stats = {
@@ -67,6 +67,9 @@ export type Stats = {
   sponsors_gave: number; sponsors_total: number; ticket_buyers: number; ticket_buyers_gave: number; tables_with_gifts: number; tables_total: number;
   operators: { name: string; count: number; cents: number }[]; amended_count: number; entered_by_hour: { label: string; count: number }[];
 };
+
+export type WebChannel = { label: string; visitors: number; donate_views: number };
+export type WebStats = { connected: boolean; pulled_at: string; week: { views: number; visitors: number; donate_visitors: number; tagged_visitors: number } | null; all: { views: number; visitors: number; donate_visitors: number } | null; channels: WebChannel[]; devices: { device: string; visitors: number }[]; referrers: { domain: string; visitors: number }[]; conversion: number };
 
 export type Takeaway = { kind: "win" | "action" | "watch" | "insight"; title: string; body: string };
 
@@ -209,6 +212,33 @@ export function loadBloomerang(path: string, previousEventDate: string): { conne
   return { connected: true, pulled_at: data.pulled_at, constituents: byConstituent.size, index, message: `Bloomerang history pulled ${data.pulled_at}: ${byConstituent.size} constituents, ${data.transactions.length} transactions.` };
 }
 
+type StatsPayload = { pulled_at: string; ranges: Record<string, { website?: { connected?: boolean; totals?: { views: number; visitors: number; donate_views: number; donate_visitors: number; tagged_visitors: number }; utm?: { source: string; medium: string; campaign: string; content: string; visitors: number; donate_views: number }[]; devices?: { device: string; visitors: number }[]; referrers?: { domain: string; visitors: number }[] } }> };
+const CHANNEL_LABELS: Record<string, string> = { "pledgeform/qrcode": "Pledge form QR", "qrcode/tablecard": "Table card QR", "givebar/qr": "Ballroom chart QR", "qrcode/backcover": "Booklet back cover QR", "qrcode/booklet": "Booklet inside QR", "ig/social": "Instagram bio link" };
+
+/** Website analytics from the Givebar Stats dashboard (Umami), gala week and all time. */
+export function loadWebStats(path: string, onlineGifts: number): WebStats {
+  const empty: WebStats = { connected: false, pulled_at: "", week: null, all: null, channels: [], devices: [], referrers: [], conversion: 0 };
+  if (!existsSync(path)) return empty;
+  const payload = JSON.parse(readFileSync(path, "utf8")) as StatsPayload;
+  const week = payload.ranges["7d"]?.website; const all = payload.ranges.all?.website;
+  if (!week?.connected || !week.totals) return { ...empty, pulled_at: payload.pulled_at };
+  const merged = new Map<string, WebChannel>();
+  for (const u of week.utm || []) {
+    if (!u.source) continue;
+    const label = CHANNEL_LABELS[`${u.source}/${u.medium}`] || [u.source, u.medium].filter(Boolean).join(" / ");
+    const row = merged.get(label) || { label, visitors: 0, donate_views: 0 };
+    row.visitors += u.visitors; row.donate_views += u.donate_views; merged.set(label, row);
+  }
+  const channels = [...merged.values()].sort((a, b) => b.visitors - a.visitors).slice(0, 8);
+  return {
+    connected: true, pulled_at: payload.pulled_at,
+    week: { views: week.totals.views, visitors: week.totals.visitors, donate_visitors: week.totals.donate_visitors, tagged_visitors: week.totals.tagged_visitors },
+    all: all?.totals ? { views: all.totals.views, visitors: all.totals.visitors, donate_visitors: all.totals.donate_visitors } : null,
+    channels, devices: (week.devices || []).map(d => ({ device: d.device, visitors: d.visitors })), referrers: (week.referrers || []).slice(0, 6).map(r => ({ domain: r.domain, visitors: r.visitors })),
+    conversion: week.totals.donate_visitors ? onlineGifts / week.totals.donate_visitors : 0
+  };
+}
+
 function bandOf(cents: number): string {
   if (cents >= 5_000_000) return "$50,000+"; if (cents >= 2_500_000) return "$25,000 to $49,999"; if (cents >= 1_000_000) return "$10,000 to $24,999"; if (cents >= 500_000) return "$5,000 to $9,999";
   if (cents >= 100_000) return "$1,000 to $4,999"; if (cents >= 50_000) return "$500 to $999"; if (cents >= 10_000) return "$100 to $499"; return "Under $100";
@@ -343,7 +373,7 @@ export async function buildReport(config: Config): Promise<Report> {
     event: { name: state.event_name, subtitle: state.event_subtitle, goal_cents: goal, total_cents: total, major_gift_threshold_cents: state.major_gift_threshold_cents, match_total_cents: state.match_total_cents, qr_url: state.qr_url, display_url: state.display_url, appeal_start: appealStart, first_gift_at: active[0]?.created_at || 0, last_gift_at: last },
     gifts, donors, events, qgiv: { all: qgiv.all, declined, pre_event: preEvent, form_name: qgiv.form_name, pulled_at: qgiv.pulled_at }, prospects: master.prospects, sponsors: master.sponsors, tickets: master.tickets, tables: master.tables, milestones, ask_tiers: askTiers,
     bloomerang: { connected: bloomerang.connected, pulled_at: bloomerang.pulled_at, constituents: bloomerang.constituents, matched: donors.filter(d => d.bloomerang).length, message: bloomerang.message },
-    stats, takeaways: []
+    web: loadWebStats(config.inputs.stats, online.length), stats, takeaways: []
   };
   report.takeaways = buildTakeaways(report);
   db.close();
@@ -366,6 +396,7 @@ export function buildTakeaways(r: Report): Takeaway[] {
   if (s.gift_assist_cents) out.push({ kind: "insight", title: `Donors covered ${money(s.gift_assist_cents)} in processing fees`, body: `Fees on online gifts were ${money(s.fees_cents)}; net online is ${money(s.net_online_cents)}. Keep the fee-cover option on by default.` });
   if (s.peak) out.push({ kind: "insight", title: `Peak giving window: ${s.peak.label} (${money(s.peak.cents)} in 15 minutes)`, body: `${s.peak.count} gifts landed in the strongest quarter hour. Next year, place the matching announcement and the emcee's second ask inside that window rather than after it.` });
   if (s.ticket_buyers) out.push({ kind: "action", title: `${s.ticket_buyers - s.ticket_buyers_gave} of ${s.ticket_buyers} ticket buyers on file have no gift recorded`, body: `Guests who bought tickets but did not give tonight are the first segment for the post-gala email; they were in the room and heard the case.` });
+  if (r.web.connected && r.web.week) out.push({ kind: "insight", title: `${r.web.week.donate_visitors.toLocaleString("en-US")} people opened the donate page during gala week; ${pct(r.web.conversion)} gave`, body: `${r.web.week.visitors.toLocaleString("en-US")} website visitors in the seven days around the gala, ${Math.round(100 * (r.web.devices.find(d => d.device === "mobile")?.visitors || 0) / Math.max(1, r.web.devices.reduce((n, d) => n + d.visitors, 0)))}% on phones. Top QR channel: ${r.web.channels[0]?.label || "n/a"} (${r.web.channels[0]?.visitors || 0} visitors). Keep the pledge-form and table-card QR codes; they outperformed the ballroom chart QR.` });
   if (r.event.match_total_cents === 0) out.push({ kind: "watch", title: "No matching grant was configured", body: "A board or sponsor match, even $25,000, gives the emcee a second peak. Secure it before the next appeal; Givebar folds it automatically." });
   if (!r.bloomerang.connected) out.push({ kind: "action", title: "Connect Bloomerang to see repeat-donor history", body: r.bloomerang.message });
   else out.push({ kind: "insight", title: `${s.repeat_donors} repeat donors, ${s.new_donors} first-time donors`, body: `${r.bloomerang.matched} of ${s.households} households matched a Bloomerang constituent. First-time donors need a welcome series within 7 days; repeat donors get a "you were with us again" note referencing their last gift.` });
