@@ -933,3 +933,27 @@ textarea.form-input-text { min-height:80px; resize:vertical; }
 #chart-hour { max-height: 420px; overflow-y: auto; }
 #stats-donations { font-variant-numeric: tabular-nums; }
 .stats-main [hidden] { display: none !important; }
+
+/* Keep Stats focused on the charts until donation detail is requested. */
+.stats-donation-details { padding: 0; }
+.stats-donation-details summary { display: flex; align-items: center; gap: 16px; min-height: 72px; padding: 16px 20px; cursor: pointer; list-style: none; }
+.stats-donation-details summary::-webkit-details-marker { display: none; }
+.stats-donation-details summary:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 3px; }
+.stats-disclosure-title { font-weight: 700; margin-right: auto; }
+.stats-disclosure-hint { display: block; font-size: 12px; font-weight: 400; color: var(--ink-secondary); margin-top: 4px; }
+.stats-chevron { flex-shrink: 0; transition: transform .15s; }
+.stats-donation-details[open] .stats-chevron { transform: rotate(180deg); }
+.stats-donation-body { padding: 0 20px 20px; border-top: 1px solid var(--border-subtle); }
+.stats-table-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 16px 0; }
+#stats-sort { width: auto; min-width: 180px; margin-right: auto; }
+.stats-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 16px; }
+.stats-donation-details #stats-donations { max-height: 480px; overflow: auto; }
+.stats-donation-details th { position: sticky; top: 0; background: var(--bg-surface); z-index: 1; }
+#stats-csv-panel { margin-top: 16px; }
+@media (max-width: 600px) {
+  .stats-donation-details summary { flex-wrap: wrap; gap: 8px; padding: 14px; }
+  .stats-donation-details #stats-row-count { flex-basis: 100%; order: 3; }
+  .stats-donation-body { padding: 0 14px 14px; }
+  .stats-table-toolbar #stats-sort { flex: 1 1 180px; min-width: 180px; }
+  .stats-pagination { justify-content: space-between; gap: 6px; }
+}

@@ -119,25 +119,49 @@
   }
 
   function addHover(root, points, x, describe) {
-    const tip = svg('g', { opacity: 0 }, root);
+    const tip = svg('g', { opacity: 0, 'pointer-events': 'none' }, root);
     const rule = svg('line', { y1: 0, y2: root.viewBox.baseVal.height - 30, stroke: INK, opacity: 0.35 }, tip);
-    const box = svg('rect', { rx: 6, fill: '#101116', stroke: '#2a2c34', height: 24 }, tip);
+    const box = svg('rect', { rx: 6, fill: '#101116', stroke: '#55565f' }, tip);
     const label = text(tip, 0, 0, '', { fill: INK });
-    root.addEventListener('mousemove', event => {
+    let selected = points.length - 1;
+    function show(index) {
+      selected = index;
+      const cx = x(index);
+      rule.setAttribute('x1', cx); rule.setAttribute('x2', cx);
+      const lines = [describe(index), ...(points[index].donations || [])];
+      label.replaceChildren();
+      const available = root.viewBox.baseVal.width - 24;
+      lines.forEach((line, i) => {
+        const span = svg('tspan', { dy: i ? 19 : 0 }, label);
+        span.textContent = line;
+        while (span.getComputedTextLength() > available && span.textContent.length > 4) span.textContent = span.textContent.slice(0, -2).replace(/…$/, '') + '…';
+      });
+      const width = Math.min(available + 16, Math.max(...Array.from(label.children).map(span => span.getComputedTextLength())) + 16);
+      const bx = Math.max(4, Math.min(cx - width / 2, root.viewBox.baseVal.width - width - 4));
+      box.setAttribute('x', bx); box.setAttribute('y', 2); box.setAttribute('width', width); box.setAttribute('height', lines.length * 19 + 10);
+      label.setAttribute('y', 20);
+      Array.from(label.children).forEach(span => span.setAttribute('x', bx + 8));
+      tip.setAttribute('opacity', 1);
+      root.setAttribute('aria-label', lines.join('. '));
+    }
+    function pointAt(event) {
       const rect = root.getBoundingClientRect();
       const px = ((event.clientX - rect.left) / rect.width) * root.viewBox.baseVal.width;
       let best = 0;
       for (let i = 1; i < points.length; i++) if (Math.abs(x(i) - px) < Math.abs(x(best) - px)) best = i;
-      const cx = x(best);
-      rule.setAttribute('x1', cx); rule.setAttribute('x2', cx);
-      label.textContent = describe(best);
-      const width = label.getComputedTextLength() + 16;
-      const bx = Math.min(Math.max(cx - width / 2, 4), root.viewBox.baseVal.width - width - 4);
-      box.setAttribute('x', bx); box.setAttribute('y', 2); box.setAttribute('width', width);
-      label.setAttribute('x', bx + 8); label.setAttribute('y', 18);
-      tip.setAttribute('opacity', 1);
+      show(best);
+    }
+    root.setAttribute('tabindex', '0');
+    root.addEventListener('mousemove', pointAt);
+    root.addEventListener('pointerdown', pointAt);
+    root.addEventListener('focus', () => show(selected));
+    root.addEventListener('keydown', event => {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault(); show(Math.max(0, Math.min(points.length - 1, selected + (event.key === 'ArrowLeft' ? -1 : 1))));
+      } else if (event.key === 'Escape') tip.setAttribute('opacity', 0);
     });
     root.addEventListener('mouseleave', () => tip.setAttribute('opacity', 0));
+    root.addEventListener('blur', () => tip.setAttribute('opacity', 0));
   }
 
   /** Horizontal bars with label, count, and amount: sources, methods, sizes, hours, devices. */
@@ -196,12 +220,23 @@
     }
 
     const bucket = data.bucket_ms;
+    const giftsByBucket = new Map();
+    for (const gift of data.donations) {
+      const slot = Math.floor(gift.created_at / bucket) * bucket;
+      if (!giftsByBucket.has(slot)) giftsByBucket.set(slot, []);
+      giftsByBucket.get(slot).push(gift);
+    }
+    const bucketDonations = t => {
+      const gifts = giftsByBucket.get(t) || [];
+      if (!gifts.length) return ['No gifts recorded in this interval.'];
+      return [...gifts.slice(0, 4).map(g => `${g.donor_name}: ${money(g.amount_cents)}`), ...(gifts.length > 4 ? [`+ ${gifts.length - 4} more gifts in this interval`] : [])];
+    };
     $('timeline-hint').textContent = `per ${bucket >= 86_400_000 ? 'day' : bucket >= 3_600_000 ? `${bucket / 3_600_000} hour${bucket > 3_600_000 ? 's' : ''}` : `${bucket / 60_000} minute${bucket === 60_000 ? '' : 's'}`}`;
-    areaChart($('chart-timeline'), data.timeline.map(b => ({ label: timeLabel(b.t, bucket), y: b.cumulative_cents, detail: b.gifts ? `${b.gifts} gift${b.gifts === 1 ? '' : 's'} (${money(b.cents)})` : '' })), {
+    areaChart($('chart-timeline'), data.timeline.map(b => ({ label: timeLabel(b.t, bucket), y: b.cumulative_cents, donations: bucketDonations(b.t), detail: b.gifts ? `${b.gifts} gift${b.gifts === 1 ? '' : 's'} (${money(b.cents)})` : '' })), {
       label: 'Total raised over time', format: short,
       rules: [...data.milestones.map(m => ({ value: m.cents, label: m.label })), { value: data.goal_cents, label: 'Goal' }]
     });
-    columnChart($('chart-gifts'), data.timeline.map(b => ({ label: timeLabel(b.t, bucket), y: b.gifts, cents: b.cents })), { label: 'Gifts per period', format: p => `${p.y} gift${p.y === 1 ? '' : 's'} · ${money(p.cents)}` });
+    columnChart($('chart-gifts'), data.timeline.map(b => ({ label: timeLabel(b.t, bucket), y: b.gifts, cents: b.cents, donations: bucketDonations(b.t) })), { label: 'Gifts per period', format: p => `${p.y} gift${p.y === 1 ? '' : 's'} · ${money(p.cents)}` });
     if (web.connected) {
       columnChart($('chart-web'), web.timeline.map(b => ({ label: timeLabel(b.t, web.bucket_ms), y: b.views, y2: b.visitors })), { label: 'Donation page visits', color: '#7ab8e6', format: p => `${p.y} views · ${p.y2} visitors`, emptyMessage: 'No donation page visits in this range.' });
     } else empty($('chart-web'), web.message || 'Website analytics are not connected.');
@@ -259,10 +294,10 @@
   }
   function renderDonations(data) {
     const rows = data.donations;
-    const pages = Math.max(1, Math.ceil(rows.length / 25));
+    const pages = Math.max(1, Math.ceil(rows.length / 10));
     state.page = Math.min(state.page, pages - 1);
     $('stats-row-count').textContent = `${rows.length} gifts · ${money(data.summary.direct_cents)} given`;
-    table($('stats-donations'), rows.slice(state.page * 25, (state.page + 1) * 25), [
+    table($('stats-donations'), rows.slice(state.page * 10, (state.page + 1) * 10), [
       { title: 'Recorded (Eastern)', value: r => eastern({ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(r.created_at)) },
       { title: 'Donor', value: r => r.donor_name },
       { title: 'Gift', value: r => money(r.amount_cents), align: 'text-right' },

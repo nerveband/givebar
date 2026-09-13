@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.5.1">
   <link rel="stylesheet" href="/css/base.css?v=7.5.1">
   <link rel="stylesheet" href="/css/components.css?v=7.5.1">
-  <link rel="stylesheet" href="/css/app.css?v=7.5.6">
+  <link rel="stylesheet" href="/css/app.css?v=7.5.8">
 </head>
 <body>
   <div class="ops-shell">
@@ -75,20 +75,7 @@
         <button type="submit" class="btn-secondary">Apply filters</button>
       </form>
       <p class="form-hint" id="stats-error" role="status"></p>
-      <p class="form-hint">Donation filters apply to gift totals, charts, and tables. Website visits use the time range and chart interval only. Gift times show when Givebar recorded them.</p>
-
-      <section class="stats-card">
-        <div class="stats-card-head"><h2>Matching donations</h2><span id="stats-row-count" class="form-hint"></span></div>
-        <div class="stats-filters">
-          <label for="stats-sort">Sort</label><select id="stats-sort" class="input-dark"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="amount_desc">Largest first</option><option value="amount_asc">Smallest first</option></select>
-          <button id="stats-csv-preview" class="btn-secondary" type="button">View CSV</button>
-          <button id="stats-csv-download" class="btn-secondary" type="button">Export matching CSV</button>
-          <a id="stats-csv-signin" class="btn-secondary" href="/signin?next=/stats" hidden>Sign in for filtered CSV</a>
-        </div>
-        <div id="stats-donations" class="stats-table"></div>
-        <div class="stats-filters"><button id="stats-prev" class="btn-secondary" type="button">Previous</button><span id="stats-page" class="form-hint"></span><button id="stats-next" class="btn-secondary" type="button">Next</button></div>
-        <div id="stats-csv-panel" hidden><label for="stats-csv-text">Filtered CSV preview</label><textarea id="stats-csv-text" readonly rows="10" class="input-dark"></textarea></div>
-      </section>
+      <p class="form-hint">Filters update gift totals, charts, and donation rows. Website visits follow the selected time range.</p>
 
       <section class="stats-tiles" aria-label="Totals">
         <div class="stat-tile"><span class="stat-label">Raised in range</span><strong class="stat-val accent" id="t-total">—</strong><span class="stat-sub" id="t-total-sub"></span></div>
@@ -101,6 +88,7 @@
 
       <section class="stats-card">
         <div class="stats-card-head"><h2>Total raised over time</h2><span class="form-hint" id="timeline-hint"></span></div>
+        <p class="form-hint">Hover or tap to inspect gifts. Use the arrow keys when the chart is focused.</p>
         <div id="chart-timeline" class="chart"></div>
       </section>
 
@@ -131,6 +119,21 @@
         </section>
       </div>
 
+      <details class="stats-card stats-donation-details" id="stats-donation-details">
+        <summary><span class="stats-disclosure-title">View donations<span class="stats-disclosure-hint">Search results and CSV export</span></span><span id="stats-row-count" class="form-hint"></span><svg class="stats-chevron" width="20" height="20" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z"/></svg></summary>
+        <div class="stats-donation-body">
+        <div class="stats-table-toolbar">
+          <label for="stats-sort">Sort</label><select id="stats-sort" class="input-dark"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="amount_desc">Largest first</option><option value="amount_asc">Smallest first</option></select>
+          <button id="stats-csv-preview" class="btn-secondary" type="button">View CSV</button>
+          <button id="stats-csv-download" class="btn-secondary" type="button">Export matching CSV</button>
+          <a id="stats-csv-signin" class="btn-secondary" href="/signin?next=/stats" hidden>Sign in for filtered CSV</a>
+        </div>
+        <div id="stats-donations" class="stats-table"></div>
+        <div class="stats-pagination"><button id="stats-prev" class="btn-secondary" type="button">Previous</button><span id="stats-page" class="form-hint"></span><button id="stats-next" class="btn-secondary" type="button">Next</button></div>
+        <div id="stats-csv-panel" hidden><label for="stats-csv-text">Filtered CSV preview</label><textarea id="stats-csv-text" readonly rows="10" class="input-dark"></textarea></div>
+        </div>
+      </details>
+
       <div class="stats-grid">
         <section class="stats-card">
           <div class="stats-card-head"><h2>QR codes and tagged links</h2><span class="form-hint">Visitors who arrived with UTM tags</span></div>
@@ -158,6 +161,6 @@
 
   <script src="/js/session.js?v=7.5.3"></script>
   <script src="/js/presence.js?v=7.5.1"></script>
-  <script src="/js/stats.js?v=7.5.5"></script>
+  <script src="/js/stats.js?v=7.5.6"></script>
 </body>
 </html>
