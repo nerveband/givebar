@@ -44,12 +44,12 @@ export function renderHTML(r: Report): Record<string, string> {
   const s = r.stats; const c = r.config; const w = r.web; const view = viewPayload(r);
   const generated = localTime(new Date(r.generated_at).getTime(), c.timezone, { dateStyle: "long", timeStyle: "short" });
   const eventDate = new Date(`${c.event_date}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-  const stat = (label: string, value: string, sub = "") => `<div class="stat"><div class="stat-label">${esc(label)}</div><div class="stat-value">${esc(value)}</div>${sub ? `<div class="stat-sub">${esc(sub)}</div>` : ""}</div>`;
+  const stat = (label: string, value: string, sub = "", href = "") => `<${href ? `a href="${esc(href)}"` : "div"} class="stat rv"><div class="stat-label">${esc(label)}</div><div class="stat-value">${esc(value)}</div>${sub ? `<div class="stat-sub">${esc(sub)}</div>` : ""}</${href ? "a" : "div"}>`;
   const kindLabel: Record<string, string> = { win: "Win", action: "Action", watch: "Watch", insight: "Insight" };
   const kindOrder: Record<string, number> = { action: 0, watch: 1, win: 2, insight: 3 };
   const takeaways = [...r.takeaways].sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind]);
   const goalPct = Math.min(1, s.pct_of_goal);
-  const head = (label: string, title: string, lead = "") => `<header class="sec-head"><p class="eyebrow">${esc(label)}</p><h2>${title}</h2>${lead ? `<p class="lead">${lead}</p>` : ""}</header>`;
+  const head = (label: string, title: string, lead = "") => `<header class="sec-head rv"><p class="eyebrow">${esc(label)}</p><h2>${title}</h2>${lead ? `<p class="lead">${lead}</p>` : ""}</header>`;
   const toolbar = (inner: string) => `<div class="toolbar hide-print">${inner}</div>`;
   const table = (id: string, ths: string, mode = "stack") => `<div class="tbl ${mode}"><table id="${id}"><thead><tr>${ths}</tr></thead><tbody></tbody></table></div><nav class="pager hide-print" id="${id}-pager" aria-label="Pages"></nav>`;
   const mobileDevices = w.devices.find(d => d.device === "mobile")?.visitors || 0; const allDevices = Math.max(1, w.devices.reduce((n, d) => n + d.visitors, 0));
@@ -88,7 +88,7 @@ h3{font-size:clamp(16px,2vw,19px);font-weight:700;text-transform:uppercase;lette
 .hero .sub{margin:14px 0 0;font-size:clamp(15px,1.8vw,18px);color:#C9D3E8;max-width:52ch}
 .total-label{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#E5C578}
 .total{font-family:var(--display);font-weight:900;font-size:clamp(48px,9vw,104px);line-height:.95;letter-spacing:-.01em;color:#FDE6B0;margin:6px 0 8px}
-.goal{margin-top:18px}.goal-bar{position:relative;height:6px;background:rgba(255,255,255,.14);border-radius:3px}.goal-bar i{position:absolute;left:0;top:0;bottom:0;width:${(goalPct * 100).toFixed(1)}%;background:linear-gradient(90deg,#C59B27,#FDE6B0);border-radius:3px}
+.goal{margin-top:18px}.goal-bar{position:relative;height:6px;background:rgba(255,255,255,.14);border-radius:3px}.goal-bar i{position:absolute;left:0;top:0;bottom:0;--w:${(goalPct * 100).toFixed(1)}%;background:linear-gradient(90deg,#C59B27,#FDE6B0);border-radius:3px}
 .goal-bar b{position:absolute;top:-5px;width:2px;height:16px;background:rgba(255,255,255,.45);transform:translateX(-1px)}.goal-bar b.hit{background:#FDE6B0}
 .goal-meta{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#C9D3E8;margin-top:10px}.goal-meta strong{color:#fff;font-weight:600}
 .hero-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12);border-radius:var(--r);overflow:hidden}
@@ -143,8 +143,26 @@ td.name{font-weight:600;color:var(--navy)}td.dim,.dim{color:var(--muted)}td.nowr
 .note{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;font-size:14px;color:var(--slate)}.note.warn{border-color:#E9C58A;background:#FBF3E4}.note code{font-family:var(--body);font-weight:600;color:var(--navy);word-break:break-all}
 dl.spec{display:grid;grid-template-columns:190px 1fr;gap:8px 20px;font-size:14px;margin:28px 0 0}dl.spec dt{font-weight:700;color:var(--navy)}dl.spec dd{margin:0;color:var(--slate)}@media (max-width:640px){dl.spec{grid-template-columns:1fr;gap:2px}dl.spec dd{margin-bottom:10px}}
 .foot{border-top:1px solid var(--line);margin-top:48px;padding:20px 0 max(20px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}.foot img{height:16px;vertical-align:middle}
-.print-only{display:none}.print-story{display:none;margin-top:22px;padding-top:14px;border-top:1px solid rgba(229,197,120,.35);color:#C9D3E8;font-size:13px;max-width:70ch}.print-story b{color:#fff}
-@media print{
+.print-only{display:none}
+/* motion */
+:root{--ease-out:cubic-bezier(.22,1,.36,1);--ease-pop:cubic-bezier(.34,1.45,.64,1);--dropdown-open-dur:250ms;--dropdown-close-dur:150ms;--digit-dur:520ms;--digit-stagger:45ms}
+.rv{opacity:0;transform:translateY(10px);transition:opacity .45s var(--ease-out),transform .45s var(--ease-out)}.rv.in{opacity:1;transform:none}
+.stats .stat{transition:border-color .2s var(--ease-out),transform .25s var(--ease-out)}.stats .stat:hover{border-top-color:var(--gold)}
+a.stat{text-decoration:none;color:inherit;display:block}a.stat:hover{transform:translateY(-2px)}a.stat .stat-label::after{content:" →";color:var(--gold-ink);opacity:0;transition:opacity .2s}a.stat:hover .stat-label::after{opacity:1}
+.take li{transition:transform .25s var(--ease-out),box-shadow .25s var(--ease-out)}.take li:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(20,27,46,.08)}.take li a.more-link{display:inline-block;margin-top:8px;font-family:var(--display);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-ink);text-decoration:none}.take li a.more-link:hover{color:var(--navy)}
+.menu .panel{transform-origin:top right;transform:scale(.97);opacity:0;pointer-events:none;transition:transform var(--dropdown-open-dur) var(--ease-out),opacity var(--dropdown-open-dur) var(--ease-out);display:block}.menu[open] .panel{transform:scale(1);opacity:1;pointer-events:auto}.menu .panel.is-closing{transform:scale(.99);opacity:0;pointer-events:none;transition-duration:var(--dropdown-close-dur)}.menu summary .chev{transition:transform .2s var(--ease-out)}.menu[open] summary .chev{transform:rotate(-135deg) translateY(-2px)}
+@keyframes digit-in{0%{transform:translateY(10px);opacity:0;filter:blur(2px)}100%{transform:none;opacity:1;filter:blur(0)}}.total .dg{display:inline-block;will-change:transform,opacity,filter}.total.go .dg{animation:digit-in var(--digit-dur) var(--ease-pop) both;animation-delay:calc(var(--i) * var(--digit-stagger))}
+.goal-bar i{width:0;transition:width 1.1s var(--ease-out) .3s}.goal-bar.go i{width:var(--w)}.goal-bar b{transition:background .3s var(--ease-out)}.goal-bar b.hit{transition-delay:calc(.35s + var(--p) * 1.1s)}
+.hero-stats .stat{transition:background .2s}.hero-stats .stat:hover{background:rgba(15,23,48,.75)}
+.chart .bar{transition:opacity .15s,fill .15s}.chart:hover .bar{opacity:.55}.chart .bar:hover{opacity:1;fill:var(--gold-ink)}.chart .bar.gold:hover{fill:var(--navy)}
+.tip{position:fixed;z-index:40;pointer-events:none;background:var(--navy);color:#fff;font-size:12.5px;line-height:1.35;padding:8px 10px;border-radius:var(--r);box-shadow:0 8px 24px rgba(20,27,46,.25);max-width:260px;opacity:0;transform:translateY(4px);transition:opacity .15s,transform .15s}.tip.on{opacity:1;transform:none}.tip b{color:#FDE6B0}
+tbody tr{transition:background .15s}tbody tr td{animation:row-in .3s var(--ease-out) both;animation-delay:calc(var(--i,0) * 18ms)}@keyframes row-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+th[data-k]{transition:color .15s}.pill[data-f]{cursor:pointer;transition:transform .15s var(--ease-out),box-shadow .15s}.pill[data-f]:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(20,27,46,.15)}
+.pager button{transition:background .15s,color .15s,transform .15s var(--ease-out)}.pager button:not(:disabled):hover{background:var(--surface-2);transform:translateY(-1px)}
+.btn{transition:background .15s,transform .15s var(--ease-out)}.btn:active{transform:scale(.98)}
+.chip{transition:background .15s,color .15s,border-color .15s}
+@media (prefers-reduced-motion:reduce){.rv{opacity:1;transform:none;transition:none}.total.go .dg,tbody tr td{animation:none}.goal-bar i{transition:none;width:var(--w)}.menu .panel,.take li,.stats .stat,.tip{transition:none}}.print-story{display:none;margin-top:22px;padding-top:14px;border-top:1px solid rgba(229,197,120,.35);color:#C9D3E8;font-size:13px;max-width:70ch}.print-story b{color:#fff}
+@media print{.rv{opacity:1;transform:none}.total .dg{animation:none}.goal-bar i{width:var(--w)}tbody tr td{animation:none}.menu .panel{display:none}
   @page{size:letter;margin:.45in}
   body{background:#fff;font-size:11.5px}.top,.toolbar,.hide-print,.pager{display:none!important}.print-only{display:inline-flex}.print-story{display:block!important}
   .wrap{max-width:none;padding:0}.sec{padding:22px 26px 28px;border:0;break-before:page;page-break-before:always;position:relative;min-height:0}#method{break-before:auto;padding-top:0}#method::before{display:none}#lists{padding-bottom:0}#method dl.spec{font-size:10px;gap:5px 14px;margin-top:12px}#method .foot{margin-top:18px}.sec::before{content:"";position:absolute;inset:6px;border:1px solid var(--gold);pointer-events:none}
@@ -189,16 +207,16 @@ ${body}
       <p class="sub">${esc(r.event.subtitle.replace(/[.\s]+$/, ""))}. Every gift and pledge from the night, with the follow-up list.</p>
       <div class="goal">
         <div class="total-label">Raised on the night</div>
-        <div class="total">${esc(money0(s.total_cents))}</div>
-        <div class="goal-bar"><i></i>${r.milestones.map(m => `<b class="${m.reached_at ? "hit" : ""}" style="left:${Math.min(100, (m.cents / (s.goal_cents || 1)) * 100).toFixed(1)}%" title="${esc(m.label)}"></b>`).join("")}</div>
+        <div class="total" id="total">${money0(s.total_cents).split("").map((ch, i) => `<span class="dg" style="--i:${i}">${esc(ch)}</span>`).join("")}</div>
+        <div class="goal-bar"><i></i>${r.milestones.map(m => `<b class="${m.reached_at ? "hit" : ""}" style="left:${Math.min(100, (m.cents / (s.goal_cents || 1)) * 100).toFixed(1)}%;--p:${Math.min(1, m.cents / (s.goal_cents || 1)).toFixed(2)}" title="${esc(m.label)}${m.reached_at ? ` · ${localTime(m.reached_at, c.timezone, { hour: "numeric", minute: "2-digit" })}` : ""}"></b>`).join("")}</div>
         <div class="goal-meta"><span><strong>${esc(pct(s.pct_of_goal))}</strong> of the ${esc(money0(s.goal_cents))} goal</span><span>${esc(money0(Math.max(0, s.goal_cents - s.total_cents)))} to go</span></div>
       </div>
     </div>
     <div class="hero-stats">
-      ${stat("Gifts", String(s.active_count), `${s.households} households`)}
-      ${stat("Pledges to invoice", money0(s.collection.pledge.cents), `${s.collection.pledge.count} gifts, nothing collected yet`)}
-      ${stat("Checks and cash in hand", money0(s.collection.check.cents + s.collection.cash.cents), `${s.collection.check.count} checks, ${s.collection.cash.count} cash`)}
-      ${stat("Major gifts", String(s.major_count), `${money0(s.major_cents)} at ${money0(r.event.major_gift_threshold_cents)}+`)}
+      ${stat("Gifts", String(s.active_count), `${s.households} households`, "donors.html")}
+      ${stat("Pledges to invoice", money0(s.collection.pledge.cents), `${s.collection.pledge.count} gifts, nothing collected yet`, "followup.html#pledges")}
+      ${stat("Checks and cash in hand", money0(s.collection.check.cents + s.collection.cash.cents), `${s.collection.check.count} checks, ${s.collection.cash.count} cash`, "gifts.html?payment=check")}
+      ${stat("Major gifts", String(s.major_count), `${money0(s.major_cents)} at ${money0(r.event.major_gift_threshold_cents)}+`, "donors.html?f=major")}
     </div>
   </div>
   <p class="print-story"><b>In short.</b> The gala raised ${esc(money0(s.total_cents))}, ${esc(pct(s.pct_of_goal))} of the goal. ${esc(money0(s.collection.online.cents))} is already paid online and ${esc(money0(s.collection.check.cents + s.collection.cash.cents))} arrived as checks and cash. ${esc(money0(s.collection.pledge.cents))} is pledged and needs an invoice. ${s.repeat_donors} households had given before; ${s.new_donors} gave for the first time. The next pages cover the numbers, this week's actions, the timeline, giving history, and website traffic. The full lists are online.</p>
@@ -212,22 +230,22 @@ ${body}
   ${head("Summary", "The night <em>in numbers</em>", `Sources: the Givebar ledger, the Bloomerang Fundraising form, the staff MASTER workbook, and the Bloomerang CRM. Times are Eastern.`)}
   <h3 style="margin-top:28px">How the money arrives</h3>
   <div class="stats" style="margin-top:0">
-    ${stat("Paid online", money0(s.collection.online.cents), `${s.collection.online.count} gifts, net ${money0(s.net_online_cents)}`)}
-    ${stat("Checks received", money0(s.collection.check.cents), `${s.collection.check.count} checks`)}
-    ${stat("Cash received", money0(s.collection.cash.cents), `${s.collection.cash.count} gifts`)}
-    ${stat("Card on pledge card", money0(s.collection.card.cents), `${s.collection.card.count} to charge`)}
-    ${stat("Pledge to invoice", money0(s.collection.pledge.cents), `${s.collection.pledge.count} gifts`)}
+    ${stat("Paid online", money0(s.collection.online.cents), `${s.collection.online.count} gifts, net ${money0(s.net_online_cents)}`, "gifts.html?payment=online")}
+    ${stat("Checks received", money0(s.collection.check.cents), `${s.collection.check.count} checks`, "gifts.html?payment=check")}
+    ${stat("Cash received", money0(s.collection.cash.cents), `${s.collection.cash.count} gifts`, "gifts.html?payment=cash")}
+    ${stat("Card on pledge card", money0(s.collection.card.cents), `${s.collection.card.count} to charge`, "gifts.html?payment=card")}
+    ${stat("Pledge to invoice", money0(s.collection.pledge.cents), `${s.collection.pledge.count} gifts`, "followup.html#pledges")}
   </div>
   <h3>Shape of the giving</h3>
   <div class="stats" style="margin-top:0">
     ${stat("Average gift", money0(s.avg_cents), `median ${money0(s.median_cents)}`)}
     ${stat("Top 10 gifts", pct(s.top10_pct), `${money0(s.top10_cents)} of the total`)}
-    ${stat("Anonymous", money0(s.anonymous_cents), `${s.anonymous_count} gifts`)}
-    ${stat("Deleted / corrected", `${s.void_count} / ${s.amended_count}`, "ledger entries")}
-    ${stat("Zakat, online", money0(s.zakat_cents), `${s.zakat_count} gifts · ${pct(s.zakat_cents / (s.online_cents || 1))} of online`)}
-    ${stat("Monthly donors", String(s.recurring_count), `${money0(s.recurring_monthly_cents)} per month started`)}
+    ${stat("Anonymous", money0(s.anonymous_cents), `${s.anonymous_count} gifts`, "donors.html?f=anon")}
+    ${stat("Deleted / corrected", `${s.void_count} / ${s.amended_count}`, "ledger entries", "gifts.html?deleted=1&f=amended")}
+    ${stat("Zakat, online", money0(s.zakat_cents), `${s.zakat_count} gifts · ${pct(s.zakat_cents / (s.online_cents || 1))} of online`, "gifts.html?q=zakat")}
+    ${stat("Monthly donors", String(s.recurring_count), `${money0(s.recurring_monthly_cents)} per month started`, "gifts.html?q=monthly")}
     ${stat("Fees covered by donors", money0(s.gift_assist_cents), `of ${money0(s.fees_cents)} charged`)}
-    ${stat("Declined online", String(s.declined_count), `${money0(s.declined_cents)} attempted`)}
+    ${stat("Declined online", String(s.declined_count), `${money0(s.declined_cents)} attempted`, "followup.html#declined")}
   </div>
   <div class="two" style="margin-top:8px">
     <div><h3>Milestones</h3><div class="tbl"><table><thead><tr><th>Level</th><th class="r">Amount</th><th>Reached</th></tr></thead><tbody>${r.milestones.map(m => `<tr><td class="name">${esc(m.label)}</td><td class="r" data-l="Amount">${esc(money0(m.cents))}</td><td data-l="Reached">${m.reached_at ? esc(localTime(m.reached_at, c.timezone, { hour: "numeric", minute: "2-digit" })) : '<span class="pill">not reached</span>'}</td></tr>`).join("")}</tbody></table></div></div>
@@ -238,18 +256,18 @@ ${body}
 
 <section class="sec" id="takeaways"><div class="wrap">
   ${head("Takeaways", "What to do <em>this week</em>", "Actions first, then risks, then context.")}
-  <ol class="take">${takeaways.map(t => `<li class="${t.kind}"><span class="tag">${esc(kindLabel[t.kind])}</span><h4>${esc(t.title)}</h4>${t.body ? `<p>${esc(t.body)}</p>` : ""}</li>`).join("")}</ol>
+  <ol class="take">${takeaways.map(t => `<li class="${t.kind} rv"><span class="tag">${esc(kindLabel[t.kind])}</span><h4>${esc(t.title)}</h4>${t.body ? `<p>${esc(t.body)}</p>` : ""}${t.href ? `<a class="more-link" href="${esc(t.href)}">${esc(t.link || "Open")} →</a>` : ""}</li>`).join("")}</ol>
 </div></section>
 
 <section class="sec" id="charts"><div class="wrap">
   ${head("Charts", "How the night <em>unfolded</em>")}
   <h3>Running total and gifts per 15 minutes</h3>
-  <div class="chart-box"><div id="chart-timeline"></div>
+  <div class="chart-box rv"><div id="chart-timeline"></div>
   <div class="legend"><span><i style="background:var(--navy)"></i>Gifts in window</span><span><i style="background:var(--gold-ink)"></i>Running total</span>${s.peak ? `<span>Peak: <b>${esc(s.peak.label)}</b>, ${esc(money0(s.peak.cents))} across ${s.peak.count} gifts</span>` : ""}</div></div>
   <div class="two">
-    <div><h3>Gift size bands</h3><div class="chart-box"><div id="chart-bands"></div></div></div>
-    <div><h3>Where the money came from</h3><div class="chart-box"><div id="chart-mix"></div></div>
-      <h3>Concentration</h3><div class="chart-box"><div id="chart-pareto"></div></div></div>
+    <div><h3>Gift size bands</h3><div class="chart-box rv"><div id="chart-bands"></div></div></div>
+    <div><h3>Where the money came from</h3><div class="chart-box rv"><div id="chart-mix"></div></div>
+      <h3>Concentration</h3><div class="chart-box rv"><div id="chart-pareto"></div></div></div>
   </div>
 </div></section>
 
@@ -273,11 +291,11 @@ ${body}
   ${head("Bloomerang", "Giving <em>history</em>", r.bloomerang.connected ? `${r.bloomerang.matched} of ${s.households} households matched a Bloomerang record (${num(r.bloomerang.constituents)} constituents, pulled ${esc(r.bloomerang.pulled_at.slice(0, 10))}). History means gifts before the gala day. The gala's online gifts are already in Bloomerang and are left out.` : "Not connected.")}
   ${r.bloomerang.connected ? `
   <div class="stats">
-    ${stat("Repeat donors", String(s.repeat_donors), `gave ${money0(r.bloomerang.repeat_cents)}`)}
-    ${stat("First-time donors", String(s.new_donors), `gave ${money0(r.bloomerang.new_cents)} · ${s.unknown_donors} unmatched`)}
+    ${stat("Repeat donors", String(s.repeat_donors), `gave ${money0(r.bloomerang.repeat_cents)}`, "donors.html?f=repeat")}
+    ${stat("First-time donors", String(s.new_donors), `gave ${money0(r.bloomerang.new_cents)} · ${s.unknown_donors} unmatched`, "donors.html?f=new")}
     ${stat("Back from last year's gala", String(r.bloomerang.returning.count), `${money0(r.bloomerang.returning.then_cents)} then · ${money0(r.bloomerang.returning.now_cents)} now`)}
     ${stat("Up / down vs last year", `${r.bloomerang.returning.upgraded} / ${r.bloomerang.returning.downgraded}`, `${r.bloomerang.returning.count - r.bloomerang.returning.upgraded - r.bloomerang.returning.downgraded} gave the same`)}
-    ${stat("Lapsed gala donors", String(r.bloomerang.lapsed.length), `gave ${money0(r.bloomerang.lapsed.reduce((n, l) => n + l.last_gala_cents, 0))} last year, nothing recorded tonight`)}
+    ${stat("Lapsed gala donors", String(r.bloomerang.lapsed.length), `gave ${money0(r.bloomerang.lapsed.reduce((n, l) => n + l.last_gala_cents, 0))} last year, nothing recorded tonight`, "followup.html#lapsed")}
   </div>
   <h3>Returning gala donors <small>largest last-year gift first · full list on the Donors page</small></h3>
   <div class="tbl"><table><thead><tr><th>Donor</th><th class="r">Last year</th><th class="r">Tonight</th><th class="r">Change</th><th class="hide-m">Gala history</th></tr></thead><tbody>${r.donors.filter(d => d.bloomerang?.last_gala_cents).sort((a, b) => b.bloomerang!.last_gala_cents - a.bloomerang!.last_gala_cents).slice(0, 15).map(d => { const b = d.bloomerang!; const delta = d.total_cents - b.last_gala_cents; return `<tr><td class="name">${esc(d.name)}${d.is_anonymous ? ' <span class="pill gold">anonymous</span>' : ""}</td><td class="r" data-l="Last year">${esc(money0(b.last_gala_cents))}</td><td class="r" data-l="Tonight"><b>${esc(money0(d.total_cents))}</b></td><td class="r" data-l="Change" style="color:${delta < 0 ? "var(--red)" : "var(--green)"}">${delta > 0 ? "+" : ""}${esc(money0(delta))}</td><td data-l="History" class="dim hide-m">${esc(b.galas.map(g => `${g.label.replace(" Annual", "")} ${money0(g.cents)}`).join(" · "))}</td></tr>`; }).join("")}</tbody></table></div>` : ""}
@@ -326,7 +344,7 @@ ${banner("Gifts", "Every gift, <em style='font-style:normal;color:#E5C578'>in or
   const crossref = shell("crossref.html", "Cross-reference", `
 ${banner("Cross-reference", "Prospects, sponsors, <em style='font-style:normal;color:#E5C578'>tables</em>", "The ledger compared with the staff MASTER workbook: the ask list, sponsorships, and seating. Matching is by name and email. A blank means no match was found, not that nobody gave.")}
 <main><section class="sec"><div class="wrap">
-  <div class="stats" style="margin-top:0">${stat("Prospects on list", String(s.prospects_total))}${stat("Gave tonight", String(s.prospects_gave), `${money0(s.prospects_actual_cents)} recorded`)}${stat("Asks on the list", money0(s.prospects_ask_cents))}${stat("Below ask", String(s.prospects_under_ask.length), `${s.prospects_missing.length} with an ask and no gift`)}</div>
+  <div class="stats" style="margin-top:0">${stat("Prospects on list", String(s.prospects_total))}${stat("Gave tonight", String(s.prospects_gave), `${money0(s.prospects_actual_cents)} recorded`)}${stat("Asks on the list", money0(s.prospects_ask_cents))}${stat("Below ask", String(s.prospects_under_ask.length), `${s.prospects_missing.length} with an ask and no gift`, "crossref.html?prospects=below")}</div>
   <h3>Major-donor ask list vs. actual</h3>
   ${toolbar(`<select id="prospect-f" aria-label="Filter prospects"><option value="">All prospects</option><option value="gave">Gave tonight</option><option value="below">Below ask</option><option value="none">No gift recorded</option></select><span class="count" id="prospect-count"></span>`)}
   ${table("prospect-table", `<th data-k="name">Prospect</th><th data-k="before" class="r">Gave earlier 2026</th><th data-k="ask" class="r">Ask</th><th data-k="assumed" class="r">Assumed</th><th data-k="actual" class="r">Gave tonight</th><th data-k="delta" class="r">vs. ask</th><th>Status</th><th>Notes</th>`)}
@@ -340,17 +358,17 @@ ${banner("Cross-reference", "Prospects, sponsors, <em style='font-style:normal;c
   const followup = shell("followup.html", "Follow-up", `
 ${banner("Follow-up", "Lists to <em style='font-style:normal;color:#E5C578'>work from</em>", `${money0(s.collection.pledge.cents)} in pledges to invoice, ${s.prospects_missing.length} prospects with an ask and no gift, ${s.declined_count} declined online attempts, ${view.tickets_no_gift.length} ticket buyers with no gift${r.bloomerang.connected ? `, ${r.bloomerang.lapsed.length} lapsed gala donors` : ""}.`)}
 <main><section class="sec"><div class="wrap">
-  <h3 style="margin-top:0">Pledges to invoice <small>${esc(money0(s.collection.pledge.cents))} · ${s.collection.pledge.count} gifts with nothing collected on the night</small></h3>
+  <h3 style="margin-top:0" id="pledges">Pledges to invoice <small>${esc(money0(s.collection.pledge.cents))} · ${s.collection.pledge.count} gifts with nothing collected on the night</small></h3>
   <p class="note" style="margin-bottom:12px">Checks, cash, and card details collected at the tables are not on this list; they are marked on the Gifts page.</p>
   ${table("pledge-table", `<th data-k="name">Donor</th><th data-k="pledged" class="r">Pledged</th><th data-k="by">Recorded by</th><th>Table</th><th>Note</th>`)}
   <div class="two">
     <div><h3>Prospects with an ask and no gift <small>${s.prospects_missing.length}</small></h3>${table("missing-table", `<th>Prospect</th><th class="r">Ask</th><th>Notes</th>`)}</div>
-    <div><h3>Declined online attempts <small>${s.declined_count}</small></h3>${table("declined-table", `<th>Name</th><th>Time</th><th class="r">Amount</th><th>Payment</th>`)}</div>
+    <div><h3 id="declined">Declined online attempts <small>${s.declined_count}</small></h3>${table("declined-table", `<th>Name</th><th>Time</th><th class="r">Amount</th><th>Payment</th>`)}</div>
   </div>
-  ${r.bloomerang.connected ? `<h3>Gave at last year's gala, nothing recorded tonight <small>${r.bloomerang.lapsed.length} Bloomerang records · ${esc(money0(r.bloomerang.lapsed.reduce((n, l) => n + l.last_gala_cents, 0)))} last year</small></h3>
+  ${r.bloomerang.connected ? `<h3 id="lapsed">Gave at last year's gala, nothing recorded tonight <small>${r.bloomerang.lapsed.length} Bloomerang records · ${esc(money0(r.bloomerang.lapsed.reduce((n, l) => n + l.last_gala_cents, 0)))} last year</small></h3>
   <p class="note" style="margin-bottom:12px">Matched by name and email. A gift made under a spouse's or business name will not match. Check before calling.</p>
   ${table("lapsed-table", `<th data-k="name">Name</th><th data-k="last_gala_cents" class="r">Last year's gala</th><th data-k="lifetime_cents" class="r">Lifetime</th><th data-k="last_gift">Last gift</th><th>Email</th>`)}` : ""}
-  <h3>Ticket buyers with no gift recorded <small>${view.tickets_no_gift.length} people</small></h3>
+  <h3 id="tickets">Ticket buyers with no gift recorded <small>${view.tickets_no_gift.length} people</small></h3>
   ${table("ticket-table", `<th>Name</th><th>Email</th><th class="r">Tickets</th><th>Order</th>`)}
 </div></section></main>${foot}`);
 
@@ -362,13 +380,14 @@ const script = `
 const R=JSON.parse(document.getElementById('report-data').textContent);
 const $=s=>document.querySelector(s);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usd=c=>(c/100).toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:c%100?2:0});const usd0=c=>(c/100).toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0});
-const pill=(t,k)=>'<span class="pill '+(k||'')+'">'+esc(t)+'</span>';const td=(l,body,cls)=>'<td data-l="'+esc(l)+'"'+(cls?' class="'+cls+'"':'')+'>'+body+'</td>';
+const pill=(t,k,f)=>'<span class="pill '+(k||'')+'"'+(f?' data-f="'+esc(f)+'" title="Filter"':'')+'>'+esc(t)+'</span>';const Q=new URLSearchParams(location.search);const preset=(sel,key)=>{const el=$(sel);if(el&&Q.has(key)){el.value=Q.get(key);if(el.type==='checkbox')el.checked=Q.get(key)==='1';}};const td=(l,body,cls)=>'<td data-l="'+esc(l)+'"'+(cls?' class="'+cls+'"':'')+'>'+body+'</td>';
 const nameCell=(name,anon,sub)=>'<td class="name">'+esc(name)+(anon?' '+pill('anonymous','gold'):'')+(sub?'<span class="sub">'+esc(sub)+'</span>':'')+'</td>';
 const PAGE=50;
 function csv(rows,name){const lines=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(','));const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join('\\n')],{type:'text/csv'}));a.download=name;a.click();}
 function sortable(table,state,render){table.querySelectorAll('th[data-k]').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.k;state.dir=state.key===k&&state.dir==='desc'?'asc':'desc';state.key=k;state.page=1;table.querySelectorAll('th').forEach(h=>h.removeAttribute('data-dir'));th.dataset.dir=state.dir;render();}));}
 function sortRows(rows,state){const k=state.key;if(!k)return rows;const m=state.dir==='asc'?1:-1;return rows.slice().sort((a,b)=>{const x=a[k],y=b[k];if(typeof x==='number'&&typeof y==='number')return (x-y)*m;if(x===null||x===undefined||x==='')return 1;if(y===null||y===undefined||y==='')return -1;return String(x).localeCompare(String(y))*m;});}
 // Numbered pagination: first, window around current, last.
+function stagger(tbody){[...tbody.children].forEach((tr,i)=>tr.querySelectorAll('td').forEach(td=>td.style.setProperty('--i',Math.min(i,20))));}
 function paged(rows,state,pagerEl,render,size){size=size||PAGE;const pages=Math.max(1,Math.ceil(rows.length/size));state.page=Math.min(Math.max(1,state.page||1),pages);const p=state.page;
  if(pages<=1){pagerEl.innerHTML='';return rows;}
  const items=new Set([1,pages,p-1,p,p+1]);if(p<=3)[2,3,4].forEach(n=>items.add(n));if(p>=pages-2)[pages-1,pages-2,pages-3].forEach(n=>items.add(n));
@@ -385,24 +404,25 @@ function renderDonors(){const q=$('#donor-q').value.trim().toLowerCase();const f
   if(!q)return true;return [d.name,d.display,d.email,d.city,d.table,d.sponsor,d.prospect&&d.prospect.name,d.notes].join(' ').toLowerCase().includes(q);});
  const rows=sortRows(dView,dState);$('#donor-count').textContent=rows.length+' of '+R.donors.length+' households · '+usd0(rows.reduce((s,d)=>s+d.total,0));
  const shown=paged(rows,dState,$('#donor-table-pager'),renderDonors);
- $('#donor-table tbody').innerHTML=shown.map(d=>{const ctx=[];if(d.prospect)ctx.push(pill('ask '+usd0(d.prospect.ask||0),'navy'));if(d.sponsor)ctx.push(pill('sponsor','gold'));if(d.ticket)ctx.push(pill('ticket'));if(d.table)ctx.push(pill('table '+d.table.split(':')[0]));if(d.restriction)ctx.push(pill(d.restriction,'green'));if(d.city)ctx.push(pill(d.city));if(d.largest>=R.event.major_gift_threshold_cents)ctx.push(pill('major','orange'));if(d.prospect&&d.prospect.before)ctx.push(pill('gave '+usd0(d.prospect.before)+' earlier','green'));
+ $('#donor-table tbody').innerHTML=shown.map(d=>{const ctx=[];if(d.prospect)ctx.push(pill('ask '+usd0(d.prospect.ask||0),'navy','f=prospect'));if(d.sponsor)ctx.push(pill('sponsor','gold','f=sponsor'));if(d.ticket)ctx.push(pill('ticket','','f=ticket'));if(d.table)ctx.push(pill('table '+d.table.split(':')[0]));if(d.restriction)ctx.push(pill(d.restriction,'green'));if(d.city)ctx.push(pill(d.city));if(d.largest>=R.event.major_gift_threshold_cents)ctx.push(pill('major','orange','f=major'));if(d.prospect&&d.prospect.before)ctx.push(pill('gave '+usd0(d.prospect.before)+' earlier','green'));
   const b=d.bloomerang;const hist=b?(b.count?('<b>'+usd0(b.lifetime)+'</b> · '+b.count+' gifts since '+esc(b.first.slice(0,4))+(b.monthly?' '+pill('monthly','green'):'')+'<span class="sub">last '+esc(b.last)+' '+usd0(b.lastAmount)+(b.galas.length?' · galas: '+esc(b.galas.map(g=>g.label.replace(' Annual','')+' '+usd0(g.cents)).join(', ')):'')+'</span>'):pill('first gift','gold')):'<span class="dim">no Bloomerang match</span>';
-  const pay=d.collections.map(k=>pill(R.collection_labels[k],k==='pledge'?'orange':k==='online'?'':'green')).join('');const brief=[d.count>1?d.count+' gifts':'',d.collections.map(k=>R.collection_labels[k]).join(', '),d.prospect?'ask '+usd0(d.prospect.ask||0):'',b&&b.count?'gave before':''].filter(Boolean).join(' · ');
-  return '<tr>'+nameCell(d.name,d.anon,d.anon?'shown as '+d.display:(d.display!==d.name?'shown as '+d.display:''))+td('Total','<b>'+usd(d.total)+'</b>','r amt')+'<td class="brief">'+esc(brief)+'</td>'+td('Gifts',d.count,'r')+td('Pledged',d.pledged?usd(d.pledged):'','r')+td('Online',d.paid?usd(d.paid):'','r')+td('First gift',esc(d.firstLabel),'dim nowrap')+td('Context',pay+ctx.join('')+(notes&&d.notes?'<span class="sub">'+esc(d.notes)+'</span>':''))+(hasHistory?td('History',hist):'')+'</tr>';}).join('');}
-['#donor-q','#donor-f','#donor-c','#donor-notes'].forEach(s=>$(s).addEventListener('input',()=>{dState.page=1;renderDonors();}));sortable($('#donor-table'),dState,renderDonors);renderDonors();
+  const pay=d.collections.map(k=>pill(R.collection_labels[k],k==='pledge'?'orange':k==='online'?'':'green','payment='+k)).join('');const brief=[d.count>1?d.count+' gifts':'',d.collections.map(k=>R.collection_labels[k]).join(', '),d.prospect?'ask '+usd0(d.prospect.ask||0):'',b&&b.count?'gave before':''].filter(Boolean).join(' · ');
+  return '<tr>'+nameCell(d.name,d.anon,d.anon?'shown as '+d.display:(d.display!==d.name?'shown as '+d.display:''))+td('Total','<b>'+usd(d.total)+'</b>','r amt')+'<td class="brief">'+esc(brief)+'</td>'+td('Gifts',d.count,'r')+td('Pledged',d.pledged?usd(d.pledged):'','r')+td('Online',d.paid?usd(d.paid):'','r')+td('First gift',esc(d.firstLabel),'dim nowrap')+td('Context',pay+ctx.join('')+(notes&&d.notes?'<span class="sub">'+esc(d.notes)+'</span>':''))+(hasHistory?td('History',hist):'')+'</tr>';}).join('');stagger($('#donor-table tbody'));}
+preset('#donor-q','q');preset('#donor-f','f');preset('#donor-c','payment');['#donor-q','#donor-f','#donor-c','#donor-notes'].forEach(s=>$(s).addEventListener('input',()=>{dState.page=1;renderDonors();}));sortable($('#donor-table'),dState,renderDonors);renderDonors();
+$('#donor-table').addEventListener('click',e=>{const p=e.target.closest('.pill[data-f]');if(!p)return;e.stopPropagation();const [k,v]=p.dataset.f.split('=');const el=$(k==='payment'?'#donor-c':'#donor-f');el.value=el.value===v?'':v;dState.page=1;renderDonors();});
 $('#donor-csv').addEventListener('click',()=>csv([['Donor','Display name','Anonymous','Total','Gifts','Pledged','Online','First gift','Email','City','Prospect ask','Sponsor','Table','Recorded by','Notes']].concat(sortRows(dView,dState).map(d=>[d.name,d.display,d.anon?'yes':'',d.total/100,d.count,d.pledged/100,d.paid/100,d.firstLabel,d.email,d.city,d.prospect?d.prospect.ask/100:'',d.sponsor,d.table,d.by,d.notes])),'donors.csv'));
 }
 
 if(document.getElementById('gift-table')){
 const gState={key:'t',dir:'asc',page:1};let gView=[];
 function renderGifts(){const q=$('#gift-q').value.trim().toLowerCase();const f=$('#gift-f').value;
- const del=$('#gift-deleted').checked;gView=R.gifts.filter(g=>{if(!del&&g.status!=='active')return false;if(['pledge','check','cash','card','online'].includes(f)&&g.collection!==f)return false;if(f==='amended'&&!g.amended)return false;if(f==='anon'&&!g.anon)return false;if(f==='notes'&&!g.notes)return false;if(!q)return true;return [g.donor,g.display,g.by,g.notes,g.email,g.city,g.table,g.seated].join(' ').toLowerCase().includes(q);});
+ const del=$('#gift-deleted').checked;gView=R.gifts.filter(g=>{if(!del&&g.status!=='active')return false;if(['pledge','check','cash','card','online'].includes(f)&&g.collection!==f)return false;if(f==='amended'&&!g.amended)return false;if(f==='anon'&&!g.anon)return false;if(f==='notes'&&!g.notes)return false;if(!q)return true;return [g.donor,g.display,g.by,g.notes,g.email,g.city,g.table,g.seated,g.recurring?'monthly':'',g.restriction].join(' ').toLowerCase().includes(q);});
  const rows=sortRows(gView,gState);$('#gift-count').textContent=rows.length+' entries · '+usd0(rows.filter(g=>g.status==='active').reduce((s,g)=>s+g.amount,0))+' active';
  const shown=paged(rows,gState,$('#gift-table-pager'),renderGifts);
  $('#gift-table tbody').innerHTML=shown.map(g=>{const flags=[];if(g.status==='voided')flags.push(pill('deleted','red'));if(g.amended)flags.push(pill('was '+usd0(g.original),'orange'));if(g.recurring)flags.push(pill('monthly','green'));if(g.restriction==='Zakat')flags.push(pill('zakat','green'));if(g.prospect)flags.push(pill('prospect','navy'));if(g.seated)flags.push(pill('table '+g.seated.split(':')[0]));
   const pay=pill(R.collection_labels[g.collection]+(g.ref?' #'+g.ref:''),g.collection==='pledge'?'orange':g.collection==='online'?'':'green');const brief=[R.collection_labels[g.collection]+(g.ref?' #'+g.ref:''),g.by&&g.source==='manual'?'by '+g.by:'',g.status==='voided'?'deleted':''].filter(Boolean).join(' · ');
-  return '<tr'+(g.status==='voided'?' style="opacity:.55"':'')+'>'+nameCell(g.donor,g.anon,g.time)+td('Amount','<b>'+usd(g.amount)+'</b>','r amt')+'<td class="brief">'+esc(brief)+'</td>'+td('Method',esc(g.method))+td('Source',esc(g.source))+td('Recorded by',esc(g.by))+td('Payment',pay+flags.join(''))+td('Note',esc(g.plain||g.notes),'dim')+'</tr>';}).join('');}
-['#gift-q','#gift-f','#gift-deleted'].forEach(s=>$(s).addEventListener('input',()=>{gState.page=1;renderGifts();}));sortable($('#gift-table'),gState,renderGifts);renderGifts();
+  return '<tr'+(g.status==='voided'?' style="opacity:.55"':'')+'>'+nameCell(g.donor,g.anon,g.time)+td('Amount','<b>'+usd(g.amount)+'</b>','r amt')+'<td class="brief">'+esc(brief)+'</td>'+td('Method',esc(g.method))+td('Source',esc(g.source))+td('Recorded by',esc(g.by))+td('Payment',pay+flags.join(''))+td('Note',esc(g.plain||g.notes),'dim')+'</tr>';}).join('');stagger($('#gift-table tbody'));}
+preset('#gift-q','q');preset('#gift-f','f');preset('#gift-deleted','deleted');if(Q.has('payment'))$('#gift-f').value=Q.get('payment');['#gift-q','#gift-f','#gift-deleted'].forEach(s=>$(s).addEventListener('input',()=>{gState.page=1;renderGifts();}));sortable($('#gift-table'),gState,renderGifts);renderGifts();
 $('#gift-csv').addEventListener('click',()=>csv([['Time','Donor','Display','Anonymous','Amount','Method','Payment','Reference','Source','Recorded by','Status','Corrected from','Note','Restriction','Recurring','City']].concat(sortRows(gView,gState).map(g=>[g.time,g.donor,g.display,g.anon?'yes':'',g.amount/100,g.method,R.collection_labels[g.collection],g.ref,g.source,g.by,g.status,g.amended?g.original/100:'',g.notes,g.restriction,g.recurring?'monthly':'',g.city])),'gifts.csv'));
 }
 
@@ -414,7 +434,7 @@ function renderProspects(){const f=$('#prospect-f').value;const all=R.prospects.
  const shown=paged(rows,pState,$('#prospect-table-pager'),renderProspects);
  $('#prospect-table tbody').innerHTML=shown.map(p=>{const st=p.actual===null?pill('no gift recorded','red'):p.ask&&p.actual<p.ask?pill('below ask','orange'):p.ask?pill('met ask','green'):pill('gave','green');
   return '<tr>'+nameCell(p.name,false,p.matched&&p.matched!==p.name?'matched: '+p.matched:'')+td('Earlier 2026',p.before?usd0(p.before):'','r')+td('Ask',p.ask?usd0(p.ask):'','r')+td('Assumed',p.assumed?usd0(p.assumed):'','r')+td('Gave tonight',p.actual!==null?'<b>'+usd0(p.actual)+'</b>'+(p.anon?' '+pill('anonymous','gold'):''):'','r')+td('vs. ask',p.delta!==null?'<span style="color:'+(p.delta<0?'var(--red)':'var(--green)')+'">'+(p.delta>0?'+':'')+usd0(p.delta)+'</span>':'','r')+td('Status',st)+td('Notes',esc(p.notes),'dim')+'</tr>';}).join('');}
-$('#prospect-f').addEventListener('input',()=>{pState.page=1;renderProspects();});sortable($('#prospect-table'),pState,renderProspects);renderProspects();
+preset('#prospect-f','prospects');$('#prospect-f').addEventListener('input',()=>{pState.page=1;renderProspects();});sortable($('#prospect-table'),pState,renderProspects);renderProspects();
 const tState={page:1};function renderTables(){const shown=paged(R.tables,tState,$('#table-table-pager'),renderTables,25);$('#table-table tbody').innerHTML=shown.map(t=>'<tr><td class="name">Table '+esc(t.number)+'</td>'+td('Host',esc(t.host)+'<span class="sub">'+esc(t.donors.join(', '))+'</span>')+td('Gifts',t.count,'r')+td('Raised','<b>'+usd0(t.raised)+'</b>','r')+'</tr>').join('');}renderTables();
 $('#sponsor-table tbody').innerHTML=R.sponsors.filter(s=>s.gave!==null).sort((a,b)=>b.gave-a.gave).map(s=>'<tr>'+nameCell(s.org,false,s.donor)+td('Tier',esc(s.tier))+td('Package',usd0(s.cost),'r')+td('Appeal gift','<b>'+usd0(s.gave)+'</b>','r')+'</tr>').join('')||'<tr><td class="dim">No sponsor matched an appeal gift by name.</td></tr>';
 }
@@ -437,17 +457,28 @@ const short=c=>c>=1e8?'$'+(c/1e8).toFixed(1).replace(/\\.0$/,'')+'M':c>=1e5?'$'+
 function timeline(){const T=R.stats.timeline;if(!T.length)return;const W=widthOf('chart-timeline'),narrow=W<560,H=narrow?240:300,L=narrow?30:48,Rm=narrow?46:64,top=18,bot=narrow?34:44;const iw=W-L-Rm,ih=H-top-bot;const maxC=Math.max(1,...T.map(b=>b.count));const maxCum=Math.max(1,...T.map(b=>b.cumulative));const bw=iw/T.length;
  let out='';for(let i=0;i<=4;i++){const y=top+ih-ih*i/4;out+='<line class="axis" x1="'+L+'" x2="'+(W-Rm)+'" y1="'+y+'" y2="'+y+'"/><text x="'+(L-6)+'" y="'+(y+4)+'" text-anchor="end">'+Math.round(maxC*i/4)+'</text><text x="'+(W-Rm+6)+'" y="'+(y+4)+'">'+short(maxCum*i/4)+'</text>';}
  const every=Math.ceil(T.length/(narrow?5:12));
- T.forEach((b,i)=>{const h=ih*b.count/maxC;out+='<rect class="bar" x="'+(L+i*bw+1)+'" y="'+(top+ih-h)+'" width="'+Math.max(1,bw-2)+'" height="'+h+'"><title>'+esc(b.label)+': '+b.count+' gifts, '+usd0(b.cents)+'</title></rect>';if(i%every===0)out+='<text x="'+(L+i*bw+bw/2)+'" y="'+(H-bot+16)+'" text-anchor="middle">'+esc(b.label)+'</text>';});
+ T.forEach((b,i)=>{const h=ih*b.count/maxC;out+='<rect class="bar" x="'+(L+i*bw+1)+'" y="'+(top+ih-h)+'" width="'+Math.max(1,bw-2)+'" height="'+Math.max(h,b.count?2:0)+'" data-tip="<b>'+esc(b.label)+'</b><br>'+b.count+' gift'+(b.count===1?'':'s')+' · '+usd0(b.cents)+'<br>running total '+usd0(b.cumulative)+'"></rect>';if(i%every===0)out+='<text x="'+(L+i*bw+bw/2)+'" y="'+(H-bot+16)+'" text-anchor="middle">'+esc(b.label)+'</text>';});
  const pts=T.map((b,i)=>[L+i*bw+bw/2,top+ih-ih*b.cumulative/maxCum]);out+='<path class="area" d="M'+pts[0][0]+','+(top+ih)+' '+pts.map(p=>'L'+p[0]+','+p[1]).join(' ')+' L'+pts[pts.length-1][0]+','+(top+ih)+'Z"/><path class="line" d="M'+pts.map(p=>p[0]+','+p[1]).join(' L')+'"/>';
  if(!narrow)R.milestones.filter(m=>m.reached_at).forEach(m=>{const y=top+ih-ih*m.cents/maxCum;if(y<top||y>top+ih)return;out+='<line x1="'+L+'" x2="'+(W-Rm)+'" y1="'+y+'" y2="'+y+'" stroke="#C59B27" stroke-dasharray="3 4" stroke-width="1"/><text class="lbl" x="'+(L+6)+'" y="'+(y-4)+'">'+esc(m.label.toUpperCase())+'</text>';});
  out+='<text class="lbl" x="'+L+'" y="'+(H-4)+'">GIFTS / 15 MIN</text><text class="lbl" x="'+(W-Rm)+'" y="'+(H-4)+'" text-anchor="end">RUNNING TOTAL</text>';$('#chart-timeline').innerHTML=svg(W,H,out);}
-function bands(){const B=R.stats.bands;const W=widthOf('chart-bands'),rowH=30,L=Math.min(150,W*.32),H=B.length*rowH+20;const max=Math.max(1,...B.map(b=>b.cents));let out='';B.forEach((b,i)=>{const y=6+i*rowH;const w=Math.max(2,(W-L-100)*b.cents/max);out+='<text x="'+(L-8)+'" y="'+(y+19)+'" text-anchor="end">'+esc(b.label)+'</text><rect class="bar gold" x="'+L+'" y="'+(y+5)+'" width="'+w+'" height="'+(rowH-11)+'" rx="2"/><text x="'+(L+w+6)+'" y="'+(y+19)+'">'+short(b.cents)+' · '+b.count+'</text>';});$('#chart-bands').innerHTML=svg(W,H,out);}
-function mix(){const S=R.stats;const W=widthOf('chart-mix');const parts=[['Ballroom pledges',S.pledge_cents,'#1E2A4A'],['Online cards',S.online_cents,'#C59B27'],['Other paid in room',S.manual_paid_cents,'#7C9AC0']].filter(p=>p[1]>0);const total=parts.reduce((s,p)=>s+p[1],0);let x=0,out='';parts.forEach(p=>{const w=W*p[1]/total;out+='<rect x="'+x+'" y="6" width="'+w+'" height="34" fill="'+p[2]+'"/>';if(w>60)out+='<text x="'+(x+8)+'" y="28" style="fill:#fff;font-weight:600">'+Math.round(100*p[1]/total)+'%</text>';x+=w;});let y=64;parts.forEach(p=>{out+='<rect x="0" y="'+(y-10)+'" width="10" height="10" rx="2" fill="'+p[2]+'"/><text x="16" y="'+y+'">'+esc(p[0])+' · '+usd0(p[1])+'</text>';y+=18;});const z=S.zakat_cents,g=S.general_cents;if(z+g){out+='<text class="lbl" x="0" y="'+(y+12)+'">ONLINE RESTRICTION</text>';const zw=W*z/(z+g);out+='<rect x="0" y="'+(y+20)+'" width="'+zw+'" height="22" fill="#2F6B3A"/><rect x="'+zw+'" y="'+(y+20)+'" width="'+(W-zw)+'" height="22" fill="#D8D3C8"/><text x="0" y="'+(y+58)+'">Zakat '+usd0(z)+' ('+Math.round(100*z/(z+g))+'%) · General '+usd0(g)+'</text>';y+=70;}$('#chart-mix').innerHTML=svg(W,y+4,out);}
+function bands(){const B=R.stats.bands;const W=widthOf('chart-bands'),rowH=30,L=Math.min(150,W*.32),H=B.length*rowH+20;const max=Math.max(1,...B.map(b=>b.cents));let out='';B.forEach((b,i)=>{const y=6+i*rowH;const w=Math.max(2,(W-L-100)*b.cents/max);out+='<text x="'+(L-8)+'" y="'+(y+19)+'" text-anchor="end">'+esc(b.label)+'</text><rect class="bar gold" x="'+L+'" y="'+(y+5)+'" width="'+w+'" height="'+(rowH-11)+'" rx="2" data-tip="<b>'+esc(b.label)+'</b><br>'+b.count+' gifts · '+usd0(b.cents)+'<br>'+Math.round(100*b.cents/Math.max(1,R.stats.total_cents))+'% of the total"/><text x="'+(L+w+6)+'" y="'+(y+19)+'">'+short(b.cents)+' · '+b.count+'</text>';});$('#chart-bands').innerHTML=svg(W,H,out);}
+function mix(){const S=R.stats;const W=widthOf('chart-mix');const parts=[['Ballroom pledges',S.pledge_cents,'#1E2A4A'],['Online cards',S.online_cents,'#C59B27'],['Other paid in room',S.manual_paid_cents,'#7C9AC0']].filter(p=>p[1]>0);const total=parts.reduce((s,p)=>s+p[1],0);let x=0,out='';parts.forEach(p=>{const w=W*p[1]/total;out+='<rect class="bar" x="'+x+'" y="6" width="'+w+'" height="34" fill="'+p[2]+'" style="fill:'+p[2]+'" data-tip="<b>'+esc(p[0])+'</b><br>'+usd0(p[1])+' · '+Math.round(100*p[1]/total)+'%"/>';if(w>60)out+='<text x="'+(x+8)+'" y="28" style="fill:#fff;font-weight:600">'+Math.round(100*p[1]/total)+'%</text>';x+=w;});let y=64;parts.forEach(p=>{out+='<rect x="0" y="'+(y-10)+'" width="10" height="10" rx="2" fill="'+p[2]+'"/><text x="16" y="'+y+'">'+esc(p[0])+' · '+usd0(p[1])+'</text>';y+=18;});const z=S.zakat_cents,g=S.general_cents;if(z+g){out+='<text class="lbl" x="0" y="'+(y+12)+'">ONLINE RESTRICTION</text>';const zw=W*z/(z+g);out+='<rect x="0" y="'+(y+20)+'" width="'+zw+'" height="22" fill="#2F6B3A"/><rect x="'+zw+'" y="'+(y+20)+'" width="'+(W-zw)+'" height="22" fill="#D8D3C8"/><text x="0" y="'+(y+58)+'">Zakat '+usd0(z)+' ('+Math.round(100*z/(z+g))+'%) · General '+usd0(g)+'</text>';y+=70;}$('#chart-mix').innerHTML=svg(W,y+4,out);}
 function pareto(){const D=R.donors.map(d=>d.total);const total=D.reduce((s,v)=>s+v,0);if(!total)return;const W=widthOf('chart-pareto'),H=170,L=40,top=10,ih=120;let cum=0;const pts=D.map((v,i)=>{cum+=v;return [L+(W-L-10)*(i+1)/D.length,top+ih-ih*cum/total];});let out='<line class="axis" x1="'+L+'" x2="'+(W-10)+'" y1="'+(top+ih)+'" y2="'+(top+ih)+'"/>';[0.5,0.8,1].forEach(f=>{const y=top+ih-ih*f;out+='<line class="axis" x1="'+L+'" x2="'+(W-10)+'" y1="'+y+'" y2="'+y+'" stroke-dasharray="2 4"/><text x="'+(L-6)+'" y="'+(y+4)+'" text-anchor="end">'+Math.round(f*100)+'%</text>';});out+='<path class="line" d="M'+L+','+(top+ih)+' L'+pts.map(p=>p[0]+','+p[1]).join(' L')+'"/>';let run=0,n50=0;for(let i=0;i<D.length;i++){run+=D[i];if(run>=total/2){n50=i+1;break;}}out+='<text class="lbl" x="'+L+'" y="'+(H-8)+'">'+n50+' OF '+D.length+' HOUSEHOLDS GAVE HALF THE TOTAL</text>';$('#chart-pareto').innerHTML=svg(W,H,out);}
 function charts(){timeline();bands();mix();pareto();}charts();let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(charts,150);});
 }
+// Hero: digits pop in, then the goal bar fills and the milestone ticks light up in order.
+const total=document.getElementById('total');if(total){requestAnimationFrame(()=>{total.classList.add('go');setTimeout(()=>document.querySelector('.goal-bar')?.classList.add('go'),250);});}
+// Reveal section heads, stats, cards, and charts as they enter the viewport.
+if('IntersectionObserver' in window){const ro=new IntersectionObserver(es=>{es.forEach(e=>{if(!e.isIntersecting)return;const box=e.target;const kids=box.classList.contains('rv')?[box]:[...box.querySelectorAll('.rv:not(.in)')];kids.forEach((k,i)=>{k.style.transitionDelay=(Math.min(i,8)*55)+'ms';k.classList.add('in');});ro.unobserve(box);});},{rootMargin:'0px 0px -8% 0px'});document.querySelectorAll('.stats,.take,.sec-head.rv,.chart-box.rv,.hero-stats').forEach(el=>ro.observe(el));document.querySelectorAll('.hero-stats .stat').forEach(s=>s.classList.add('rv'));}else document.querySelectorAll('.rv').forEach(el=>el.classList.add('in'));
+setTimeout(()=>document.querySelectorAll('.rv:not(.in)').forEach(el=>el.classList.add('in')),2500);
+// Chart tooltips: one floating box, follows the pointer over bars and points.
+const tip=document.createElement('div');tip.className='tip';document.body.appendChild(tip);
+function showTip(html,x,y){tip.innerHTML=html;tip.classList.add('on');const w=tip.offsetWidth,h=tip.offsetHeight;tip.style.left=Math.min(window.innerWidth-w-8,Math.max(8,x+14))+'px';tip.style.top=(y-h-14<8?y+18:y-h-14)+'px';}
+function hideTip(){tip.classList.remove('on');}
+document.addEventListener('mousemove',e=>{const t=e.target.closest('[data-tip]');if(t)showTip(t.dataset.tip,e.clientX,e.clientY);else if(tip.classList.contains('on'))hideTip();});
+document.addEventListener('touchstart',e=>{const t=e.target.closest('[data-tip]');if(t){const r=t.getBoundingClientRect();showTip(t.dataset.tip,r.left+r.width/2,r.top);setTimeout(hideTip,1800);}},{passive:true});
 // Mobile rows open on tap; a row starts closed so the list stays short.
 document.querySelectorAll('.tbl.collapse').forEach(box=>box.addEventListener('click',e=>{if(e.target.closest('a,button'))return;const tr=e.target.closest('tr');if(tr&&tr.parentElement.tagName==='TBODY')tr.classList.toggle('open');}));
 // Close the chapter menu on outside click or Escape.
-const menu=document.querySelector('details.menu');if(menu){document.addEventListener('click',e=>{if(!menu.contains(e.target))menu.removeAttribute('open');});document.addEventListener('keydown',e=>{if(e.key==='Escape')menu.removeAttribute('open');});}
+const menu=document.querySelector('details.menu');if(menu){const panel=menu.querySelector('.panel');const closeMenu=()=>{if(!menu.open)return;panel.classList.add('is-closing');setTimeout(()=>{menu.removeAttribute('open');panel.classList.remove('is-closing');},150);};menu.querySelector('summary').addEventListener('click',e=>{if(menu.open){e.preventDefault();closeMenu();}});document.addEventListener('click',e=>{if(!menu.contains(e.target))closeMenu();});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu();});}
 })();`;
