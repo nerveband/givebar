@@ -20,6 +20,7 @@ const config = JSON.parse(readFileSync("reports/report.config.json", "utf8")) as
 for (const [name, path] of Object.entries(config.inputs)) {
   if (!existsSync(path) && name !== "bloomerang") { console.error(`Missing input ${name}: ${path}`); process.exit(1); }
 }
+ensureFonts();
 mkdirSync("reports/out", { recursive: true });
 const base = join("reports/out", config.output_basename);
 
@@ -43,6 +44,20 @@ if (!process.argv.includes("--no-pdf")) {
   }
 }
 
+
+/** The Brandon/Jakarta/Space Mono files are licensed and gitignored; copy them from the booklet release on this machine when absent. */
+function ensureFonts(): void {
+  const dir = join(root, "reports", "theme", "fonts");
+  const source = "/home/nerveband/state/booklet-r22-spacing-release/versions/r16/assets";
+  const files: Record<string, string> = { "Brandon_reg.otf": "fonts/Brandon_reg.otf", "Brandon_med.otf": "fonts/Brandon_med.otf", "Brandon_bld.otf": "fonts/Brandon_bld.otf", "Brandon_blk.otf": "fonts/Brandon_blk.otf", "Brandon_light.otf": "fonts/Brandon_light.otf", "plus-jakarta-sans-400.ttf": "plus-jakarta-sans-400.ttf", "plus-jakarta-sans-400-italic.ttf": "plus-jakarta-sans-400-italic.ttf", "plus-jakarta-sans-600.ttf": "plus-jakarta-sans-600.ttf", "plus-jakarta-sans-700.ttf": "plus-jakarta-sans-700.ttf", "space-mono-400.ttf": "space-mono-400.ttf", "space-mono-700.ttf": "space-mono-700.ttf" };
+  mkdirSync(dir, { recursive: true });
+  for (const [name, rel] of Object.entries(files)) {
+    if (existsSync(join(dir, name))) continue;
+    const from = join(source, rel);
+    if (!existsSync(from)) { console.error(`Missing font ${name}; copy it into reports/theme/fonts (see reports/README.md).`); process.exit(1); }
+    writeFileSync(join(dir, name), readFileSync(from));
+  }
+}
 function findChromium(): string | null {
   const home = process.env.HOME || "";
   const cache = join(home, ".cache", "ms-playwright");
