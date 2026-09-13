@@ -58,7 +58,7 @@ describe("Ledger stats", () => {
 
   test("range buckets shrink with the window", () => {
     const now = Date.parse("2026-09-12T23:00:00Z");
-    expect(rangeBounds("24h", now, 0).bucket_ms).toBe(15 * 60_000);
+    expect(rangeBounds("24h", now, 0).bucket_ms).toBe(60_000);
     expect(rangeBounds("7d", now, 0).bucket_ms).toBe(HOUR);
     expect(rangeBounds("30d", now, 0).bucket_ms).toBe(6 * HOUR);
     expect(rangeBounds("all", now, now - 100 * DAY).bucket_ms).toBe(DAY);
@@ -102,4 +102,89 @@ describe("Website stats", () => {
     expect(body.website.connected).toBe(false);
     expect(body.summary.gifts).toBe(0);
   });
+});
+
+
+test("last hour separates adjacent minutes, fills idle minutes, and excludes older gifts", () => {
+  const now = Date.parse("2026-09-12T23:30:30Z");
+  for (const [id, at, cents] of [["older", now - HOUR - 1, 9000], ["first", Date.parse("2026-09-12T23:21:10Z"), 1000], ["second", Date.parse("2026-09-12T23:22:10Z"), 2000]] as const) {
+    recordDonation(db, { donation_id: id, donor_name: id, amount_cents: cents });
+    db.query("UPDATE ledger SET created_at = ? WHERE donation_id = ?").run(at, id);
+  }
+  const stats = ledgerStats(db, "1h", "", "", now);
+  expect(stats.from).toBe(now - HOUR);
+  expect(stats.bucket_ms).toBe(60_000);
+  expect(stats.summary.total_cents).toBe(3000);
+  expect(stats.timeline.filter(b => b.gifts).map(b => b.cents)).toEqual([1000, 2000]);
+  expect(stats.timeline.find(b => b.t === Date.parse("2026-09-12T23:23:00Z"))?.gifts).toBe(0);
+  expect(stats.timeline.at(-1)?.cumulative_cents).toBe(3000);
+  expect(stats.by_minute.map(b => [b.label, b.cents])).toEqual([["7:21 PM", 1000], ["7:22 PM", 2000]]);
+});
+
+test('search and amount filters agree across summary, timeline, rows and authenticated CSV', async () => {
+  const web = { query: async () => ({ connected: false }), close() {} };
+  const cookie = await sessionCookie(db, backupsFor(db), 'reviewer', 'operator');
+  recordDonation(db, { donation_id: 'csv-a', donor_name: '=Example, "Donor"', amount_cents: 12345, entered_by: 'Desk One' });
+  recordDonation(db, { donation_id: 'csv-b', donor_name: 'Other', amount_cents: 999, entered_by: 'Desk Two' });
+  const query = '/api/stats?range=1h&q=Example&min=10000&max=20000&bucket=300000&sort=amount_desc';
+  const result = await (await handleStatsRequest(get(query, cookie), db, web)).json();
+  expect(result.summary.total_cents).toBe(12345);
+  expect(result.donations).toHaveLength(1);
+  expect(result.timeline.at(-1).cumulative_cents).toBe(12345);
+  expect(result.bucket_ms).toBe(300000);
+  expect(result.operators.map(o => o.operator)).toEqual(['Desk One']);
+  const csv = await handleStatsRequest(get(query + '&format=csv', cookie), db, web);
+  expect(csv.status).toBe(200);
+  const text = await csv.text();
+  expect(text).toContain('"\'=Example, ""Donor"""');
+  expect(text).toContain('"123.45"');
+  expect(text).not.toContain('Other');
+  expect((await handleStatsRequest(get(query + '&format=csv'), db, web)).status).toBe(401);
+});
+
+test('public search cannot discover private anonymous names, notes or operators', async () => {
+  const web = { query: async () => ({ connected: false }), close() {} };
+  recordDonation(db, { donation_id: 'private-search', donor_name: 'Secret Name', amount_cents: 5000, is_anonymous: true, notes: 'Hidden Note', entered_by: 'Private Operator' });
+  for (const q of ['Secret', 'Hidden', 'Private']) {
+    const result = await (await handleStatsRequest(get('/api/stats?range=1h&q=' + q), db, web)).json();
+    expect(result.summary.gifts).toBe(0);
+    expect(result.donations).toEqual([]);
+  }
+  const publicResult = await (await handleStatsRequest(get('/api/stats?range=1h&q=Anonymous'), db, web)).json();
+  expect(publicResult.donations[0].donor_name).toBe('Anonymous Supporter');
+  expect(JSON.stringify(publicResult)).not.toContain('Secret Name');
+  expect(publicResult.donations[0].operator).toBeUndefined();
+});
+
+test('rejects invalid filters and impractically dense chart ranges', async () => {
+  const web = { query: async () => ({ connected: false }), close() {} };
+  for (const query of ['min=-1', 'min=200&max=100', 'bucket=12', 'sort=bad', 'range=30d&bucket=60000']) {
+    expect((await handleStatsRequest(get('/api/stats?' + query), db, web)).status).toBe(400);
+  }
+});
+
+test('every chart interval preserves amounts and forwards the interval to website analytics', async () => {
+  recordDonation(db, { donation_id: 'interval', donor_name: 'Interval', amount_cents: 12345 });
+  for (const bucket of [60000, 300000, 900000, 3600000, 86400000]) {
+    let received: number | undefined;
+    const web = { query: async (_range: string, _now: number, interval?: number) => { received = interval; return { connected: false }; }, close() {} };
+    const result = await (await handleStatsRequest(get(`/api/stats?range=1h&bucket=${bucket}`), db, web)).json();
+    expect(received).toBe(bucket);
+    expect(result.bucket_ms).toBe(bucket);
+    expect(result.timeline.reduce((sum, row) => sum + row.cents, 0)).toBe(12345);
+    expect(result.timeline.at(-1).cumulative_cents).toBe(result.summary.total_cents);
+  }
+});
+
+test('all sort orders retain the same filtered gifts and exact totals', () => {
+  const now = Date.now();
+  for (const [id, amount, age] of [['sort-a', 1000, 3000], ['sort-b', 3000, 2000], ['sort-c', 2000, 1000]] as const) {
+    recordDonation(db, { donation_id: id, donor_name: id, amount_cents: amount });
+    db.query('UPDATE ledger SET created_at=? WHERE donation_id=?').run(now-age, id);
+  }
+  for (const [sort, amounts] of [['newest', [2000, 3000, 1000]], ['oldest', [1000, 3000, 2000]], ['amount_asc', [1000, 2000, 3000]], ['amount_desc', [3000, 2000, 1000]]] as const) {
+    const result = ledgerStats(db, '1h', '', '', now, {sort});
+    expect(result.donations.map(g => g.amount_cents)).toEqual([...amounts]);
+    expect(result.summary.direct_cents).toBe(6000);
+  }
 });

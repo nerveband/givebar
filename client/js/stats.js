@@ -17,9 +17,10 @@
   const MUTED = '#88888e';
   const LINE = 'rgba(255,255,255,0.08)';
   const state = {
-    range: localStorage.getItem('givebar_stats_range') || 'all',
+    range: localStorage.getItem('givebar_stats_range') || '1h',
     source: '',
     method: '',
+    q: '', min: '', max: '', bucket: '', sort: 'newest', page: 0,
     data: null,
     timer: null
   };
@@ -163,10 +164,14 @@
 
   function render(data) {
     const s = data.summary;
-    const rangeText = { today: 'today', '24h': 'the last 24 hours', '7d': 'the last 7 days', '30d': 'the last 30 days', all: 'all time' }[data.range];
-    const filters = [state.source && ({ bloomerang: 'online gifts only', manual: 'gifts entered by hand only' })[state.source], state.method && `${state.method} only`].filter(Boolean);
+    renderDonations(data);
+    $('stats-search').placeholder = data.can_view_private ? 'Search donor, note, or operator' : 'Search donor name';
+    $('stats-csv-preview').hidden = $('stats-csv-download').hidden = !data.can_view_private;
+    $('stats-csv-signin').hidden = data.can_view_private;
+    const rangeText = { '1h': 'the last hour', today: 'today', '24h': 'the last 24 hours', '7d': 'the last 7 days', '30d': 'the last 30 days', all: 'all time' }[data.range];
+    const filters = [state.source && ({ bloomerang: 'online gifts only', manual: 'gifts entered by hand only' })[state.source], state.method && `${state.method} only`, state.q && `search: ${state.q}`, state.min !== '' && `minimum ${money(Number(state.min))}`, state.max !== '' && `maximum ${money(Number(state.max))}`].filter(Boolean);
     $('stats-subtitle').textContent = `Gifts, sources, and how people reached the donation page, ${rangeText}${filters.length ? ', ' + filters.join(', ') : ''}.`;
-    $('btn-clear-filters').hidden = !filters.length;
+    $('btn-clear-filters').hidden = !filters.length && !state.bucket;
     $('t-total').textContent = money(s.total_cents);
     $('t-total-sub').textContent = s.matched_cents ? `${money(s.direct_cents)} given + ${money(s.matched_cents)} matched` : `${Math.round((s.total_cents / Math.max(data.goal_cents, 1)) * 100)}% of the ${short(data.goal_cents)} goal`;
     $('t-gifts').textContent = String(s.gifts);
@@ -191,7 +196,7 @@
     }
 
     const bucket = data.bucket_ms;
-    $('timeline-hint').textContent = `per ${bucket >= 86_400_000 ? 'day' : bucket >= 3_600_000 ? `${bucket / 3_600_000} hour${bucket > 3_600_000 ? 's' : ''}` : `${bucket / 60_000} minutes`}`;
+    $('timeline-hint').textContent = `per ${bucket >= 86_400_000 ? 'day' : bucket >= 3_600_000 ? `${bucket / 3_600_000} hour${bucket > 3_600_000 ? 's' : ''}` : `${bucket / 60_000} minute${bucket === 60_000 ? '' : 's'}`}`;
     areaChart($('chart-timeline'), data.timeline.map(b => ({ label: timeLabel(b.t, bucket), y: b.cumulative_cents, detail: b.gifts ? `${b.gifts} gift${b.gifts === 1 ? '' : 's'} (${money(b.cents)})` : '' })), {
       label: 'Total raised over time', format: short,
       rules: [...data.milestones.map(m => ({ value: m.cents, label: m.label })), { value: data.goal_cents, label: 'Goal' }]
@@ -204,7 +209,7 @@
     barList($('chart-source'), data.by_source, { label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
     barList($('chart-method'), data.by_method, { label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
     barList($('chart-size'), data.by_size, { label: r => r.label, value: r => r.gifts, format: r => `${r.gifts} · ${money(r.cents)}` });
-    barList($('chart-hour'), data.by_hour, { label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
+    barList($('chart-hour'), data.by_minute, { label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
     if (web.connected) barList($('chart-devices'), web.devices, { label: r => r.device.charAt(0).toUpperCase() + r.device.slice(1), value: r => r.visitors, format: r => `${r.visitors}`, emptyMessage: 'No donation page visits in this range.' });
     else empty($('chart-devices'), 'Not connected.');
 
@@ -247,16 +252,81 @@
     $('stats-updated').textContent = `Updated ${eastern({ hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(data.server_time))}`;
   }
 
-  async function load() {
-    try {
-      const response = await GivebarSession.api(`/api/stats?range=${state.range}&source=${state.source}&method=${state.method}`);
-      if (!response.ok) return;
-      state.data = await response.json();
-      render(state.data);
-    } catch (_) {
-      $('stats-updated').textContent = 'Connection lost; showing the last figures.';
-    }
+  function params() {
+    const query = new URLSearchParams({ range: state.range, source: state.source, method: state.method, sort: state.sort });
+    for (const key of ['q', 'min', 'max', 'bucket']) if (state[key] !== '') query.set(key, state[key]);
+    return query;
   }
+  function renderDonations(data) {
+    const rows = data.donations;
+    const pages = Math.max(1, Math.ceil(rows.length / 25));
+    state.page = Math.min(state.page, pages - 1);
+    $('stats-row-count').textContent = `${rows.length} gifts · ${money(data.summary.direct_cents)} given`;
+    table($('stats-donations'), rows.slice(state.page * 25, (state.page + 1) * 25), [
+      { title: 'Recorded (Eastern)', value: r => eastern({ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(r.created_at)) },
+      { title: 'Donor', value: r => r.donor_name },
+      { title: 'Gift', value: r => money(r.amount_cents), align: 'text-right' },
+      { title: 'Match', value: r => money(r.matched_amount_cents), align: 'text-right' },
+      { title: 'Source', value: r => fmt.source(r.source) },
+      { title: 'Method', value: r => r.payment_method },
+      ...(data.can_view_private ? [{ title: 'Operator', value: r => r.operator }] : [])
+    ], 'No donations match these filters.');
+    $('stats-page').textContent = `Page ${state.page + 1} of ${pages}`;
+    $('stats-prev').disabled = state.page === 0;
+    $('stats-next').disabled = state.page + 1 === pages;
+  }
+  let requestNumber = 0;
+  async function load() {
+    const current = ++requestNumber;
+    $('btn-clear-filters').hidden = ![state.source, state.method, state.q, state.min, state.max, state.bucket].some(value => value !== '');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    $('stats-csv-preview').disabled = $('stats-csv-download').disabled = true;
+    try {
+      const response = await GivebarSession.api(`/api/stats?${params()}`, { signal: controller.signal });
+      const data = await response.json();
+      if (current !== requestNumber) return;
+      if (!response.ok) throw new Error(data.message || 'Could not load stats.');
+      state.data = data;
+      state.loadedQuery = params().toString();
+      $('stats-error').textContent = '';
+      $('stats-csv-panel').hidden = true;
+      render(data);
+      $('stats-csv-preview').disabled = $('stats-csv-download').disabled = false;
+    } catch (error) {
+      if (current === requestNumber) $('stats-error').textContent = `${error.name === 'AbortError' ? 'Stats request timed out.' : error.message} Showing the last loaded results.`;
+    } finally { clearTimeout(timeout); }
+  }
+  async function exportCsv(preview) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await GivebarSession.api(`/api/stats?${state.loadedQuery}&format=csv`, { signal: controller.signal });
+      if (!response.ok) throw new Error('CSV export failed. Sign in and try again.');
+      const csv = await response.text();
+      if (preview) {
+        $('stats-csv-text').value = csv;
+        $('stats-csv-panel').hidden = false;
+      } else {
+        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+        const link = document.createElement('a'); link.href = url; link.download = 'givebar-filtered-donations.csv'; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch (error) { GivebarSession.toast(error.name === 'AbortError' ? 'CSV request timed out. Try again.' : error.message); }
+    finally { clearTimeout(timeout); }
+  }
+  $('stats-detail-filters').addEventListener('submit', event => {
+    event.preventDefault();
+    state.q = $('stats-search').value.trim();
+    for (const key of ['min', 'max']) state[key] = $('stats-' + key).value === '' ? '' : String(Math.round(Number($('stats-' + key).value) * 100));
+    state.bucket = $('stats-bucket').value;
+    state.page = 0; load();
+  });
+  $('stats-sort').addEventListener('change', () => { state.sort = $('stats-sort').value; state.page = 0; load(); });
+  $('stats-prev').addEventListener('click', () => { state.page--; renderDonations(state.data); });
+  $('stats-next').addEventListener('click', () => { state.page++; renderDonations(state.data); });
+  $('stats-csv-preview').addEventListener('click', () => exportCsv(true));
+  $('stats-csv-download').addEventListener('click', () => exportCsv(false));
 
   function seg(id, attr, key) {
     const group = $(id);
@@ -264,6 +334,7 @@
       button.setAttribute('aria-checked', String(button.dataset[attr] === state[key]));
       button.addEventListener('click', () => {
         state[key] = button.dataset[attr];
+        state.page = 0;
         if (key === 'range') localStorage.setItem('givebar_stats_range', state.range);
         group.querySelectorAll('button').forEach(other => other.setAttribute('aria-checked', String(other === button)));
         load();
@@ -276,6 +347,8 @@
   $('btn-clear-filters').addEventListener('click', () => {
     state.source = '';
     state.method = '';
+    state.q = state.min = state.max = state.bucket = ''; state.page = 0;
+    $('stats-detail-filters').reset();
     document.querySelectorAll('#source-seg button, #method-seg button').forEach(button => button.setAttribute('aria-checked', String(!button.dataset.source && !button.dataset.method)));
     load();
   });

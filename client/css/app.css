@@ -923,3 +923,13 @@ textarea.form-input-text { min-height:80px; resize:vertical; }
 .donation-dialog .dialog-body { display: grid; gap: 16px; padding: 8px clamp(16px, 4vw, 32px) 16px; overflow: auto; min-height: 0; flex: 1; }
 .donation-dialog .dialog-foot { flex-shrink: 0; padding: 12px clamp(16px, 4vw, 32px) clamp(12px, 3vw, 20px); border-top: 1px solid #44434a; background: #18191d; }
 .donation-dialog #btn-submit-add { min-height: 56px; width: 100%; position: static; }
+
+/* Stats detail filters and paged donation results. */
+.stats-detail-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 16px 0; }
+.stats-detail-filters label { display: grid; gap: 6px; flex: 1 1 150px; font-size: 13px; }
+.stats-detail-filters label:first-child { flex-basis: 260px; }
+.stats-detail-filters input, .stats-detail-filters select, #stats-sort { min-height: 44px; }
+#stats-csv-text { width: 100%; font-family: var(--font-mono); }
+#chart-hour { max-height: 420px; overflow-y: auto; }
+#stats-donations { font-variant-numeric: tabular-nums; }
+.stats-main [hidden] { display: none !important; }

@@ -14,8 +14,8 @@ import { getSession } from "./authz";
  * omit operator identities; signed-in operators retain their detailed view.
  */
 
-export type StatsRange = "today" | "24h" | "7d" | "30d" | "all";
-const RANGES: Record<string, true> = { today: true, "24h": true, "7d": true, "30d": true, all: true };
+export type StatsRange = "1h" | "today" | "24h" | "7d" | "30d" | "all";
+const RANGES: Record<string, true> = { "1h": true, today: true, "24h": true, "7d": true, "30d": true, all: true };
 const WEB_CACHE_MS = 30_000;
 const WEB_MAX_DAYS = 90;
 const DONATE_PATHS = /donat|gala|give|pledge/i;
@@ -37,13 +37,14 @@ function startOfEasternDay(now: number): number {
 
 export function rangeBounds(range: StatsRange, now: number, earliest: number): { from: number; to: number; bucket_ms: number } {
   const day = 86_400_000;
-  const bounds = range === "today" ? { from: startOfEasternDay(now), to: now }
+  const bounds = range === "1h" ? { from: now - 3_600_000, to: now }
+    : range === "today" ? { from: startOfEasternDay(now), to: now }
     : range === "24h" ? { from: now - day, to: now }
     : range === "7d" ? { from: now - 7 * day, to: now }
     : range === "30d" ? { from: now - 30 * day, to: now }
     : { from: Math.min(earliest || now, now - day), to: now };
   const span = bounds.to - bounds.from;
-  const bucket = span <= day ? 15 * 60_000 : span <= 2 * day ? 30 * 60_000 : span <= 8 * day ? 3_600_000 : span <= 32 * day ? 6 * 3_600_000 : day;
+  const bucket = span <= day ? 60_000 : span <= 2 * day ? 30 * 60_000 : span <= 8 * day ? 3_600_000 : span <= 32 * day ? 6 * 3_600_000 : day;
   return { ...bounds, bucket_ms: bucket };
 }
 
@@ -58,11 +59,12 @@ function tally(map: Map<string, KeyCount>, key: string, label: string, cents: nu
   map.set(key, row);
 }
 
-export function ledgerStats(db: Database, range: StatsRange, source: string, method: string, now = Date.now()) {
+export function ledgerStats(db: Database, range: StatsRange, source: string, method: string, now = Date.now(), filters: { q?: string; min?: number; max?: number; bucket?: number; private?: boolean; sort?: string } = {}) {
   const fold = foldLedger(db);
   const events = db.query<LedgerEvent, []>(`SELECT * FROM ledger ORDER BY seq ASC`).all();
   const earliest = events.reduce((min, event) => event.event_type === "create" && event.source !== "rehearsal" ? Math.min(min, event.created_at) : min, now);
   const bounds = rangeBounds(range, now, earliest);
+  if (filters.bucket) bounds.bucket_ms = filters.bucket;
   const state = getEventState(db);
 
   const active = Array.from(fold.active_donations.values())
@@ -70,12 +72,22 @@ export function ledgerStats(db: Database, range: StatsRange, source: string, met
     .filter(record => record.created_at >= bounds.from && record.created_at <= bounds.to)
     .filter(record => !source || record.source === source)
     .filter(record => !method || record.payment_method === method)
+    .filter(record => filters.min === undefined || record.amount_cents >= filters.min)
+    .filter(record => filters.max === undefined || record.amount_cents <= filters.max)
+    .filter(record => {
+      const name = filters.private ? record.donor_name : record.is_anonymous ? "Anonymous Supporter" : record.display_name;
+      const searchable = [name, filters.private ? record.entered_by : "", filters.private ? record.notes : ""].join(" ").toLowerCase();
+      return !filters.q || searchable.includes(filters.q.toLowerCase());
+    })
     .sort((a, b) => a.created_at - b.created_at);
 
   const bySource = new Map<string, KeyCount>();
   const byMethod = new Map<string, KeyCount>();
   const bySize = new Map<string, KeyCount>();
   const byHour = new Map<string, KeyCount>();
+  const byMinute = new Map<string, KeyCount>();
+  const minuteFormat = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true });
+  const minuteKeyFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   const buckets = new Map<number, Bucket>();
   let direct = 0;
   let matched = 0;
@@ -92,6 +104,7 @@ export function ledgerStats(db: Database, range: StatsRange, source: string, met
     tally(bySize, String(SIZE_BUCKETS.indexOf(size)), size[1], record.amount_cents);
     const hour = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hour12: true }).format(new Date(record.created_at));
     tally(byHour, String(Math.floor(((record.created_at - startOfEasternDay(record.created_at)) / 3_600_000) % 24)).padStart(2, "0"), hour, record.amount_cents);
+    tally(byMinute, minuteKeyFormat.format(new Date(record.created_at)), minuteFormat.format(new Date(record.created_at)), record.amount_cents);
     const slot = Math.floor(record.created_at / bounds.bucket_ms) * bounds.bucket_ms;
     const bucket = buckets.get(slot) || { t: slot, gifts: 0, cents: 0, cumulative_cents: 0 };
     bucket.gifts++;
@@ -110,7 +123,9 @@ export function ledgerStats(db: Database, range: StatsRange, source: string, met
   const median = sorted.length ? (sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : Math.round((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2)) : 0;
 
   const operators = new Map<string, { operator: string; adds: number; edits: number; deletes: number; restores: number; cents: number }>();
-  const inRange = events.filter(event => event.created_at >= bounds.from && event.created_at <= bounds.to && event.source !== "rehearsal" && !event.donation_id.startsWith("match_"));
+  const matchingIds = new Set(active.map(record => record.donation_id));
+  const narrowed = !!(source || method || filters.q || filters.min !== undefined || filters.max !== undefined);
+  const inRange = events.filter(event => (!narrowed || matchingIds.has(event.donation_id)) && event.created_at >= bounds.from && event.created_at <= bounds.to && event.source !== "rehearsal" && !event.donation_id.startsWith("match_"));
   for (const event of inRange) {
     const name = event.entered_by || "Unknown";
     const row = operators.get(name) || { operator: name, adds: 0, edits: 0, deletes: 0, restores: 0, cents: 0 };
@@ -145,9 +160,16 @@ export function ledgerStats(db: Database, range: StatsRange, source: string, met
       all_time_gifts: fold.active_donation_count
     },
     timeline,
+    donations: [...active].sort((a, b) => filters.sort === "amount_desc" ? b.amount_cents - a.amount_cents : filters.sort === "amount_asc" ? a.amount_cents - b.amount_cents : filters.sort === "oldest" ? a.created_at - b.created_at : b.created_at - a.created_at).map(record => ({
+      donor_name: filters.private ? record.donor_name : record.is_anonymous ? "Anonymous Supporter" : record.display_name,
+      amount_cents: record.amount_cents, matched_amount_cents: record.matched_amount_cents,
+      source: record.source, payment_method: record.payment_method, created_at: record.created_at,
+      ...(filters.private ? { operator: record.entered_by || "" } : {})
+    })),
     by_source: Array.from(bySource.values()).sort((a, b) => b.cents - a.cents),
     by_method: Array.from(byMethod.values()).sort((a, b) => b.cents - a.cents),
     by_size: Array.from(bySize.entries()).sort((a, b) => Number(a[0]) - Number(b[0])).map(([, row]) => row),
+    by_minute: Array.from(byMinute.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([, row]) => row),
     by_hour: Array.from(byHour.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([, row]) => row),
     top_gifts: [...active].sort((a, b) => b.amount_cents - a.amount_cents).slice(0, 10).map(record => ({
       donation_id: record.donation_id, donor_name: record.donor_name, is_anonymous: record.is_anonymous, amount_cents: record.amount_cents,
@@ -173,16 +195,16 @@ export interface WebStats {
 }
 
 export interface WebStatsSource {
-  query(range: StatsRange, now: number): Promise<WebStats>;
+  query(range: StatsRange, now: number, bucket?: number): Promise<WebStats>;
   close(): void;
 }
 
 export function createWebStats(databaseUrl = process.env.GIVEBAR_UMAMI_DATABASE_URL || "", websiteId = process.env.GIVEBAR_UMAMI_WEBSITE_ID || ""): WebStatsSource {
   const sql = databaseUrl ? new SQL(databaseUrl, { max: 2, connectionTimeout: 5, idleTimeout: 60 }) : null;
   const cache = new Map<string, { at: number; value: WebStats }>();
-  async function query(range: StatsRange, now: number): Promise<WebStats> {
+  async function query(range: StatsRange, now: number, bucket?: number): Promise<WebStats> {
     if (!sql || !websiteId) return { connected: false, message: "Website analytics are not connected on this server." };
-    const key = `${range}:${Math.floor(now / WEB_CACHE_MS)}`;
+    const key = `${range}:${bucket || "auto"}:${Math.floor(now / WEB_CACHE_MS)}`;
     const hit = cache.get(key);
     if (hit) return hit.value;
     const bounds = rangeBounds(range, now, now - WEB_MAX_DAYS * 86_400_000);
@@ -194,7 +216,7 @@ export function createWebStats(databaseUrl = process.env.GIVEBAR_UMAMI_DATABASE_
         FROM website_event e LEFT JOIN session s ON s.session_id = e.session_id
         WHERE e.website_id = ${websiteId}::uuid AND e.event_type = 1 AND e.created_at >= ${from} AND e.created_at <= ${to}
         ORDER BY e.created_at ASC`;
-      const value = summarizeWeb(rows, bounds.from, bounds.to, bounds.bucket_ms);
+      const value = summarizeWeb(rows, bounds.from, bounds.to, bucket || bounds.bucket_ms);
       const result: WebStats = { connected: true, website: websiteId, ...value };
       cache.set(key, { at: now, value: result });
       for (const [k, entry] of cache) if (now - entry.at > WEB_CACHE_MS * 4) cache.delete(k);
@@ -270,20 +292,44 @@ export function summarizeWeb(rows: WebEventRow[], from: number, to: number, buck
 }
 
 
-/** GET /api/stats?range=today|24h|7d|30d|all&source=&method= */
+/** GET /api/stats?range=1h|today|24h|7d|30d|all&source=&method= */
 export async function handleStatsRequest(req: Request, db: Database, web: WebStatsSource): Promise<Response> {
   const session = getSession(req, db);
   if (req.method !== "GET") return Response.json({ error: "METHOD_NOT_ALLOWED", message: "GET required" }, { status: 405 });
   const url = new URL(req.url);
   const rangeParam = url.searchParams.get("range") || "all";
-  if (!RANGES[rangeParam]) return Response.json({ error: "INVALID_RANGE", message: "range must be today, 24h, 7d, 30d, or all" }, { status: 400 });
+  if (!RANGES[rangeParam]) return Response.json({ error: "INVALID_RANGE", message: "range must be 1h, today, 24h, 7d, 30d, or all" }, { status: 400 });
   const range = rangeParam as StatsRange;
   const source = url.searchParams.get("source") || "";
   const method = url.searchParams.get("method") || "";
   if (source && !SOURCE_LABEL[source]) return Response.json({ error: "INVALID_SOURCE", message: "source must be manual or bloomerang" }, { status: 400 });
   if (method && !METHOD_LABEL[method]) return Response.json({ error: "INVALID_METHOD", message: "method must be pledge, card, check, or cash" }, { status: 400 });
+  const q = (url.searchParams.get("q") || "").trim();
+  const min = url.searchParams.has("min") ? Number(url.searchParams.get("min")) : undefined;
+  const max = url.searchParams.has("max") ? Number(url.searchParams.get("max")) : undefined;
+  const bucket = url.searchParams.has("bucket") ? Number(url.searchParams.get("bucket")) : undefined;
+  const sort = url.searchParams.get("sort") || "newest";
+  const format = url.searchParams.get("format") || "json";
+  if (q.length > 200 || [min, max].some(n => n !== undefined && (!Number.isSafeInteger(n) || n < 0)) || (min !== undefined && max !== undefined && min > max)
+      || (bucket !== undefined && ![60000, 300000, 900000, 3600000, 86400000].includes(bucket))
+      || !["newest", "oldest", "amount_desc", "amount_asc"].includes(sort) || !["json", "csv"].includes(format))
+    return Response.json({ error: "INVALID_FILTER", message: "Check the search, amount limits, interval, or sort order." }, { status: 400 });
+  if (format === "csv" && !session) return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const now = Date.now();
-  const [ledger, website] = await Promise.all([ledgerStats(db, range, source, method, now), web.query(range, now)]);
+  const bounds = rangeBounds(range, now, db.query<{ first: number }, []>("SELECT MIN(created_at) AS first FROM ledger").get()?.first || now);
+  if (bucket && (bounds.to - bounds.from) / bucket > 10000) return Response.json({ error: "TOO_MANY_BUCKETS", message: "Choose a shorter time range or a larger chart interval." }, { status: 400 });
+  const ledger = ledgerStats(db, range, source, method, now, { q, min, max, bucket, sort, private: !!session });
+  if (format === "csv") {
+    const cell = (value: unknown) => {
+      let text = String(value ?? "");
+      if (/^[\s]*[=+@-]|^[\t\r]/.test(text)) text = "'" + text;
+      return '"' + text.replace(/"/g, '\"\"') + '"';
+    };
+    const rows = [["Recorded at (UTC)", "Donor", "Gift (USD)", "Match (USD)", "Source", "Method", "Operator"],
+      ...ledger.donations.map(g => [new Date(g.created_at).toISOString(), g.donor_name, (g.amount_cents / 100).toFixed(2), (g.matched_amount_cents / 100).toFixed(2), g.source, g.payment_method, g.operator])];
+    return new Response("\uFEFF" + rows.map(row => row.map(cell).join(",")).join("\r\n"), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="givebar-filtered-donations.csv"', "Cache-Control": "no-store" } });
+  }
+  const website = await web.query(range, now, bucket);
   if (!session) {
     const records = foldLedger(db).active_donations;
     ledger.top_gifts = ledger.top_gifts.map(gift => ({
