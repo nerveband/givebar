@@ -30,14 +30,18 @@ console.log(`ledger: ${report.stats.active_count} active gifts, ${(report.stats.
 writeFileSync(`${base}.json`, JSON.stringify({ generated_at: report.generated_at, stats: report.stats, takeaways: report.takeaways, milestones: report.milestones }, null, 2));
 await writeWorkbook(report, `${base}.xlsx`);
 console.log(`wrote ${base}.xlsx`);
-writeFileSync(`${base}.html`, renderHTML(report));
-console.log(`wrote ${base}.html`);
+const site = join("reports/out", "site");
+mkdirSync(site, { recursive: true });
+const pages = renderHTML(report);
+writeFileSync(join(site, "index.html"), pages.index);
+writeFileSync(join(site, "donors.html"), pages.donors);
+console.log(`wrote ${site}/index.html and donors.html`);
 
 if (!process.argv.includes("--no-pdf")) {
   const chromium = findChromium();
   if (!chromium) console.error("No Chromium found (looked in ~/.cache/ms-playwright and PATH); skipped the PDF.");
   else {
-    const proc = Bun.spawn([chromium, "--headless=new", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer", "--run-all-compositor-stages-before-draw", "--virtual-time-budget=8000", `--print-to-pdf=${join(root, `${base}.pdf`)}`, `file://${join(root, `${base}.html`)}`], { stdout: "ignore", stderr: "pipe" });
+    const proc = Bun.spawn([chromium, "--headless=new", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer", "--run-all-compositor-stages-before-draw", "--virtual-time-budget=8000", `--print-to-pdf=${join(root, `${base}.pdf`)}`, `file://${join(root, site, "index.html")}`], { stdout: "ignore", stderr: "pipe" });
     const code = await proc.exited;
     if (code !== 0) console.error(`Chromium exited ${code}: ${await new Response(proc.stderr).text()}`);
     else console.log(`wrote ${base}.pdf`);

@@ -20,7 +20,7 @@ KEY=$(cat "$HOME/.herenow/credentials")
 
 SITE=$(mktemp -d)
 trap 'rm -rf "$SITE"' EXIT
-cp "reports/out/$BASE.html" "$SITE/index.html"
+cp reports/out/site/index.html reports/out/site/donors.html "$SITE/"
 cp "reports/out/$BASE.xlsx" "reports/out/$BASE.pdf" "$SITE/"
 
 if [ -n "$SLUG" ]; then

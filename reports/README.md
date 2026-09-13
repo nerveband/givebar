@@ -5,7 +5,7 @@ Three outputs from one build, all in `reports/out/` (gitignored):
 | File | What it is |
 |---|---|
 | `<basename>.xlsx` | Full detail: every gift, every donor household, event log, online (Qgiv) detail, prospects vs actual, sponsors, ticket buyers, tables, declined attempts, timeline. Internal: legal names of anonymous donors and staff names are included. |
-| `<basename>.html` | Single-file interactive report (search, sort, filters, CSV of the current view, charts, QR codes). Fonts and logos are inlined; works offline. |
+| `site/index.html`, `site/donors.html` | Interactive report (charts, takeaways, cross-reference, follow-up) and the searchable donor list on its own page; the PDF links to the published donor page instead of printing it. Fonts and logos are inlined; works offline. |
 | `<basename>.pdf` | Print of the HTML through headless Chromium (letter, booklet styling). Long tables are cut at 40 rows with a note. |
 | `<basename>.json` | Stats and takeaways only, for diffing between refreshes. |
 

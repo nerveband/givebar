@@ -34,7 +34,7 @@ function viewPayload(r: Report) {
   };
 }
 
-export function renderHTML(r: Report): string {
+export function renderHTML(r: Report): { index: string; donors: string } {
   const s = r.stats; const c = r.config; const view = viewPayload(r);
   const generated = localTime(new Date(r.generated_at).getTime(), c.timezone, { dateStyle: "long", timeStyle: "short" });
   const eventDate = new Date(`${c.event_date}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
@@ -50,9 +50,9 @@ export function renderHTML(r: Report): string {
   const takeaways = [...r.takeaways].sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind]);
   const goalPct = Math.min(1, s.pct_of_goal);
   const sectionHead = (eyebrow: string, title: string, lead = "") => `<header class="sec-head"><p class="eyebrow">${esc(eyebrow)}</p><h2>${title}</h2>${lead ? `<p class="lead">${lead}</p>` : ""}</header>`;
-  const nav = [["summary", "Summary"], ["takeaways", "Takeaways"], ["charts", "Charts"], ["donors", "Donors"], ["gifts", "Gifts"], ["crossref", "Cross-reference"], ["followup", "Follow-up"], ["bloomerang", "Bloomerang"], ["links", "Links"], ["method", "Method"]];
+  const nav = [["summary", "Summary"], ["takeaways", "Takeaways"], ["charts", "Charts"], ["donors.html", "Donors"], ["gifts", "Gifts"], ["crossref", "Cross-reference"], ["followup", "Follow-up"], ["bloomerang", "Bloomerang"], ["links", "Links"], ["method", "Method"]];
 
-  return `<!doctype html>
+  const head = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#1E2A4A">
 <title>${esc(r.event.name)} · Donor Report</title>
 <style>
@@ -145,10 +145,10 @@ td.name{font-weight:600;color:var(--navy)}td.nowrap{white-space:nowrap}td.dim,.d
 @media (max-width:900px){.links{grid-template-columns:1fr 1fr}}@media (max-width:480px){.links{grid-template-columns:1fr}}
 dl.spec{display:grid;grid-template-columns:200px 1fr;gap:10px 20px;font-size:14px;margin:32px 0 0}dl.spec dt{font-weight:700;color:var(--navy)}dl.spec dd{margin:0;color:var(--slate)}@media (max-width:640px){dl.spec{grid-template-columns:1fr;gap:2px}dl.spec dd{margin-bottom:12px}}
 .foot{border-top:1px solid var(--line);margin-top:56px;padding:24px 0 max(24px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted)}.foot img{height:18px;vertical-align:middle}
-.hide-print{}
+.print-only{display:none}
 @media print{
   @page{size:letter;margin:.45in}
-  body{background:#fff;font-size:11.5px}.top,.toolbar,.hide-print,.more{display:none!important}
+  body{background:#fff;font-size:11.5px}.top,.toolbar,.hide-print,.more{display:none!important}.print-only{display:inline-flex}
   .wrap{max-width:none;padding:0}.sec{padding:0;border:0;break-after:page;page-break-after:always;position:relative;min-height:9.6in;padding:22px 26px}.sec::before{content:"";position:absolute;inset:6px;border:1px solid var(--gold);pointer-events:none}
   .hero{padding:40px 36px;min-height:9.6in;break-after:page;-webkit-print-color-adjust:exact;print-color-adjust:exact}.hero-grid{grid-template-columns:1fr}
   h2{font-size:24px}.stats{grid-template-columns:repeat(4,1fr);gap:14px}.stat-value{font-size:20px}.take{grid-template-columns:1fr 1fr}.two{display:block}.two>div{margin-bottom:18px}
@@ -157,12 +157,13 @@ dl.spec{display:grid;grid-template-columns:200px 1fr;gap:10px 20px;font-size:14p
 }
 </style></head>
 <body>
-<header class="top hide-print"><div class="wrap">
-  <a class="brand" href="#top"><img alt="" src="data:image/png;base64,${b64("cair-georgia-logo.png")}">Donor Report</a>
-  <nav class="topnav" aria-label="Sections">${nav.map(([id, label]) => `<a href="#${id}">${label}</a>`).join("")}</nav>
+`;
+  const topbar = (page: string) => `<header class="top hide-print"><div class="wrap">
+  <a class="brand" href="index.html#top"><img alt="" src="data:image/png;base64,${b64("cair-georgia-logo.png")}">Donor Report</a>
+  <nav class="topnav" aria-label="Sections">${nav.map(([id, label]) => `<a href="${id.endsWith(".html") ? id : `${page}#${id}`}"${id.endsWith(".html") && page === id ? ' class="on"' : ""}>${label}</a>`).join("")}</nav>
   <div class="dl"><a class="btn ghost" href="${esc(c.output_basename)}.xlsx" download><span class="full">Workbook</span><span class="abbr">XLSX</span></a><a class="btn ghost" href="${esc(c.output_basename)}.pdf" download>PDF</a></div>
-</div></header>
-
+</div></header>`;
+  const body = `
 <section class="hero" id="top"><div class="wrap">
   <div class="hero-grid">
     <div>
@@ -231,14 +232,13 @@ dl.spec{display:grid;grid-template-columns:200px 1fr;gap:10px 20px;font-size:14p
 </div></section>
 
 <section class="sec" id="donors"><div class="wrap">
-  ${sectionHead("Donors", "Every donor <em>household</em>", `${s.households} households, largest first. Gifts from the same person across the ballroom form and the online form are combined. Search by name, email, city, table, or note.`)}
-  <div class="toolbar"><input type="search" id="donor-q" placeholder="Search donors" aria-label="Search donors"><select id="donor-f" aria-label="Filter donors"><option value="">All donors</option><option value="pledge">Has pledge to collect</option><option value="online">Gave online</option><option value="anon">Anonymous</option><option value="prospect">On prospect list</option><option value="sponsor">Sponsor</option><option value="ticket">Ticket buyer</option><option value="repeat">Repeat (Bloomerang)</option><option value="new">First-time (Bloomerang)</option><option value="major">Major gift</option></select><label class="chip"><input type="checkbox" id="donor-legal">Legal names</label><label class="chip"><input type="checkbox" id="donor-notes">Team notes</label><button class="btn ghost" id="donor-csv" type="button">CSV of this view</button><span class="count" id="donor-count"></span></div>
-  <div class="tbl print-limit"><table id="donor-table"><thead><tr><th data-k="name">Donor</th><th data-k="total" class="r">Total</th><th data-k="count" class="r">Gifts</th><th data-k="pledged" class="r">Pledged</th><th data-k="paid" class="r">Online</th><th data-k="first">First gift</th><th>Context</th><th data-k="rel">History</th></tr></thead><tbody></tbody></table><div class="more" id="donor-more"></div></div>
+  ${sectionHead("Donors", "Every donor <em>household</em>", `${s.households} households with search, filters, sort, and CSV export live on their own page so this document stays readable.`)}
+  <p style="margin:24px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><a class="btn hide-print" href="donors.html">Open the donor list</a><a class="btn print-only" href="${esc(c.share_url)}donors.html">Open the donor list</a><span class="dim" style="font-size:13px">${esc(c.share_url)}donors.html · same password</span></p>
 </div></section>
 
 <section class="sec" id="gifts"><div class="wrap">
   ${sectionHead("Gifts", "Every gift, <em>in order</em>", `${r.gifts.length} ledger entries including ${s.void_count} deleted and ${s.amended_count} corrected. The workbook carries the full event log with every amendment.`)}
-  <div class="toolbar"><input type="search" id="gift-q" placeholder="Search gifts" aria-label="Search gifts"><select id="gift-f" aria-label="Filter gifts"><option value="">All entries</option><option value="active">Active only</option><option value="voided">Deleted only</option><option value="pledge">Pledges</option><option value="online">Online</option><option value="amended">Corrected</option><option value="anon">Anonymous</option><option value="notes">With team note</option></select><button class="btn ghost" id="gift-csv" type="button">CSV of this view</button><span class="count" id="gift-count"></span></div>
+  <div class="toolbar"><input type="search" id="gift-q" placeholder="Search gifts" aria-label="Search gifts"><select id="gift-f" aria-label="Filter gifts"><option value="">All entries</option><option value="active">Active only</option><option value="voided">Deleted only</option><option value="pledge">Pledges</option><option value="online">Online</option><option value="amended">Corrected</option><option value="anon">Anonymous</option><option value="notes">With team note</option></select><label class="chip"><input type="checkbox" id="gift-legal">Legal names</label><button class="btn ghost" id="gift-csv" type="button">CSV of this view</button><span class="count" id="gift-count"></span></div>
   <div class="tbl print-limit"><table id="gift-table"><thead><tr><th data-k="t">Time</th><th data-k="donor">Donor</th><th data-k="amount" class="r">Amount</th><th data-k="method">Method</th><th data-k="source">Source</th><th data-k="by">Recorded by</th><th>Flags</th><th>Note</th></tr></thead><tbody></tbody></table><div class="more" id="gift-more"></div></div>
 </div></section>
 
@@ -293,9 +293,15 @@ dl.spec{display:grid;grid-template-columns:200px 1fr;gap:10px 20px;font-size:14p
   </dl>
   <div class="foot"><span>${esc(r.event.name)} · Donor Report · generated ${esc(generated)}</span><span>Prepared by <img alt="wavedepth" src="data:image/svg+xml;base64,${wdLogo("#1E2A4A")}"></span></div>
 </div></section>
-</main>
-
-<script id="report-data" type="application/json">${JSON.stringify(view).replace(/</g, "\\u003c")}</script>
+</main>`;
+  const donorsBody = `<main>
+<section class="sec" id="donors" style="border-top:0;padding-top:clamp(28px,4vw,48px)"><div class="wrap">
+  ${sectionHead("Donors", "Every donor <em>household</em>", `${s.households} households, largest first. Gifts from the same person across the ballroom form and the online form are combined. Search by name, email, city, table, or note. <a href="index.html">Back to the report</a>.`)}
+  <div class="toolbar"><input type="search" id="donor-q" placeholder="Search donors" aria-label="Search donors"><select id="donor-f" aria-label="Filter donors"><option value="">All donors</option><option value="pledge">Has pledge to collect</option><option value="online">Gave online</option><option value="anon">Anonymous</option><option value="prospect">On prospect list</option><option value="sponsor">Sponsor</option><option value="ticket">Ticket buyer</option><option value="repeat">Repeat (Bloomerang)</option><option value="new">First-time (Bloomerang)</option><option value="major">Major gift</option></select><label class="chip"><input type="checkbox" id="donor-legal">Legal names</label><label class="chip"><input type="checkbox" id="donor-notes">Team notes</label><button class="btn ghost" id="donor-csv" type="button">CSV of this view</button><span class="count" id="donor-count"></span></div>
+  <div class="tbl print-limit"><table id="donor-table"><thead><tr><th data-k="name">Donor</th><th data-k="total" class="r">Total</th><th data-k="count" class="r">Gifts</th><th data-k="pledged" class="r">Pledged</th><th data-k="paid" class="r">Online</th><th data-k="first">First gift</th><th>Context</th><th data-k="rel">History</th></tr></thead><tbody></tbody></table><div class="more" id="donor-more"></div></div>
+</div></section>
+</main>`;
+  const script = `<script id="report-data" type="application/json">${JSON.stringify(view).replace(/</g, "\\u003c")}</script>
 <script>
 (function(){
 const R=JSON.parse(document.getElementById('report-data').textContent);
@@ -308,7 +314,7 @@ function sortable(table,state,render){table.querySelectorAll('th[data-k]').forEa
 function sortRows(rows,state){const k=state.key;if(!k)return rows;const m=state.dir==='asc'?1:-1;return rows.slice().sort((a,b)=>{const x=a[k],y=b[k];if(typeof x==='number'&&typeof y==='number')return (x-y)*m;return String(x??'').localeCompare(String(y??''))*m;});}
 function paged(rows,state,moreEl,render){const shown=rows.slice(0,state.limit||PAGE);moreEl.innerHTML=rows.length>shown.length?'<button class="btn ghost" type="button">Show '+Math.min(PAGE,rows.length-shown.length)+' more of '+(rows.length-shown.length)+'</button>':'';const b=moreEl.querySelector('button');if(b)b.addEventListener('click',()=>{state.limit=(state.limit||PAGE)+PAGE;render();});return shown;}
 
-// Donors
+if(document.getElementById('donor-table')){
 const dState={key:'total',dir:'desc',limit:PAGE};let dView=[];
 function donorName(d,legal){const shown=d.anon&&!legal?d.display:d.name;return '<td class="name">'+esc(shown)+(d.anon?' '+pill('anon','gold'):'')+(!d.anon&&d.display!==d.name?'<span class="sub">shown as '+esc(d.display)+'</span>':'')+'</td>';}
 function renderDonors(){const q=$('#donor-q').value.trim().toLowerCase();const f=$('#donor-f').value;const legal=$('#donor-legal').checked;const notes=$('#donor-notes').checked;
@@ -322,18 +328,20 @@ function renderDonors(){const q=$('#donor-q').value.trim().toLowerCase();const f
 ['#donor-q','#donor-f','#donor-legal','#donor-notes'].forEach(s=>$(s).addEventListener('input',()=>{dState.limit=PAGE;renderDonors();}));sortable($('#donor-table'),dState,renderDonors);renderDonors();
 $('#donor-csv').addEventListener('click',()=>{const legal=$('#donor-legal').checked;csv([['Donor','Display name','Anonymous','Total','Gifts','Pledged','Online','First gift','Email','City','Prospect ask','Sponsor','Table','Relationship']].concat(sortRows(dView,dState).map(d=>[legal||!d.anon?d.name:d.display,d.display,d.anon?'yes':'',d.total/100,d.count,d.pledged/100,d.paid/100,d.firstLabel,d.email,d.city,d.prospect?d.prospect.ask/100:'',d.sponsor,d.table,d.rel])),'donors.csv');});
 
-// Gifts
+}
+if(document.getElementById('gift-table')){
 const gState={key:'t',dir:'asc',limit:PAGE};let gView=[];
-function renderGifts(){const q=$('#gift-q').value.trim().toLowerCase();const f=$('#gift-f').value;const legal=$('#donor-legal').checked;
+function renderGifts(){const q=$('#gift-q').value.trim().toLowerCase();const f=$('#gift-f').value;const legal=$('#gift-legal').checked;
  gView=R.gifts.filter(g=>{if(f==='active'&&g.status!=='active')return false;if(f==='voided'&&g.status!=='voided')return false;if(f==='pledge'&&g.method!=='pledge')return false;if(f==='online'&&g.source!=='online')return false;if(f==='amended'&&!g.amended)return false;if(f==='anon'&&!g.anon)return false;if(f==='notes'&&!g.notes)return false;if(!q)return true;return [legal||!g.anon?g.donor:'',g.display,g.by,g.notes,g.email,g.city,g.table,g.seated].join(' ').toLowerCase().includes(q);});
  const rows=sortRows(gView,gState);$('#gift-count').textContent=rows.length+' entries · '+usd0(rows.filter(g=>g.status==='active').reduce((s,g)=>s+g.amount,0))+' active';
  const shown=paged(rows,gState,$('#gift-more'),renderGifts);
  $('#gift-table tbody').innerHTML=shown.map(g=>{const flags=[];if(g.status==='voided')flags.push(pill('deleted','red'));if(g.amended)flags.push(pill('was '+usd0(g.original),'orange'));if(g.anon)flags.push(pill('anon','gold'));if(g.recurring)flags.push(pill('monthly','green'));if(g.restriction==='Zakat')flags.push(pill('zakat','green'));if(g.prospect&&(legal||!g.anon))flags.push(pill('prospect','navy'));if(g.seated&&(legal||!g.anon))flags.push(pill('table '+g.seated.split(':')[0]));
   return '<tr'+(g.status==='voided'?' style="opacity:.55"':'')+'><td class="name">'+esc(g.anon&&!legal?g.display:g.donor)+'<span class="sub">'+esc(g.time)+'</span></td>'+td('Amount','<b>'+usd(g.amount)+'</b>','r amt')+td('Method',esc(g.method))+td('Source',esc(g.source))+td('Recorded by',esc(g.by))+td('Flags',flags.join(''))+td('Note',esc(g.notes),'dim')+'</tr>';}).join('');}
-['#gift-q','#gift-f'].forEach(s=>$(s).addEventListener('input',()=>{gState.limit=PAGE;renderGifts();}));$('#donor-legal').addEventListener('input',renderGifts);sortable($('#gift-table'),gState,renderGifts);renderGifts();
+['#gift-q','#gift-f','#gift-legal'].forEach(s=>$(s).addEventListener('input',()=>{gState.limit=PAGE;renderGifts();}));sortable($('#gift-table'),gState,renderGifts);renderGifts();
 $('#gift-csv').addEventListener('click',()=>csv([['Time','Donor','Display','Anonymous','Amount','Method','Source','Recorded by','Status','Corrected from','Note','Restriction','Recurring','City']].concat(sortRows(gView,gState).map(g=>[g.time,g.donor,g.display,g.anon?'yes':'',g.amount/100,g.method,g.source,g.by,g.status,g.amended?g.original/100:'',g.notes,g.restriction,g.recurring?'monthly':'',g.city])),'gifts.csv'));
 
-// Prospects
+}
+if(document.getElementById('prospect-table')){
 const pState={key:'ask',dir:'desc'};
 function renderProspects(){const rows=sortRows(R.prospects.map(p=>({...p,delta:p.ask&&p.actual!==null?p.actual-p.ask:null})),pState);
  $('#prospect-table tbody').innerHTML=rows.map(p=>{const st=p.actual===null?pill('no gift recorded','red'):p.ask&&p.actual<p.ask?pill('below ask','orange'):p.ask?pill('met ask','green'):pill('gave','green');
@@ -342,13 +350,15 @@ sortable($('#prospect-table'),pState,renderProspects);renderProspects();
 $('#table-table tbody').innerHTML=R.tables.map(t=>'<tr><td class="name">Table '+esc(t.number)+'</td>'+td('Host',esc(t.host)+'<span class="sub">'+esc(t.donors.join(', '))+'</span>')+td('Gifts',t.count,'r')+td('Raised','<b>'+usd0(t.raised)+'</b>','r')+'</tr>').join('');
 $('#sponsor-table tbody').innerHTML=R.sponsors.filter(s=>s.gave!==null).sort((a,b)=>b.gave-a.gave).map(s=>'<tr><td class="name">'+esc(s.org)+'<span class="sub">'+esc(s.donor)+'</span></td>'+td('Tier',esc(s.tier))+td('Package',usd0(s.cost),'r')+td('Appeal gift','<b>'+usd0(s.gave)+'</b>','r')+'</tr>').join('')||'<tr><td class="dim">No sponsor matched an appeal gift by name.</td></tr>';
 
-// Follow-up
+}
+if(document.getElementById('pledge-table')){
 $('#pledge-table tbody').innerHTML=R.donors.filter(d=>d.pledged).sort((a,b)=>b.pledged-a.pledged).map(d=>'<tr><td class="name">'+esc(d.anon?d.display+' (anonymous)':d.name)+'</td>'+td('Pledged','<b>'+usd0(d.pledged)+'</b>','r amt')+td('Recorded by',esc(d.by))+td('Table',esc(d.table),'dim')+'</tr>').join('');
 $('#missing-table tbody').innerHTML=R.stats.prospects_missing.sort((a,b)=>b.ask-a.ask).map(p=>'<tr><td class="name">'+esc(p.name)+'</td>'+td('Ask','<b>'+usd0(p.ask)+'</b>','r amt')+td('Notes',esc(p.notes),'dim')+'</tr>').join('');
 $('#declined-table tbody').innerHTML=R.declined.map(t=>'<tr><td class="name">'+esc(t.name)+'<span class="sub">'+esc(t.email)+'</span></td>'+td('Time',esc(t.time),'dim')+td('Amount',usd(t.amount),'r')+td('Payment',esc(t.payment),'dim')+'</tr>').join('')||'<tr><td class="dim">No declined attempts.</td></tr>';
 const tState={limit:PAGE};function renderTickets(){const shown=paged(R.tickets_no_gift,tState,$('#ticket-more'),renderTickets);$('#ticket-table tbody').innerHTML=shown.map(t=>'<tr><td class="name">'+esc(t.name)+'</td>'+td('Email',esc(t.email),'dim')+td('Tickets',t.tickets,'r')+td('Order',esc(t.items),'dim')+'</tr>').join('');}renderTickets();
 if(document.getElementById('bloom-table'))$('#bloom-table tbody').innerHTML=R.donors.filter(d=>d.bloomerang).map(d=>{const b=d.bloomerang;return '<tr><td class="name">'+esc(d.anon?d.display:d.name)+'</td>'+td('Tonight','<b>'+usd0(d.total)+'</b>','r amt')+td('Lifetime',usd0(b.lifetime),'r')+td('Gifts',b.count,'r')+td('First gift',esc(b.first))+td('Last gift',esc(b.last)+' · '+usd0(b.lastAmount))+td('Last gala',b.gala?usd0(b.gala):'','r')+td('Years',esc(b.years.join(', ')),'dim')+'</tr>';}).join('');
 
+}
 // Charts: inline SVG sized to the container, re-drawn on resize.
 const svg=(w,h,inner)=>'<svg class="chart" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="aspect-ratio:'+w+'/'+h+'" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="goldfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C59B27" stop-opacity=".35"/><stop offset="1" stop-color="#C59B27" stop-opacity="0"/></linearGradient></defs>'+inner+'</svg>';
 const widthOf=id=>Math.max(300,Math.floor(document.getElementById(id).clientWidth||600));
@@ -363,12 +373,13 @@ function timeline(){const T=R.stats.timeline;if(!T.length)return;const W=widthOf
 function bands(){const B=R.stats.bands;const W=widthOf('chart-bands'),rowH=30,L=Math.min(150,W*.32),H=B.length*rowH+20;const max=Math.max(1,...B.map(b=>b.cents));let out='';B.forEach((b,i)=>{const y=6+i*rowH;const w=Math.max(2,(W-L-100)*b.cents/max);out+='<text x="'+(L-8)+'" y="'+(y+19)+'" text-anchor="end">'+esc(b.label)+'</text><rect class="bar gold" x="'+L+'" y="'+(y+5)+'" width="'+w+'" height="'+(rowH-11)+'" rx="2"/><text x="'+(L+w+6)+'" y="'+(y+19)+'">'+short(b.cents)+' · '+b.count+'</text>';});$('#chart-bands').innerHTML=svg(W,H,out);}
 function mix(){const S=R.stats;const W=widthOf('chart-mix');const parts=[['Ballroom pledges',S.pledge_cents,'#1E2A4A'],['Online cards',S.online_cents,'#C59B27'],['Other paid in room',S.manual_paid_cents,'#7C9AC0']].filter(p=>p[1]>0);const total=parts.reduce((s,p)=>s+p[1],0);let x=0,out='';parts.forEach(p=>{const w=W*p[1]/total;out+='<rect x="'+x+'" y="6" width="'+w+'" height="34" fill="'+p[2]+'"/>';if(w>60)out+='<text x="'+(x+8)+'" y="28" style="fill:#fff;font-weight:600">'+Math.round(100*p[1]/total)+'%</text>';x+=w;});let y=64;parts.forEach(p=>{out+='<rect x="0" y="'+(y-10)+'" width="10" height="10" rx="2" fill="'+p[2]+'"/><text x="16" y="'+y+'">'+esc(p[0])+' · '+usd0(p[1])+'</text>';y+=18;});const z=S.zakat_cents,g=S.general_cents;if(z+g){out+='<text class="lbl" x="0" y="'+(y+12)+'">ONLINE RESTRICTION</text>';const zw=W*z/(z+g);out+='<rect x="0" y="'+(y+20)+'" width="'+zw+'" height="22" fill="#2F6B3A"/><rect x="'+zw+'" y="'+(y+20)+'" width="'+(W-zw)+'" height="22" fill="#D8D3C8"/><text x="0" y="'+(y+58)+'">Zakat '+usd0(z)+' ('+Math.round(100*z/(z+g))+'%) · General '+usd0(g)+'</text>';y+=70;}$('#chart-mix').innerHTML=svg(W,y+4,out);}
 function pareto(){const D=R.donors.map(d=>d.total);const total=D.reduce((s,v)=>s+v,0);if(!total)return;const W=widthOf('chart-pareto'),H=170,L=40,top=10,ih=120;let cum=0;const pts=D.map((v,i)=>{cum+=v;return [L+(W-L-10)*(i+1)/D.length,top+ih-ih*cum/total];});let out='<line class="axis" x1="'+L+'" x2="'+(W-10)+'" y1="'+(top+ih)+'" y2="'+(top+ih)+'"/>';[0.5,0.8,1].forEach(f=>{const y=top+ih-ih*f;out+='<line class="axis" x1="'+L+'" x2="'+(W-10)+'" y1="'+y+'" y2="'+y+'" stroke-dasharray="2 4"/><text x="'+(L-6)+'" y="'+(y+4)+'" text-anchor="end">'+Math.round(f*100)+'%</text>';});out+='<path class="line" d="M'+L+','+(top+ih)+' L'+pts.map(p=>p[0]+','+p[1]).join(' L')+'"/>';let run=0,n50=0;for(let i=0;i<D.length;i++){run+=D[i];if(run>=total/2){n50=i+1;break;}}out+='<text class="lbl" x="'+L+'" y="'+(H-8)+'">'+n50+' OF '+D.length+' HOUSEHOLDS GAVE HALF THE TOTAL</text>';$('#chart-pareto').innerHTML=svg(W,H,out);}
-function charts(){timeline();bands();mix();pareto();}charts();let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(charts,150);});
+function charts(){if(document.getElementById('chart-timeline')){timeline();bands();mix();pareto();}}charts();let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(charts,150);});
 
 // Scroll-spy for the top nav.
-const links=[...document.querySelectorAll('.topnav a')];const secs=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
-if('IntersectionObserver' in window){const io=new IntersectionObserver(es=>{es.forEach(e=>{if(!e.isIntersecting)return;links.forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+e.target.id));const on=document.querySelector('.topnav a.on');if(on)on.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'});});},{rootMargin:'-40% 0px -55% 0px'});secs.forEach(s=>io.observe(s));}
+const links=[...document.querySelectorAll('.topnav a[href^="index.html#"]')];const secs=links.map(a=>document.getElementById(a.getAttribute('href').split('#')[1])).filter(Boolean);
+if('IntersectionObserver' in window){const io=new IntersectionObserver(es=>{es.forEach(e=>{if(!e.isIntersecting)return;links.forEach(a=>a.classList.toggle('on',a.getAttribute('href').endsWith('#'+e.target.id)));const on=document.querySelector('.topnav a.on');if(on)on.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'});});},{rootMargin:'-40% 0px -55% 0px'});secs.forEach(s=>io.observe(s));}
 })();
 </script>
 </body></html>`;
+  return { index: head + topbar("index.html") + body + script, donors: head + topbar("donors.html") + donorsBody + script };
 }
