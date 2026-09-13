@@ -86,7 +86,9 @@ function serveOperatorPage(req: Request, db: Database, file: string, roles: Oper
   return serveStaticFile(file);
 }
 
-const PUBLIC_PAGES: Record<string, string> = {
+// Every page is sign-in only: the chart, presenter, and history carry donor names and live totals.
+// The sign-in page itself, its static assets, and /api/control (which owns login) are the only unauthenticated surfaces.
+const SIGNED_IN_PAGES: Record<string, string> = {
   "/": "public/index.html",
   "/projector": "public/stage.html",
   "/presenter": "public/emcee.html",
@@ -94,9 +96,9 @@ const PUBLIC_PAGES: Record<string, string> = {
   "/presenter-preview": "public/preview.html",
   "/donations": "public/control.html",
   "/history": "public/history.html",
-  "/stats": "public/stats.html",
-  "/signin": "public/signin.html"
+  "/stats": "public/stats.html"
 };
+const ANY_ROLE: OperatorRole[] = ["admin", "operator"];
 
 const OPERATOR_PAGES: Record<string, { file: string; roles: OperatorRole[] }> = {
   "/settings": { file: "public/settings.html", roles: ["admin"] },
@@ -121,6 +123,7 @@ export const server = Bun.serve({
       const parts = pathname.split("/").filter(Boolean);
       const resource = parts[1];
       if (crossOriginWrite(req, url)) return withSecurity(Response.json({ error: "FORBIDDEN", message: "Cross-origin request refused" }, { status: 403 }), req);
+      if (resource !== "control" && !getSession(req, db)) return withSecurity(Response.json({ error: "UNAUTHORIZED", message: "Sign in required" }, { status: 401 }), req);
       const declaredLength = Number(req.headers.get("content-length") || 0);
       if (declaredLength > (resource === "control" ? MAX_CONTROL_BODY_BYTES : MAX_API_BODY_BYTES)) return withSecurity(Response.json({ error: "PAYLOAD_TOO_LARGE", message: "Request body too large" }, { status: 413 }), req);
       if (resource === "state") return withSecurity(parts[2] === "stream" ? handleStateStreamRequest(req, db) : handleStateRequest(req, db), req);
@@ -138,10 +141,11 @@ export const server = Bun.serve({
       return withSecurity(Response.json({ error: "NOT_FOUND", message: `API route ${pathname} not found` }, { status: 404 }), req);
     }
 
+    if (pathname === "/signin") return withSecurity(serveStaticFile("public/signin.html"), req);
     if (pathname === "/projector" && ["1", "true"].includes(url.searchParams.get("edit") || "")) {
       return withSecurity(serveOperatorPage(req, db, "public/stage.html", ["admin"]), req);
     }
-    if (PUBLIC_PAGES[pathname]) return withSecurity(serveStaticFile(PUBLIC_PAGES[pathname]), req);
+    if (SIGNED_IN_PAGES[pathname]) return withSecurity(serveOperatorPage(req, db, SIGNED_IN_PAGES[pathname], ANY_ROLE), req);
     const operatorPage = OPERATOR_PAGES[pathname];
     if (operatorPage) return withSecurity(serveOperatorPage(req, db, operatorPage.file, operatorPage.roles), req);
     if (/^\/(css|js|assets)\//.test(url.pathname)) return withSecurity(serveStaticFile(url.pathname.slice(1)), req);

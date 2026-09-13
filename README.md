@@ -20,7 +20,7 @@ Live fundraising bar chart and stage suite for nonprofit galas and benefit appea
 | Duplicate guards | The same donor and amount entered twice within 10 minutes is challenged before it counts. Pledge card numbers are unique. Online gifts import once, keyed by their Bloomerang transaction ID. |
 | No-backward chart | Once a figure is on the wall it never rolls back. A later delete is absorbed by the next gifts. |
 | Pause | Operators can hold the ballroom chart figure and hide its feed during an emergency, then resume. The presenter keeps updating so the podium always has the true total. |
-| Privacy shield | Public views show display names and financial data. Team notes, operator identities, card numbers, and anonymous donors' legal names require a signed-in operator. History also masks earlier names when a gift becomes anonymous. |
+| Privacy shield | Every page requires a signed-in account. Team notes, operator identities, card numbers, and anonymous donors' legal names are limited to the operator role. History also masks earlier names when a gift becomes anonymous. |
 | Backups | A consistent snapshot of the whole database is taken every 5 minutes when anything changed, and before any purge, reset, restore, or deploy. Administrators can download any snapshot or restore one. |
 
 ---
@@ -31,7 +31,7 @@ Administrators create one account per person in **Team and backups**, then hand 
 
 Accounts can also have a unique sign-in email. Add it when creating the account or use **Edit email** on its row. Email addresses are case-insensitive; the email and existing sign-in name use the same PIN and share the same lockout. Changing or removing an email does not change the PIN.
 
-Viewing does not require sign-in: Home totals, gift count and progress, Donations, History, Stats, the projector, and the presenter are public. Editing requires a named account. Public data pages offer **Sign in to edit** links rather than exposing edit controls. Settings, Team and backups, and Testing are administrative tools and require sign-in. Private CSV exports, team notes, and operator activity also require sign-in. Home uses the live ledger total, not the projector's held figure; an unavailable or invalid total is never displayed as zero or `NaN%`.
+Every page and API requires sign-in: Home, Donations, History, Stats, the projector, and the presenter render the sign-in screen for anyone without a session and return to the requested page after login. Only the sign-in page, its CSS/JS/asset files, and the login endpoint are reachable signed out. Settings, Team and backups, and Testing additionally require the administrator role. Home uses the live ledger total, not the projector's held figure; an unavailable or invalid total is never displayed as zero or `NaN%`.
 
 | | Operator | Administrator |
 | :--- | :---: | :---: |
@@ -77,7 +77,7 @@ The Fundraising token lives in a mode-600 file on the server (`GIVEBAR_FUNDRAISI
 2. **Rehearsal**: Testing → inject sample gifts, delete one inside 8 seconds and watch the chart never show it, practise Edit and Undo, check the presenter reads names correctly.
 3. **Purge**: Testing → **Purge Sample Data**, then **Re-sync chart to the real total**. Confirm Home shows the real total (online gifts already imported) and the chart restarts from it.
 4. **Settings**: goal, milestones, event title, QR target and printed URL, ask tiers, major-gift threshold, staging delay. Scan the QR on the real projector.
-5. **Room screens**: open `/projector?fullscreen=1` on the projector machine and `/presenter` on the podium tablet. Both are public URLs; nobody signs in on them.
+5. **Room screens**: sign in once on the projector machine and the podium tablet (sessions do not expire), then open `/projector?fullscreen=1` and `/presenter`.
 6. **Bloomerang**: Settings → Connections shows "Automatic import on" with a recent sync time. Make a $1 test gift online if you want to see it arrive (then delete it).
 7. **Backups**: Team and backups → **Snapshot now**, then **Download a fresh copy** and keep it on a laptop.
 8. **During the appeal**: one person watches Manage Donations for "Waiting to appear" and the stale banner; the emcee keeps `/presenter` open; nobody opens Settings or Testing.
