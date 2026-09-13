@@ -99,7 +99,7 @@ export async function writeWorkbook(report: Report, path: string): Promise<void>
     { header: "Recorded by", key: "by", width: 18 }, { header: "Table", key: "table", width: 8 }, { header: "Pronunciation", key: "phonetic", width: 16 }, { header: "Team note", key: "notes", width: 30, wrap: true }, { header: "Note, plain", key: "plain", width: 40, wrap: true },
     { header: "Original amount", key: "original", width: 14, money: true }, { header: "Amended", key: "amended", width: 10 }, { header: "Void reason", key: "void", width: 24 }, { header: "Minutes into appeal", key: "minutes", width: 12 },
     { header: "Email (online)", key: "email", width: 28 }, { header: "City", key: "city", width: 16 }, { header: "State", key: "state", width: 8 }, { header: "ZIP", key: "zip", width: 8 }, { header: "Restriction", key: "restriction", width: 11 }, { header: "Recurring", key: "recurring", width: 10 },
-    { header: "Fee", key: "fee", width: 10, money: true }, { header: "Fee covered by donor", key: "assist", width: 12, money: true }, { header: "Net", key: "net", width: 12, money: true }, { header: "Card / payment", key: "payment", width: 16 }, { header: "Qgiv transaction", key: "txn", width: 14 },
+    { header: "Fee", key: "fee", width: 10, money: true }, { header: "Fee covered by donor", key: "assist", width: 12, money: true }, { header: "Net", key: "net", width: 12, money: true }, { header: "Card / payment", key: "payment", width: 16 }, { header: "Transaction ID", key: "txn", width: 14 },
     { header: "Prospect match", key: "prospect", width: 26 }, { header: "Ask", key: "ask", width: 12, money: true }, { header: "Sponsor match", key: "sponsor", width: 26 }, { header: "Ticket buyer", key: "ticket", width: 26 }, { header: "Seated at table", key: "seated", width: 26 },
     { header: "Bloomerang lifetime", key: "bl_lifetime", width: 14, money: true }, { header: "Bloomerang last gift", key: "bl_last", width: 16 }, { header: "Last gala gift", key: "bl_gala", width: 14, money: true },
     { header: "Donation ID", key: "id", width: 26 }, { header: "Ledger seq", key: "seq", width: 8 }
@@ -110,7 +110,7 @@ export async function writeWorkbook(report: Report, path: string): Promise<void>
     prospect: g.prospect?.name || "", ask: g.prospect?.ask_cents ? money(g.prospect.ask_cents) : "", sponsor: g.sponsor ? `${g.sponsor.org} (${g.sponsor.tier})` : "", ticket: g.ticket ? `${g.ticket.name} · ${g.ticket.tickets} ticket(s)` : "", seated: g.table ? `Table ${g.table.number}: ${g.table.host}` : "",
     bl_lifetime: g.bloomerang ? money(g.bloomerang.lifetime_cents) : "", bl_last: g.bloomerang?.last_gift ? `${g.bloomerang.last_gift.slice(0, 10)} · ${(g.bloomerang.last_gift_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}` : "", bl_gala: g.bloomerang?.last_gala_cents ? money(g.bloomerang.last_gala_cents) : "",
     id: g.donation_id, seq: g.seq
-  })), "One row per gift ever recorded, including voided ones (see Status). Times are local to the event. Internal: legal names of anonymous donors and staff names are included.");
+  })), "One row per gift ever recorded, including deleted ones (see Status). Times are Eastern. Includes names of anonymous donors and staff.");
 
   // Donors
   addTable(workbook, "Donors", [
@@ -131,38 +131,38 @@ export async function writeWorkbook(report: Report, path: string): Promise<void>
   addTable(workbook, "Pledges to collect", [
     { header: "Donor", key: "name", width: 30 }, { header: "Pledged", key: "pledged", width: 14, money: true }, { header: "Gifts", key: "count", width: 7 }, { header: "Recorded by", key: "by", width: 18 }, { header: "Time", key: "time", width: 20, date: true }, { header: "Table", key: "table", width: 24 }, { header: "Team note", key: "notes", width: 36, wrap: true }, { header: "Anonymous", key: "anon", width: 10 }, { header: "Ask on prospect list", key: "ask", width: 14, money: true }
   ], report.donors.filter(d => d.pledged_cents > 0).map(d => ({ name: d.name, pledged: money(d.pledged_cents), count: d.gifts.filter(g => g.payment_method === "pledge").length, by: [...new Set(d.gifts.map(g => g.entered_by))].join(", "), time: d.first_gift_at, table: d.table ? `Table ${d.table.number}: ${d.table.host}` : d.gifts.find(g => g.table_number)?.table_number || "", notes: d.gifts.map(g => g.notes).filter(Boolean).join(" | "), anon: d.is_anonymous ? "yes" : "", ask: d.prospect?.ask_cents ? money(d.prospect.ask_cents) : "" })),
-    "Pledges recorded in the ballroom are not yet cash. Thank within 48 hours with a payment link; call every major pledge personally.");
+    "Ballroom pledges. Check the Payment column on the Gifts sheet: many arrived as checks or cash on the night.");
 
   addTable(workbook, "Prospects vs actual", [
     { header: "Prospect", key: "name", width: 32 }, { header: "Gave earlier in 2026", key: "before", width: 16, money: true }, { header: "Ask", key: "ask", width: 12, money: true }, { header: "Assumed gift", key: "assumed", width: 12, money: true }, { header: "Gave tonight", key: "actual", width: 14, money: true }, { header: "vs. ask", key: "delta", width: 12, money: true }, { header: "Status", key: "status", width: 16 }, { header: "Matched donor row", key: "matched", width: 30 }, { header: "Notes", key: "notes", width: 36, wrap: true }
   ], report.prospects.map(p => { const d = report.donors.find(x => x.prospect === p); const actual = d ? d.total_cents : 0; return { name: p.name, before: p.gave_before_cents ? money(p.gave_before_cents) : "", ask: p.ask_cents ? money(p.ask_cents) : "", assumed: p.assumed_cents ? money(p.assumed_cents) : "", actual: d ? money(actual) : "", delta: p.ask_cents ? money(actual - p.ask_cents) : "", status: !d ? "no gift recorded" : p.ask_cents && actual < p.ask_cents ? "below ask" : p.ask_cents ? "met or exceeded ask" : "gave", matched: d ? `${d.name} (${d.gifts.length} gift${d.gifts.length === 1 ? "" : "s"})` : "", notes: p.notes }; }),
-    "Staff major-donor ask list (MASTER workbook, Donors 2026) against what the ledger recorded tonight. Name matching is automatic; verify a blank before you call.");
+    "The staff ask list (MASTER workbook, Donors 2026) against the ledger. Matching is by name; check a blank before you call.");
 
   addTable(workbook, "Declined online", [
-    { header: "Attempted (local)", key: "time", width: 20, date: true }, { header: "Name", key: "name", width: 28 }, { header: "Email", key: "email", width: 30 }, { header: "Amount", key: "amount", width: 12, money: true }, { header: "Status", key: "status", width: 12 }, { header: "Payment", key: "payment", width: 16 }, { header: "City", key: "city", width: 16 }, { header: "Restriction", key: "restriction", width: 11 }, { header: "Qgiv transaction", key: "txn", width: 14 }
+    { header: "Attempted (local)", key: "time", width: 20, date: true }, { header: "Name", key: "name", width: 28 }, { header: "Email", key: "email", width: 30 }, { header: "Amount", key: "amount", width: 12, money: true }, { header: "Status", key: "status", width: 12 }, { header: "Payment", key: "payment", width: 16 }, { header: "City", key: "city", width: 16 }, { header: "Restriction", key: "restriction", width: 11 }, { header: "Transaction ID", key: "txn", width: 14 }
   ], report.qgiv.declined.map(t => ({ time: t.date_ms, name: t.donor, email: t.email, amount: money(t.amount_cents), status: t.status, payment: t.payment, city: [t.city, t.state].filter(Boolean).join(", "), restriction: t.restriction, txn: t.id })),
-    "Online attempts that did not go through and were not followed by an accepted gift from the same email. A short recovery email with the donate link is the cheapest money on this list.");
+    "Online payments that failed, with no later successful gift from the same email. Email them the donate link.");
 
   addTable(workbook, "Sponsors", [
     { header: "Organization", key: "org", width: 34 }, { header: "Tier", key: "tier", width: 10 }, { header: "Sponsorship", key: "cost", width: 12, money: true }, { header: "Point of contact", key: "poc", width: 24 }, { header: "Payment status", key: "pay", width: 22 }, { header: "Gift recorded tonight", key: "gave", width: 14, money: true }, { header: "Matched donor", key: "donor", width: 28 }, { header: "Table assigned", key: "table", width: 12 }
   ], report.sponsors.map(sp => { const d = report.donors.find(x => x.sponsor === sp); return { org: sp.org, tier: sp.tier, cost: money(sp.cost_cents), poc: sp.poc, pay: sp.payment_status, gave: d ? money(d.total_cents) : "", donor: d?.name || "", table: sp.table }; }),
-    "Sponsorship packages from the MASTER workbook (Active Sponsors). Gift recorded tonight is an additional appeal gift under the organisation or its contact's name.");
+    "Sponsorships from the MASTER workbook. \"Gift recorded\" is an appeal gift under the organisation or its contact's name, on top of the package.");
 
   addTable(workbook, "Ticket buyers", [
     { header: "Name", key: "name", width: 30 }, { header: "Email", key: "email", width: 30 }, { header: "Tickets", key: "tickets", width: 8 }, { header: "Order", key: "items", width: 44 }, { header: "Gift recorded", key: "gave", width: 14, money: true }, { header: "Matched donor", key: "donor", width: 28 }
   ], report.tickets.filter(t => !t.cancelled).map(t => { const d = report.donors.find(x => x.ticket === t); return { name: t.name, email: t.email, tickets: t.tickets, items: t.items, gave: d ? money(d.total_cents) : "", donor: d?.name || "" }; }).sort((a, b) => (a.gave === "" ? 0 : 1) - (b.gave === "" ? 0 : 1)),
-    "Ticket Tailor orders from the MASTER workbook. Buyers without a gift are the first post-gala email segment.");
+    "Ticket Tailor orders from the MASTER workbook.");
 
   addTable(workbook, "Tables", [
     { header: "Table", key: "number", width: 8 }, { header: "Host / table name", key: "host", width: 32 }, { header: "Seats", key: "seats", width: 10 }, { header: "Gifts from this table", key: "count", width: 10 }, { header: "Raised", key: "raised", width: 14, money: true }, { header: "Donors matched", key: "donors", width: 40, wrap: true }, { header: "Guests", key: "guests", width: 60, wrap: true }
   ], report.tables.map(t => { const ds = report.donors.filter(d => d.table === t); return { number: t.number, host: t.host, seats: `${t.occupied}/${t.allotted}`, count: ds.reduce((n, d) => n + d.gifts.length, 0), raised: money(ds.reduce((n, d) => n + d.total_cents, 0)), donors: ds.map(d => `${d.name} (${(d.total_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })})`).join(", "), guests: t.guests }; }).sort((a, b) => b.raised - a.raised),
-    "Seating from the MASTER workbook (Final Tables). Gifts are matched to a table by donor or guest name; Givebar's own table field is on the Gifts sheet.");
+    "Seating from the MASTER workbook. Gifts are matched to a table by donor or guest name.");
 
-  addTable(workbook, "Online detail (Qgiv)", [
+  addTable(workbook, "Online detail", [
     { header: "Transaction", key: "id", width: 12 }, { header: "Date", key: "time", width: 20, date: true }, { header: "Status", key: "status", width: 10 }, { header: "Donor", key: "donor", width: 28 }, { header: "Email", key: "email", width: 30 }, { header: "Gift", key: "amount", width: 12, money: true }, { header: "Fee covered", key: "assist", width: 12, money: true }, { header: "Fee", key: "fee", width: 10, money: true }, { header: "Net", key: "net", width: 12, money: true },
     { header: "Restriction", key: "restriction", width: 11 }, { header: "Recurring", key: "recurring", width: 10 }, { header: "Payment", key: "payment", width: 16 }, { header: "City", key: "city", width: 16 }, { header: "State", key: "state", width: 10 }, { header: "ZIP", key: "zip", width: 8 }, { header: "Employer", key: "employer", width: 20 }
   ], report.qgiv.all.map(t => ({ id: t.id, time: t.date_ms, status: t.status, donor: t.donor, email: t.email, amount: money(t.amount_cents), assist: money(t.gift_assist_cents), fee: money(t.fee_cents), net: money(t.net_cents), restriction: t.restriction, recurring: t.recurring ? "monthly" : "", payment: t.payment, city: t.city, state: t.state, zip: t.zip, employer: t.employer })),
-    `Every transaction on the Qgiv form "${report.qgiv.form_name}" since January 1, pulled ${report.qgiv.pulled_at}. Accepted rows are the online gifts in the ledger.`);
+    `Every transaction on the Bloomerang Fundraising form "${report.qgiv.form_name}" since January 1, pulled ${report.qgiv.pulled_at}. Accepted rows are the online gifts in the ledger.`);
 
   addTable(workbook, "Timeline", [
     { header: "15-minute window", key: "label", width: 16 }, { header: "Gifts", key: "count", width: 8 }, { header: "Raised in window", key: "cents", width: 16, money: true }, { header: "Running total", key: "cumulative", width: 16, money: true }
@@ -171,7 +171,7 @@ export async function writeWorkbook(report: Report, path: string): Promise<void>
   addTable(workbook, "Event log", [
     { header: "Seq", key: "seq", width: 7 }, { header: "Time (local)", key: "time", width: 20, date: true }, { header: "Event", key: "type", width: 12 }, { header: "Donation ID", key: "id", width: 26 }, { header: "Amount", key: "amount", width: 12, money: true }, { header: "Donor", key: "donor", width: 28 }, { header: "Display name", key: "display", width: 26 }, { header: "Anonymous", key: "anon", width: 10 }, { header: "Method", key: "method", width: 9 }, { header: "Source", key: "source", width: 11 }, { header: "By", key: "by", width: 18 }, { header: "Notes", key: "notes", width: 40, wrap: true }, { header: "Supersedes", key: "supersedes", width: 10 }
   ], report.events.map(e => ({ seq: e.seq, time: e.created_at, type: e.event_type, id: e.donation_id, amount: e.amount_cents ? money(e.amount_cents) : "", donor: e.donor_name || "", display: e.display_name || "", anon: e.is_anonymous ? "yes" : "", method: e.payment_method || "", source: e.source || "", by: e.entered_by || "", notes: e.notes || "", supersedes: e.supersedes_seq ?? "" })),
-    "The append-only Givebar ledger, every event in order: create, amend, void, restore, match_apply, match_release. This is the audit trail behind every other sheet.");
+    "Every ledger event in order: create, amend, void, restore. The audit trail behind every other sheet.");
 
   if (report.bloomerang.connected) addTable(workbook, "Lapsed gala donors", [
     { header: "Name", key: "name", width: 32 }, { header: "Email", key: "email", width: 30 }, { header: "Last year's gala", key: "gala", width: 14, money: true }, { header: "Lifetime before tonight", key: "lifetime", width: 16, money: true }, { header: "Last gift", key: "last", width: 12 }

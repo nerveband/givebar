@@ -432,7 +432,7 @@ export async function buildReport(config: Config): Promise<Report> {
   const underAsk = donors.filter(d => d.prospect && d.prospect.ask_cents > 0 && d.total_cents < d.prospect.ask_cents).map(d => ({ prospect: d.prospect!, donor: d }));
   const ticketBuyers = master.tickets.filter(t => !t.cancelled);
   const ticketBuyersGave = ticketBuyers.filter(t => donors.some(d => d.ticket === t)).length;
-  const operators = [...active.reduce((m, g) => { const k = g.source === "online" ? "Online (Qgiv import)" : g.entered_by || "Operator"; const v = m.get(k) || { name: k, count: 0, cents: 0 }; v.count++; v.cents += g.amount_cents; return m.set(k, v); }, new Map<string, { name: string; count: number; cents: number }>()).values()].sort((a, b) => b.cents - a.cents);
+  const operators = [...active.reduce((m, g) => { const k = g.source === "online" ? "Bloomerang Fundraising (online)" : g.entered_by || "Operator"; const v = m.get(k) || { name: k, count: 0, cents: 0 }; v.count++; v.cents += g.amount_cents; return m.set(k, v); }, new Map<string, { name: string; count: number; cents: number }>()).values()].sort((a, b) => b.cents - a.cents);
   const milestones = getMilestones(db, goal).map(m => ({ label: m.label, cents: m.cents ?? 0, reached_at: (() => { let run = 0; for (const g of active) { run += g.amount_cents; if (run >= (m.cents ?? 0)) return g.created_at; } return null; })() }));
   const askTiers = getAskTiers(db).map(t => ({ label: t.label, cents: t.cents, hits: active.filter(g => g.amount_cents === t.cents).length }));
   const majors = active.filter(g => g.amount_cents >= state.major_gift_threshold_cents);

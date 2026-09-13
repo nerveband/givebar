@@ -23,7 +23,7 @@ export const PAGES: { file: string; label: string }[] = [
   { file: "index.html", label: "Overview" }, { file: "donors.html", label: "Donors" }, { file: "gifts.html", label: "Gifts" }, { file: "crossref.html", label: "Cross-reference" }, { file: "followup.html", label: "Follow-up" }
 ];
 
-/** The browser-side payload: enough for tables and charts, no Qgiv card data. */
+/** The browser-side payload: enough for tables and charts, no card data. */
 function viewPayload(r: Report) {
   const gift = (g: Gift) => ({ id: g.donation_id, t: g.created_at, time: g.local_time, donor: g.donor_name, display: g.display_name, anon: g.is_anonymous, amount: g.amount_cents, method: g.payment_method, source: g.source, by: g.entered_by, status: g.status, notes: g.notes, plain: g.note_plain, collection: g.collection, ref: g.collection_ref, table: g.table_number, amended: g.amended, original: g.original_amount_cents, restriction: g.qgiv?.restriction || "", recurring: !!g.qgiv?.recurring, city: g.qgiv ? [g.qgiv.city, g.qgiv.state].filter(Boolean).join(", ") : "", email: g.qgiv?.email || "", prospect: g.prospect?.name || "", ticket: !!g.ticket, seated: g.table ? `${g.table.number}: ${g.table.host}` : "" });
   const donor = (d: Donor) => ({ key: d.key, name: d.name, display: d.display_name, anon: d.is_anonymous, total: d.total_cents, count: d.gifts.length, pledged: d.pledged_cents, paid: d.paid_cents, largest: d.largest_cents, first: d.first_gift_at, firstLabel: localTime(d.first_gift_at, r.config.timezone), rel: d.relationship, email: d.email, city: d.city, restriction: d.restriction, collections: [...new Set(d.gifts.map(g => g.collection))], sources: d.sources.join("+"), by: [...new Set(d.gifts.filter(g => g.source === "manual").map(g => g.entered_by))].join(", "), prospect: d.prospect ? { name: d.prospect.name, ask: d.prospect.ask_cents, before: d.prospect.gave_before_cents, notes: d.prospect.notes } : null, sponsor: d.sponsor ? `${d.sponsor.org} (${d.sponsor.tier})` : "", ticket: d.ticket ? `${d.ticket.tickets} ticket(s)` : "", table: d.table ? `${d.table.number}: ${d.table.host}` : "", bloomerang: d.bloomerang ? { lifetime: d.bloomerang.lifetime_cents, count: d.bloomerang.gift_count, first: d.bloomerang.first_gift.slice(0, 10), last: d.bloomerang.last_gift.slice(0, 10), lastAmount: d.bloomerang.last_gift_cents, gala: d.bloomerang.last_gala_cents, years: d.bloomerang.years_active, galas: d.bloomerang.galas, monthly: d.bloomerang.monthly, records: d.bloomerang.records } : null, notes: d.gifts.map(g => g.note_plain || g.notes).filter(Boolean).join(" ") });
@@ -201,19 +201,19 @@ ${body}
       ${stat("Major gifts", String(s.major_count), `${money0(s.major_cents)} at ${money0(r.event.major_gift_threshold_cents)}+`)}
     </div>
   </div>
-  <p class="print-story"><b>In short.</b> The room gave ${esc(money0(s.total_cents))}, ${esc(pct(s.pct_of_goal))} of the goal. ${esc(money0(s.collection.online.cents))} is already paid online and ${esc(money0(s.collection.check.cents + s.collection.cash.cents))} arrived as checks and cash. ${esc(money0(s.collection.pledge.cents))} is pledged and needs an invoice. ${s.repeat_donors} households had given before; ${s.new_donors} gave for the first time. The next pages give the numbers, the actions for this week, the timeline, the giving history, and the website traffic; the detailed lists are online.</p>
+  <p class="print-story"><b>In short.</b> The gala raised ${esc(money0(s.total_cents))}, ${esc(pct(s.pct_of_goal))} of the goal. ${esc(money0(s.collection.online.cents))} is already paid online and ${esc(money0(s.collection.check.cents + s.collection.cash.cents))} arrived as checks and cash. ${esc(money0(s.collection.pledge.cents))} is pledged and needs an invoice. ${s.repeat_donors} households had given before; ${s.new_donors} gave for the first time. The next pages cover the numbers, this week's actions, the timeline, giving history, and website traffic. The full lists are online.</p>
   <div class="hero-foot">
     <span class="prepared">Prepared by <img alt="wavedepth" src="data:image/svg+xml;base64,${wdLogo("#FFFFFF")}"></span>
-    <span>Internal to the ${esc(c.client)} team. Contains donor names, pledges, and staff notes. Generated ${esc(generated)}.</span>
+    <span>For the ${esc(c.client)} team only. Generated ${esc(generated)}.</span>
   </div>
 </div></section>
 <main>
 <section class="sec" id="summary"><div class="wrap">
-  ${head("Summary", "The night <em>in numbers</em>", `Sources: the Givebar ledger, the Qgiv donation form, the staff MASTER workbook, and Bloomerang. Times are ${esc(c.timezone.replace("_", " "))}.`)}
+  ${head("Summary", "The night <em>in numbers</em>", `Sources: the Givebar ledger, the Bloomerang Fundraising form, the staff MASTER workbook, and the Bloomerang CRM. Times are Eastern.`)}
   <h3 style="margin-top:28px">How the money arrives</h3>
   <div class="stats" style="margin-top:0">
-    ${stat("Paid online", money0(s.collection.online.cents), `${s.collection.online.count} card gifts, net ${money0(s.net_online_cents)}`)}
-    ${stat("Checks received", money0(s.collection.check.cents), `${s.collection.check.count} checks, numbers on the Gifts page`)}
+    ${stat("Paid online", money0(s.collection.online.cents), `${s.collection.online.count} gifts, net ${money0(s.net_online_cents)}`)}
+    ${stat("Checks received", money0(s.collection.check.cents), `${s.collection.check.count} checks`)}
     ${stat("Cash received", money0(s.collection.cash.cents), `${s.collection.cash.count} gifts`)}
     ${stat("Card on pledge card", money0(s.collection.card.cents), `${s.collection.card.count} to charge`)}
     ${stat("Pledge to invoice", money0(s.collection.pledge.cents), `${s.collection.pledge.count} gifts`)}
@@ -231,13 +231,13 @@ ${body}
   </div>
   <div class="two" style="margin-top:8px">
     <div><h3>Milestones</h3><div class="tbl"><table><thead><tr><th>Level</th><th class="r">Amount</th><th>Reached</th></tr></thead><tbody>${r.milestones.map(m => `<tr><td class="name">${esc(m.label)}</td><td class="r" data-l="Amount">${esc(money0(m.cents))}</td><td data-l="Reached">${m.reached_at ? esc(localTime(m.reached_at, c.timezone, { hour: "numeric", minute: "2-digit" })) : '<span class="pill">not reached</span>'}</td></tr>`).join("")}</tbody></table></div></div>
-    <div><h3>Who recorded</h3><div class="tbl"><table><thead><tr><th>Source</th><th class="r">Gifts</th><th class="r">Amount</th></tr></thead><tbody>${s.operators.map(o => `<tr><td class="name">${esc(o.name)}</td><td class="r" data-l="Gifts">${o.count}</td><td class="r" data-l="Amount">${esc(money0(o.cents))}</td></tr>`).join("")}</tbody></table></div>
-    <h3>Quick amounts <small>gifts at exactly the tier</small></h3><div class="tbl"><table><thead><tr><th>Tier</th><th class="r">Gifts</th></tr></thead><tbody>${r.ask_tiers.map(t => `<tr><td class="name">${esc(t.label)}</td><td class="r" data-l="Gifts">${t.hits}</td></tr>`).join("")}</tbody></table></div></div>
+    <div><h3>Recorded by</h3><div class="tbl"><table><thead><tr><th>Source</th><th class="r">Gifts</th><th class="r">Amount</th></tr></thead><tbody>${s.operators.map(o => `<tr><td class="name">${esc(o.name)}</td><td class="r" data-l="Gifts">${o.count}</td><td class="r" data-l="Amount">${esc(money0(o.cents))}</td></tr>`).join("")}</tbody></table></div>
+    <h3>Quick amounts <small>gifts at exactly that amount</small></h3><div class="tbl"><table><thead><tr><th>Tier</th><th class="r">Gifts</th></tr></thead><tbody>${r.ask_tiers.map(t => `<tr><td class="name">${esc(t.label)}</td><td class="r" data-l="Gifts">${t.hits}</td></tr>`).join("")}</tbody></table></div></div>
   </div>
 </div></section>
 
 <section class="sec" id="takeaways"><div class="wrap">
-  ${head("Takeaways", "What to do <em>this week</em>", "Actions first, then risks, then context. Each one says where the list is.")}
+  ${head("Takeaways", "What to do <em>this week</em>", "Actions first, then risks, then context.")}
   <ol class="take">${takeaways.map(t => `<li class="${t.kind}"><span class="tag">${esc(kindLabel[t.kind])}</span><h4>${esc(t.title)}</h4>${t.body ? `<p>${esc(t.body)}</p>` : ""}</li>`).join("")}</ol>
 </div></section>
 
@@ -284,7 +284,7 @@ ${body}
 </div></section>
 
 <section class="sec" id="lists"><div class="wrap">
-  ${head("Detail", "The <em>lists</em>", "Each list is its own page, same password. The workbook has every column.")}
+  ${head("Detail", "The <em>lists</em>", "Each list is a page of its own, same password. The workbook has every column.")}
   <div class="stats">
     ${PAGES.slice(1).map(p => `<div class="stat"><div class="stat-label">${esc(p.label)}</div><div class="stat-value">${p.file === "donors.html" ? s.households : p.file === "gifts.html" ? r.gifts.length : p.file === "crossref.html" ? s.prospects_total : s.pledge_count}</div><div class="stat-sub">${p.file === "donors.html" ? "households" : p.file === "gifts.html" ? "ledger entries" : p.file === "crossref.html" ? "prospects, plus tables and sponsors" : "pledges, plus declines and tickets"}</div><p style="margin:10px 0 0"><a class="btn sm hide-print" href="${p.file}">Open</a><a class="btn sm print-only" href="${esc(c.share_url)}${p.file}">Open online</a></p></div>`).join("")}
   </div>
@@ -293,14 +293,14 @@ ${body}
 <section class="sec" id="method"><div class="wrap">
   ${head("Method", "Sources and <em>definitions</em>")}
   <dl class="spec">
-    <dt>Givebar ledger</dt><dd>VACUUM INTO snapshot of the production database taken ${esc(generated)}. Totals are the deterministic fold of every create, amend, void, and restore event. Rehearsal gifts are excluded.</dd>
-    <dt>Online gifts</dt><dd>Qgiv form "${esc(r.qgiv.form_name)}" (${r.qgiv.all.length} transactions since January 1). Gift time is the Qgiv transaction time, not the import time. Amount is the gift net of donor-covered fees.</dd>
+    <dt>Givebar ledger</dt><dd>Snapshot of the live database taken ${esc(generated)}. Totals are computed from every create, amend, void, and restore event. Rehearsal gifts are excluded.</dd>
+    <dt>Online gifts</dt><dd>Bloomerang Fundraising form "${esc(r.qgiv.form_name)}", ${r.qgiv.all.length} transactions since January 1. Gift time is the transaction time, not the import time. Amount excludes the fee the donor covered.</dd>
     <dt>Pledges and payment</dt><dd>Staff recorded every ballroom gift as a pledge. The team note on each gift says what was collected: a check number, cash, or card details on the pledge card. "Pledge to invoice" means nothing was collected on the night.</dd>
-    <dt>Households</dt><dd>Gifts are grouped by first and last name after removing titles ("Dr.", "Household of") and splitting couples. Anonymous donors are listed by legal name with an anonymous mark; that name never appeared on the chart.</dd>
-    <dt>Cross-reference</dt><dd>MASTER workbook sheets ${esc(Object.values(c.master_sheets).join(", "))}, matched by person name and, for online gifts, email. Automatic matching is conservative: verify before acting on a blank.</dd>
-    <dt>Website</dt><dd>${w.connected ? "Umami analytics for cairgeorgia.org as shown on the Givebar Stats page: visitors are unique sessions; a channel is a UTM source/medium pair; conversion divides online gifts by donate-page visitors in the same seven days." : "Not pulled."}</dd>
-    <dt>Bloomerang</dt><dd>${r.bloomerang.connected ? `Constituents and transactions via the REST API (${num(r.bloomerang.constituents)} constituents). Duplicate records for the same person are folded together by name and email. "Last year's gala" is any gift tagged to the 9th Annual Fundraiser campaign or dated within two weeks before to three weeks after ${esc(c.previous_event_date)}. Lifetime, first, and last gift exclude anything on or after the gala day.` : `Not connected. The Givebar fundraising token is a Qgiv form token and is rejected by the Bloomerang API (401), so repeat-donor history needs a Bloomerang API key from the CAIR-Georgia account (Settings → Integrations → API keys). Once it exists, ${esc("reports/pull-bloomerang.ts")} fills the history columns on the next build.`}</dd>
-    <dt>Privacy</dt><dd>This report includes legal names of anonymous donors, staff names, and team notes. It is for the ${esc(c.client)} team only.</dd>
+    <dt>Households</dt><dd>Gifts are grouped by first and last name, ignoring titles and splitting couples. Anonymous donors are listed by name with an anonymous mark; the name never appeared on the chart.</dd>
+    <dt>Cross-reference</dt><dd>MASTER workbook sheets ${esc(Object.values(c.master_sheets).join(", "))}, matched by name and, for online gifts, email. A blank means no match was found; check before acting on it.</dd>
+    <dt>Website</dt><dd>${w.connected ? "cairgeorgia.org analytics from the Givebar Stats page. Visitors are unique sessions. A channel is a UTM source and medium. Conversion is online gifts divided by donate-page visitors in the same seven days." : "Not pulled."}</dd>
+    <dt>Bloomerang</dt><dd>${r.bloomerang.connected ? `${num(r.bloomerang.constituents)} constituents and their transactions. Duplicate records for one person are combined by name and email. "Last year's gala" is a gift to the 9th Annual Fundraiser campaign or dated within two weeks before to three weeks after ${esc(c.previous_event_date)}. Lifetime, first, and last gift stop at the gala day.` : `Not connected. The Givebar fundraising token is a Qgiv form token and is rejected by the Bloomerang API (401), so repeat-donor history needs a Bloomerang API key from the CAIR-Georgia account (Settings → Integrations → API keys). Once it exists, ${esc("reports/pull-bloomerang.ts")} fills the history columns on the next build.`}</dd>
+    <dt>Privacy</dt><dd>Names of anonymous donors, staff names, and team notes are included. For the ${esc(c.client)} team only.</dd>
   </dl>
   ${foot.replace('<div class="wrap">', "<div>")}
 </div></section>
