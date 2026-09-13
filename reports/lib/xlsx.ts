@@ -3,7 +3,7 @@
 // anonymous donors and operator names are included, so it is never shared outside the team.
 import ExcelJS from "exceljs";
 import type { Report } from "./data";
-import { localTime } from "./data";
+import { localTime, COLLECTION_LABEL } from "./data";
 
 const NAVY = "FF1E2A4A"; const GOLD = "FFC59B27"; const CREAM = "FFF7F4EE"; const SLATE = "FF334155";
 const USD = '"$"#,##0.00;[Red]-"$"#,##0.00'; const USD0 = '"$"#,##0;[Red]-"$"#,##0';
@@ -60,7 +60,8 @@ export async function writeWorkbook(report: Report, path: string): Promise<void>
     ["Total raised", money(s.total_cents), `${s.active_count} active gifts from ${s.households} donor households`],
     ["Goal", money(s.goal_cents), `${Math.round(s.pct_of_goal * 100)}% of goal`],
     ["Remaining to goal", money(Math.max(0, s.goal_cents - s.total_cents))],
-    ["Ballroom pledges (to collect)", money(s.pledge_cents), `${s.pledge_count} pledges`],
+    ["Recorded as pledges in the ballroom", money(s.pledge_cents), `${s.pledge_count} gifts`],
+    ["  of which checks received", money(s.collection.check.cents), `${s.collection.check.count} checks`], ["  of which cash received", money(s.collection.cash.cents), `${s.collection.cash.count} gifts`], ["  of which card on pledge card", money(s.collection.card.cents), `${s.collection.card.count} to charge`], ["  of which pledge to invoice", money(s.collection.pledge.cents), `${s.collection.pledge.count} gifts, nothing collected`],
     ["Online card gifts (settled)", money(s.online_cents), `${s.online_count} gifts; net after fees ${(s.net_online_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}`],
     ["Average gift", money(s.avg_cents)], ["Median gift", money(s.median_cents)],
     ["Major gifts (≥ threshold)", money(s.major_cents), `${s.major_count} gifts at or above ${(report.event.major_gift_threshold_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}`],
@@ -94,8 +95,8 @@ export async function writeWorkbook(report: Report, path: string): Promise<void>
   // Gifts
   addTable(workbook, "Gifts", [
     { header: "Time (local)", key: "time", width: 20, date: true }, { header: "Donor (legal name)", key: "donor", width: 30 }, { header: "Display name", key: "display", width: 28 }, { header: "Anonymous", key: "anon", width: 11 },
-    { header: "Amount", key: "amount", width: 14, money: true }, { header: "Method", key: "method", width: 10 }, { header: "Source", key: "source", width: 10 }, { header: "Status", key: "status", width: 10 },
-    { header: "Recorded by", key: "by", width: 18 }, { header: "Table", key: "table", width: 8 }, { header: "Pronunciation", key: "phonetic", width: 16 }, { header: "Team note", key: "notes", width: 30, wrap: true },
+    { header: "Amount", key: "amount", width: 14, money: true }, { header: "Method", key: "method", width: 10 }, { header: "Source", key: "source", width: 10 }, { header: "Status", key: "status", width: 10 }, { header: "Payment", key: "collection", width: 18 }, { header: "Check number", key: "ref", width: 12 },
+    { header: "Recorded by", key: "by", width: 18 }, { header: "Table", key: "table", width: 8 }, { header: "Pronunciation", key: "phonetic", width: 16 }, { header: "Team note", key: "notes", width: 30, wrap: true }, { header: "Note, plain", key: "plain", width: 40, wrap: true },
     { header: "Original amount", key: "original", width: 14, money: true }, { header: "Amended", key: "amended", width: 10 }, { header: "Void reason", key: "void", width: 24 }, { header: "Minutes into appeal", key: "minutes", width: 12 },
     { header: "Email (online)", key: "email", width: 28 }, { header: "City", key: "city", width: 16 }, { header: "State", key: "state", width: 8 }, { header: "ZIP", key: "zip", width: 8 }, { header: "Restriction", key: "restriction", width: 11 }, { header: "Recurring", key: "recurring", width: 10 },
     { header: "Fee", key: "fee", width: 10, money: true }, { header: "Fee covered by donor", key: "assist", width: 12, money: true }, { header: "Net", key: "net", width: 12, money: true }, { header: "Card / payment", key: "payment", width: 16 }, { header: "Qgiv transaction", key: "txn", width: 14 },
@@ -103,7 +104,7 @@ export async function writeWorkbook(report: Report, path: string): Promise<void>
     { header: "Bloomerang lifetime", key: "bl_lifetime", width: 14, money: true }, { header: "Bloomerang last gift", key: "bl_last", width: 16 }, { header: "Last gala gift", key: "bl_gala", width: 14, money: true },
     { header: "Donation ID", key: "id", width: 26 }, { header: "Ledger seq", key: "seq", width: 8 }
   ], report.gifts.map(g => ({
-    time: g.created_at, donor: g.donor_name, display: g.display_name, anon: g.is_anonymous ? "yes" : "", amount: money(g.amount_cents), method: g.payment_method, source: g.source, status: g.status, by: g.entered_by, table: g.table_number, phonetic: g.donor_phonetic, notes: g.notes,
+    time: g.created_at, donor: g.donor_name, display: g.display_name, anon: g.is_anonymous ? "yes" : "", amount: money(g.amount_cents), method: g.payment_method, source: g.source, status: g.status, collection: COLLECTION_LABEL[g.collection], ref: g.collection_ref, by: g.entered_by, table: g.table_number, phonetic: g.donor_phonetic, notes: g.notes, plain: g.note_plain,
     original: g.amended ? money(g.original_amount_cents) : "", amended: g.amended ? "yes" : "", void: g.void_reason, minutes: g.minutes_into_appeal ?? "", email: g.qgiv?.email || "", city: g.qgiv?.city || "", state: g.qgiv?.state || "", zip: g.qgiv?.zip || "", restriction: g.qgiv?.restriction || "", recurring: g.qgiv?.recurring ? "monthly" : "",
     fee: g.qgiv ? money(g.qgiv.fee_cents) : "", assist: g.qgiv ? money(g.qgiv.gift_assist_cents) : "", net: g.qgiv ? money(g.qgiv.net_cents) : "", payment: g.qgiv?.payment || "", txn: g.qgiv?.id || "",
     prospect: g.prospect?.name || "", ask: g.prospect?.ask_cents ? money(g.prospect.ask_cents) : "", sponsor: g.sponsor ? `${g.sponsor.org} (${g.sponsor.tier})` : "", ticket: g.ticket ? `${g.ticket.name} · ${g.ticket.tickets} ticket(s)` : "", seated: g.table ? `Table ${g.table.number}: ${g.table.host}` : "",

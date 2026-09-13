@@ -12,7 +12,7 @@ import { NameIndex, nameKeys, normalizeEmail, personKey } from "./names";
 export type Config = {
   client: string; event_name: string; event_short: string; event_date: string; timezone: string; previous_event_date: string;
   output_basename: string; prepared_by: string; prepared_by_url: string; givebar_url: string; donate_url: string; org_url: string;
-  share_slug: string; share_url: string; master_workbook: string; master_sheets: { prospects: string; sponsors: string; tickets: string; tables: string };
+  share_slug: string; share_url: string; master_workbook: string; prospects_workbook?: string; master_sheets: { prospects: string; sponsors: string; tickets: string; tables: string };
   inputs: { givebar_sqlite: string; qgiv_history: string; bloomerang: string; stats: string }; extra_takeaways: string[];
 };
 
@@ -46,7 +46,29 @@ export type Gift = {
   status: "active" | "voided"; void_reason: string; amended: boolean; event_count: number; minutes_into_appeal: number | null;
   qgiv: QgivTxn | null; prospect: Prospect | null; sponsor: Sponsor | null; ticket: TicketOrder | null; table: TableRow | null; bloomerang: BloomerangMatch | null;
   household: string;
+  /** How the money arrives, read from the team note: online card, check in hand, cash in hand, card details on the pledge card, or a pledge to invoice. */
+  collection: Collection; collection_ref: string; note_plain: string;
 };
+export type Collection = "online" | "check" | "cash" | "card" | "pledge";
+export const COLLECTION_LABEL: Record<Collection, string> = { online: "Paid online", check: "Check received", cash: "Cash received", card: "Card on pledge card", pledge: "Pledge to invoice" };
+
+/** Turn a staff shorthand note ("Check #8934", "Pledge card with credit card detail", "Table 19") into a collection status and a plain sentence. */
+export function readNote(note: string, method: string, source: string): { collection: Collection; ref: string; plain: string } {
+  if (source !== "manual") return { collection: "online", ref: "", plain: "" };
+  const check = /check(?:\s*(?:number|no\.?|#))?\s*#?\s*(\d+)/i.exec(note);
+  const table = /table\s*(\d+)/i.exec(note);
+  const parts: string[] = [];
+  let collection: Collection = "pledge"; let ref = "";
+  if (check) { collection = "check"; ref = check[1]; parts.push(`Check number ${check[1]} was handed in at the table.`); }
+  else if (/\bcash\b/i.test(note)) { collection = "cash"; const mult = /(\d+)\s*x\s*\$?(\d+)/i.exec(note); parts.push(mult ? `Cash received: ${mult[1]} bills of ${mult[2]}.` : "Cash received at the table."); }
+  else if (/credit\s*card|card\s*detail/i.test(note)) { collection = "card"; parts.push("The pledge card carries credit card details; charge the card, no invoice needed."); }
+  else if (method === "pledge") { parts.push("Pledge only: nothing was collected on the night, invoice and follow up."); }
+  if (table) parts.push(`Seated at table ${table[1]}.`);
+  if (/out of town/i.test(note)) parts.push("Donor is out of town.");
+  const reach = /reach out to ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i.exec(note);
+  if (reach) parts.push(`${reach[1]} will collect the check.`);
+  return { collection, ref, plain: parts.join(" ") };
+}
 
 export type Donor = {
   key: string; name: string; display_name: string; is_anonymous: boolean; gifts: Gift[]; total_cents: number; pledged_cents: number; paid_cents: number;
@@ -74,6 +96,8 @@ export type Stats = {
   prospects_gave: number; prospects_total: number; prospects_ask_cents: number; prospects_actual_cents: number; prospects_missing: Prospect[]; prospects_under_ask: { prospect: Prospect; donor: Donor }[];
   sponsors_gave: number; sponsors_total: number; ticket_buyers: number; ticket_buyers_gave: number; tables_with_gifts: number; tables_total: number;
   operators: { name: string; count: number; cents: number }[]; amended_count: number; entered_by_hour: { label: string; count: number }[];
+  /** Ballroom money by how it arrives. "pledge" is the part that still needs an invoice. */
+  collection: Record<Collection, { count: number; cents: number }>;
 };
 
 export type WebChannel = { label: string; visitors: number; donate_views: number };
@@ -151,8 +175,11 @@ export async function loadMaster(config: Config): Promise<{ prospects: Prospect[
   if (!existsSync(config.master_workbook)) return empty;
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(config.master_workbook);
+  // The ask list was removed from the shared MASTER after the gala; read it from the archived copy when the live file lacks the sheet.
+  let prospectSource = workbook;
+  if (!workbook.getWorksheet(config.master_sheets.prospects) && config.prospects_workbook && existsSync(config.prospects_workbook)) { prospectSource = new ExcelJS.Workbook(); await prospectSource.xlsx.readFile(config.prospects_workbook); }
   const prospects: Prospect[] = [];
-  for (const row of (await sheetRows(workbook, config.master_sheets.prospects)).slice(1)) {
+  for (const row of (await sheetRows(prospectSource, config.master_sheets.prospects)).slice(1)) {
     const name = text(row[0]);
     if (!name || /^(matches|total|board)/i.test(name)) { if (/^matches/i.test(name)) break; continue; }
     if (typeof row[1] === "number") continue; // pledge-tracker rows below the prospect list carry an amount in column B
@@ -173,11 +200,18 @@ export async function loadMaster(config: Config): Promise<{ prospects: Prospect[
     if (!name) continue;
     tickets.push({ name, email, tickets: Number(row[1]) || 0, items: text(row[0]), cancelled: !shifted && Number(row[2]) === 1 });
   }
+  // Header-driven: the seating sheet has been re-laid out more than once (a leading room-number column appeared after the gala).
   const tables: TableRow[] = [];
-  for (const row of (await sheetRows(workbook, config.master_sheets.tables)).slice(1)) {
-    const host = text(row[1]);
+  const tableRows = await sheetRows(workbook, config.master_sheets.tables);
+  const header = Array.from(tableRows[0] || [], v => text(v).toLowerCase());
+  const col = (label: string, fallback: number) => { const i = header.findIndex(h => h.includes(label)); return i >= 0 ? i : fallback; };
+  const nameCol = col("table name", 1), numberCol = col("table number", 0), allottedCol = col("allotted", 2), occupiedCol = col("occupied", 3), guestsCol = col("guest names", 4);
+  const roomCol = numberCol > 0 && header[0] === "" ? 0 : -1;
+  for (const row of tableRows.slice(1)) {
+    const host = text(row[nameCol]);
     if (!host) continue;
-    tables.push({ number: text(row[0]) || String(tables.length + 1), host, allotted: Number(row[2]) || 0, occupied: Number(row[3]) || 0, guests: text(row[4]) });
+    const room = roomCol >= 0 ? text(row[roomCol]) : "";
+    tables.push({ number: room || text(row[numberCol]) || String(tables.length + 1), host, allotted: Number(row[allottedCol]) || 0, occupied: Number(row[occupiedCol]) || 0, guests: text(row[guestsCol]) });
   }
   return { prospects, sponsors, tickets, tables };
 }
@@ -336,7 +370,8 @@ export async function buildReport(config: Config): Promise<Report> {
       local_time: localTime(givenAt, config.timezone), status: r.is_voided ? "voided" : "active", void_reason: voidReasons.get(r.donation_id) || "", amended: original !== r.amount_cents,
       event_count: eventCounts.get(r.donation_id) || 1, minutes_into_appeal: appealStart ? Math.round((givenAt - appealStart) / 60000) : null,
       qgiv: q, prospect: prospectIndex.find(r.donor_name)[0] || null, sponsor: sponsorIndex.find(r.donor_name)[0] || null, ticket: ticketIndex.find(r.donor_name, email)[0] || null,
-      table: tableIndex.find(r.donor_name)[0] || null, bloomerang: mergeBloomerang(bloomerang.index.find(r.donor_name, email)), household: personKey(r.donor_name) || r.donor_name.toLowerCase()
+      table: tableIndex.find(r.donor_name)[0] || null, bloomerang: mergeBloomerang(bloomerang.index.find(r.donor_name, email)), household: personKey(r.donor_name) || r.donor_name.toLowerCase(),
+      ...(() => { const n = readNote(r.notes && !/^Fundraising transaction/.test(r.notes) ? r.notes : "", r.payment_method, r.source); return { collection: n.collection, collection_ref: n.ref, note_plain: n.plain }; })()
     };
   }).sort((a, b) => a.created_at - b.created_at);
 
@@ -413,7 +448,8 @@ export async function buildReport(config: Config): Promise<Report> {
     prospects_gave: prospectsGave.length, prospects_total: master.prospects.length, prospects_ask_cents: master.prospects.reduce((s, p) => s + p.ask_cents, 0), prospects_actual_cents: donors.filter(d => d.prospect).reduce((s, d) => s + d.total_cents, 0), prospects_missing: prospectsMissing, prospects_under_ask: underAsk,
     sponsors_gave: master.sponsors.filter(s => donors.some(d => d.sponsor === s)).length, sponsors_total: master.sponsors.length, ticket_buyers: ticketBuyers.length, ticket_buyers_gave: ticketBuyersGave,
     tables_with_gifts: master.tables.filter(t => donors.some(d => d.table === t)).length, tables_total: master.tables.length, operators, amended_count: active.filter(g => g.amended).length,
-    entered_by_hour: []
+    entered_by_hour: [],
+    collection: (["online", "check", "cash", "card", "pledge"] as Collection[]).reduce((m, k) => { const rows = active.filter(g => g.collection === k); m[k] = { count: rows.length, cents: rows.reduce((n, g) => n + g.amount_cents, 0) }; return m; }, {} as Record<Collection, { count: number; cents: number }>)
   };
 
   const report: Report = {
@@ -441,25 +477,27 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 export function buildTakeaways(r: Report): Takeaway[] {
   const s = r.stats; const out: Takeaway[] = [];
   const gap = s.goal_cents - s.total_cents;
-  out.push({ kind: gap <= 0 ? "win" : "insight", title: gap <= 0 ? `Goal met: ${money(s.total_cents)} against ${money(s.goal_cents)}` : `${money(s.total_cents)} raised, ${pct(s.pct_of_goal)} of the ${money(s.goal_cents)} goal`, body: gap <= 0 ? `The room exceeded the goal by ${money(-gap)}.` : `${money(gap)} remains. ${s.prospects_missing.length} major-donor prospects on the ask list have not given yet (asks total ${money(s.prospects_missing.reduce((t, p) => t + p.ask_cents, 0))}); closing half of them covers most of the gap.` });
-  if (s.pledge_cents > 0) out.push({ kind: "action", title: `${money(s.pledge_cents)} in ballroom pledges to collect (${pct(s.pledge_cents / s.total_cents)} of the total)`, body: `${s.pledge_count} pledges were recorded by staff at the tables and are not yet cash. Send a thank-you with a payment link within 48 hours, then a personal call for every pledge of ${money(r.event.major_gift_threshold_cents)} or more. Card gifts through the online form (${money(s.online_cents)}) are already settled.` });
-  if (s.top10_pct > 0.5) out.push({ kind: "watch", title: `Top 10 gifts are ${pct(s.top10_pct)} of the night`, body: `${money(s.top10_cents)} came from ten gifts; the median gift is ${money(s.median_cents)}. Concentration this high means next year's result rides on ten conversations. Start those stewardship visits in the first quarter, not the month before the gala.` });
-  if (s.declined_count) out.push({ kind: "action", title: `${s.declined_count} online attempts declined (${money(s.declined_cents)})`, body: `Card declines on the donate form from people who tried to give. A short "your gift did not go through" email with the link recovers a meaningful share; the list is in the Follow-up section and the workbook.` });
-  if (s.prospects_total) out.push({ kind: "insight", title: `${s.prospects_gave} of ${s.prospects_total} major prospects gave; ${s.prospects_under_ask.length} gave below their ask`, body: `Asks on the staff list total ${money(s.prospects_ask_cents)}; matched prospects gave ${money(s.prospects_actual_cents)}. The under-ask group is the warmest upgrade list for a follow-up conversation this month.` });
-  if (s.anonymous_count) out.push({ kind: "insight", title: `${s.anonymous_count} anonymous gifts worth ${money(s.anonymous_cents)}`, body: `Anonymous donors are ${pct(s.anonymous_cents / s.total_cents)} of the total. Their legal names are in the operator workbook only; thank them privately and never in print.` });
-  if (s.zakat_count) out.push({ kind: "insight", title: `Zakat was ${pct(s.zakat_cents / (s.online_cents || 1))} of online giving`, body: `${s.zakat_count} online donors chose the Zakat restriction (${money(s.zakat_cents)}). Keep the Zakat-eligible framing in the follow-up email; it moved money tonight.` });
-  if (s.recurring_count) out.push({ kind: "win", title: `${s.recurring_count} new monthly donors`, body: `${money(s.recurring_monthly_cents)} per month in recurring gifts started tonight (${money(s.recurring_monthly_cents * 12)} annualised). Welcome them as a named circle within the week.` });
-  if (s.gift_assist_cents) out.push({ kind: "insight", title: `Donors covered ${money(s.gift_assist_cents)} in processing fees`, body: `Fees on online gifts were ${money(s.fees_cents)}; net online is ${money(s.net_online_cents)}. Keep the fee-cover option on by default.` });
-  if (s.peak) out.push({ kind: "insight", title: `Peak giving window: ${s.peak.label} (${money(s.peak.cents)} in 15 minutes)`, body: `${s.peak.count} gifts landed in the strongest quarter hour. Next year, place the matching announcement and the emcee's second ask inside that window rather than after it.` });
-  if (s.ticket_buyers) out.push({ kind: "action", title: `${s.ticket_buyers - s.ticket_buyers_gave} of ${s.ticket_buyers} ticket buyers on file have no gift recorded`, body: `Guests who bought tickets but did not give tonight are the first segment for the post-gala email; they were in the room and heard the case.` });
-  if (r.web.connected && r.web.week) out.push({ kind: "insight", title: `${r.web.week.donate_visitors.toLocaleString("en-US")} people opened the donate page during gala week; ${pct(r.web.conversion)} gave`, body: `${r.web.week.visitors.toLocaleString("en-US")} website visitors in the seven days around the gala, ${Math.round(100 * (r.web.devices.find(d => d.device === "mobile")?.visitors || 0) / Math.max(1, r.web.devices.reduce((n, d) => n + d.visitors, 0)))}% on phones. Top QR channel: ${r.web.channels[0]?.label || "n/a"} (${r.web.channels[0]?.visitors || 0} visitors). Keep the pledge-form and table-card QR codes; they outperformed the ballroom chart QR.` });
-  if (r.event.match_total_cents === 0) out.push({ kind: "watch", title: "No matching grant was configured", body: "A board or sponsor match, even $25,000, gives the emcee a second peak. Secure it before the next appeal; Givebar folds it automatically." });
+  const col = s.collection;
+  out.push({ kind: gap <= 0 ? "win" : "insight", title: gap <= 0 ? `Goal met: ${money(s.total_cents)} against ${money(s.goal_cents)}` : `${money(s.total_cents)} raised, ${pct(s.pct_of_goal)} of the ${money(s.goal_cents)} goal`, body: gap <= 0 ? `The total is ${money(-gap)} above the goal.` : `${money(gap)} short. ${s.prospects_missing.length} people on the major-donor ask list have no gift recorded; their asks total ${money(s.prospects_missing.reduce((t, p) => t + p.ask_cents, 0))}.` });
+  if (col.pledge.cents > 0) out.push({ kind: "action", title: `${money(col.pledge.cents)} in pledges still needs an invoice (${col.pledge.count} gifts)`, body: `Of the ${money(s.pledge_cents)} recorded as pledges in the ballroom, staff notes show ${money(col.check.cents)} arrived as checks (${col.check.count}), ${money(col.cash.cents)} as cash (${col.cash.count}), and ${money(col.card.cents)} as card details on pledge cards (${col.card.count}). The remaining ${money(col.pledge.cents)} is a promise only. Send those donors a thank-you with a payment link within 48 hours and call every pledge of ${money(r.event.major_gift_threshold_cents)} or more. The Follow-up page lists them.` });
+  if (col.check.cents + col.cash.cents > 0) out.push({ kind: "action", title: `Deposit ${money(col.check.cents + col.cash.cents)} in checks and cash collected at the tables`, body: `${col.check.count} checks and ${col.cash.count} cash gifts are recorded with their check numbers on the Gifts page. Deposit them this week and mark each one paid in Bloomerang so the pledge balance is correct.` });
+  if (s.top10_pct > 0.5) out.push({ kind: "watch", title: `Ten gifts are ${pct(s.top10_pct)} of the total`, body: `${money(s.top10_cents)} came from ten gifts; the median gift is ${money(s.median_cents)}. Next year's result depends on ten conversations. Schedule those visits in the first quarter.` });
+  if (s.declined_count) out.push({ kind: "action", title: `${s.declined_count} online payments were declined (${money(s.declined_cents)})`, body: `These people tried to give and their card failed. Email them the donate link with a short note that the payment did not go through. The list is on the Follow-up page.` });
+  if (s.prospects_total) out.push({ kind: "insight", title: `${s.prospects_gave} of ${s.prospects_total} people on the ask list gave; ${s.prospects_under_ask.length} gave less than their ask`, body: `Asks on the list total ${money(s.prospects_ask_cents)}; the people who gave recorded ${money(s.prospects_actual_cents)}. Call the under-ask group this month; they already said yes to something.` });
+  if (s.anonymous_count) out.push({ kind: "insight", title: `${s.anonymous_count} anonymous gifts, ${money(s.anonymous_cents)}`, body: `${pct(s.anonymous_cents / s.total_cents)} of the total. Their names are in this report and the workbook for the team only. Thank them privately; never print them.` });
+  if (s.zakat_count) out.push({ kind: "insight", title: `Zakat was ${pct(s.zakat_cents / (s.online_cents || 1))} of online giving`, body: `${s.zakat_count} online donors chose the Zakat option (${money(s.zakat_cents)}). Keep the Zakat wording in the follow-up email.` });
+  if (s.recurring_count) out.push({ kind: "win", title: `${s.recurring_count} new monthly donors`, body: `${money(s.recurring_monthly_cents)} per month started tonight, ${money(s.recurring_monthly_cents * 12)} a year. Send them a welcome note this week.` });
+  if (s.gift_assist_cents) out.push({ kind: "insight", title: `Donors covered ${money(s.gift_assist_cents)} of ${money(s.fees_cents)} in card fees`, body: `Net online is ${money(s.net_online_cents)}. Leave the fee-cover option on.` });
+  if (s.peak) out.push({ kind: "insight", title: `Most money arrived at ${s.peak.label}: ${money(s.peak.cents)} in 15 minutes`, body: `${s.peak.count} gifts in that window. Next year, announce the match and make the second ask inside it, not after.` });
+  if (s.ticket_buyers) out.push({ kind: "action", title: `${s.ticket_buyers - s.ticket_buyers_gave} of ${s.ticket_buyers} ticket buyers have no gift recorded`, body: `They were in the room and heard the appeal. Email them first.` });
+  if (r.web.connected && r.web.week) out.push({ kind: "insight", title: `${r.web.week.donate_visitors.toLocaleString("en-US")} people opened the donate page during gala week; ${pct(r.web.conversion)} of them gave`, body: `${r.web.week.visitors.toLocaleString("en-US")} website visitors in the seven days around the gala, ${Math.round(100 * (r.web.devices.find(d => d.device === "mobile")?.visitors || 0) / Math.max(1, r.web.devices.reduce((n, d) => n + d.visitors, 0)))}% on phones. The pledge-form QR (${r.web.channels[0]?.visitors || 0} visitors) and table-card QR brought more people than the chart on screen. Print both again next year.` });
+  if (r.event.match_total_cents === 0) out.push({ kind: "watch", title: "No matching grant was set up", body: "A board or sponsor match, even $25,000, gives the emcee a second moment to ask. Arrange it before the next appeal; Givebar applies it automatically." });
   if (!r.bloomerang.connected) out.push({ kind: "action", title: "Connect Bloomerang to see repeat-donor history", body: r.bloomerang.message });
   else {
     const b = r.bloomerang;
-    out.push({ kind: "insight", title: `${s.repeat_donors} repeat donors gave ${money(b.repeat_cents)}; ${s.new_donors} first-time donors gave ${money(b.new_cents)}`, body: `${b.matched} of ${s.households} households matched a Bloomerang record (${s.unknown_donors} had no match). First-time donors need a welcome series within 7 days; repeat donors get a "you were with us again" note referencing their last gift.` });
-    if (b.returning.count) out.push({ kind: b.returning.now_cents >= b.returning.then_cents ? "win" : "watch", title: `${b.returning.count} donors from last year's gala came back: ${money(b.returning.then_cents)} then, ${money(b.returning.now_cents)} now`, body: `${b.returning.upgraded} gave more than last year, ${b.returning.downgraded} gave less. The downgrades are the first stewardship calls; the upgrades deserve a personal thank-you from the board.` });
-    if (b.lapsed.length) out.push({ kind: "action", title: `${b.lapsed.length} donors gave at last year's gala (${money(b.lapsed.reduce((n, l) => n + l.last_gala_cents, 0))}) but not tonight`, body: `Lapsed gala donors in Bloomerang with no gift recorded tonight. Some were in the room and pledged under another name; check the list in Follow-up before calling, then make it the second segment of the post-gala email.` });
+    out.push({ kind: "insight", title: `${s.repeat_donors} repeat donors gave ${money(b.repeat_cents)}; ${s.new_donors} first-time donors gave ${money(b.new_cents)}`, body: `${b.matched} of ${s.households} households matched a Bloomerang record; ${s.unknown_donors} did not. Send first-time donors a welcome email within 7 days. Send repeat donors a thank-you that mentions their last gift.` });
+    if (b.returning.count) out.push({ kind: b.returning.now_cents >= b.returning.then_cents ? "win" : "watch", title: `${b.returning.count} donors from last year's gala gave again: ${money(b.returning.then_cents)} last year, ${money(b.returning.now_cents)} this year`, body: `${b.returning.upgraded} gave more than last year, ${b.returning.downgraded} gave less. Call the people who gave less first. A board member should thank the people who gave more.` });
+    if (b.lapsed.length) out.push({ kind: "action", title: `${b.lapsed.length} donors gave at last year's gala (${money(b.lapsed.reduce((n, l) => n + l.last_gala_cents, 0))}) and have no gift recorded this year`, body: `Some of them gave under a spouse's or business name; check the Follow-up list before calling. Then email them as a separate group.` });
   }
   for (const extra of r.config.extra_takeaways) out.push({ kind: "insight", title: extra, body: "" });
   return out;

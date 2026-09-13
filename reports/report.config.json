@@ -14,7 +14,8 @@
   "share_mount": "cair-ga-gala-2026-donors",
   "share_slug": "fern-unity-eg3f",
   "share_url": "https://share.wavedepth.com/cair-ga-gala-2026-donors/",
-  "master_workbook": "/home/nerveband/src/client/cair-ga-gala-10-anniversary/resources/2026 10th Anniversary MASTER.xlsx",
+  "master_workbook": "reports/data/master/2026 10th Anniversary MASTER.xlsx",
+  "prospects_workbook": "/home/nerveband/src/client/cair-ga-gala-10-anniversary/resources/2026 10th Anniversary MASTER.xlsx",
   "master_sheets": {
     "prospects": "Donors 2026",
     "sponsors": "Active Sponsors",

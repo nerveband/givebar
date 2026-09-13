@@ -34,9 +34,13 @@ Step 2 can be skipped when nothing new came in online; the previous `reports/dat
 | Qgiv history | `reports/data/qgiv-history.json` (`inputs.qgiv_history`) | `reports/pull-qgiv.ts`: the reporting API, one request per calendar year. The current token only sees the 2026 gala form; an organisation-level token would add previous years. |
 | Givebar Stats | `reports/data/givebar-stats.json` (`inputs.stats`), optional | `reports/pull-stats.ts`: signs in with the admin account, pulls `/api/stats` for all/30d/7d/24h (ledger stats plus Umami website analytics), logs out. |
 | Bloomerang CRM | `reports/data/bloomerang.json` (`inputs.bloomerang`) | `reports/pull-bloomerang.ts` with `BLOOMERANG_API_KEY` in the environment (4,320 constituents, 9,338 transactions, about 2.5 minutes). The key is a CAIR-Georgia Bloomerang API key supplied by Ashraf; store it in 1Password ("AI Agents" vault) and run through `secret-gate exec`. Duplicate constituent records are folded by name and email; history excludes gifts on or after the gala day. |
-| Staff MASTER workbook | `master_workbook` + `master_sheets` | Read directly from the gala project checkout. Sheets: prospects (Donors 2026: name, gave earlier in 2026, ask, assumed gift, notes; rows stop at "Matches"), sponsors (Active Sponsors), tickets (Ticket Tailor export), tables (Final Tables). |
+| Staff MASTER workbook | `master_workbook` + `master_sheets`; `prospects_workbook` for the archived copy that still has the ask list | Downloaded from OneDrive (`Galas/2026 10th Anniversary/00 Master Planning & Logistics/2026 10th Anniversary MASTER.xlsx`) with the cair-georgia-m365-browser `onedrive_cli.py download` into `reports/data/master/`. The ask list (Donors 2026) was removed from the shared file after the gala, so it is read from the archived copy in the gala project checkout. Sheets: prospects (Donors 2026: name, gave earlier in 2026, ask, assumed gift, notes; rows stop at "Matches"), sponsors (Active Sponsors), tickets (Ticket Tailor export), tables (Final Tables). |
 
 `reports/data/` and `reports/out/` are gitignored; the snapshot contains the full ledger and sessions table.
+
+## Team notes
+
+`readNote` in `reports/lib/data.ts` turns staff shorthand on each ballroom gift into a payment status: `check` (with the check number), `cash`, `card` (card details on the pledge card), or `pledge` (nothing collected). The status drives the "How the money arrives" figures, the payment filters on the Donors and Gifts pages, the Pledges to invoice list, and the Payment / Note-plain columns in the workbook. Add new shorthand patterns there.
 
 ## Code map
 

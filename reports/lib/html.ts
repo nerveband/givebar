@@ -8,7 +8,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import type { Report, Gift, Donor } from "./data";
-import { localTime } from "./data";
+import { localTime, COLLECTION_LABEL } from "./data";
 
 const THEME = join(import.meta.dir, "..", "theme");
 const b64 = (file: string) => readFileSync(join(THEME, file)).toString("base64");
@@ -25,8 +25,8 @@ export const PAGES: { file: string; label: string }[] = [
 
 /** The browser-side payload: enough for tables and charts, no Qgiv card data. */
 function viewPayload(r: Report) {
-  const gift = (g: Gift) => ({ id: g.donation_id, t: g.created_at, time: g.local_time, donor: g.donor_name, display: g.display_name, anon: g.is_anonymous, amount: g.amount_cents, method: g.payment_method, source: g.source, by: g.entered_by, status: g.status, notes: g.notes, table: g.table_number, amended: g.amended, original: g.original_amount_cents, restriction: g.qgiv?.restriction || "", recurring: !!g.qgiv?.recurring, city: g.qgiv ? [g.qgiv.city, g.qgiv.state].filter(Boolean).join(", ") : "", email: g.qgiv?.email || "", prospect: g.prospect?.name || "", ticket: !!g.ticket, seated: g.table ? `${g.table.number}: ${g.table.host}` : "" });
-  const donor = (d: Donor) => ({ key: d.key, name: d.name, display: d.display_name, anon: d.is_anonymous, total: d.total_cents, count: d.gifts.length, pledged: d.pledged_cents, paid: d.paid_cents, largest: d.largest_cents, first: d.first_gift_at, firstLabel: localTime(d.first_gift_at, r.config.timezone), rel: d.relationship, email: d.email, city: d.city, restriction: d.restriction, sources: d.sources.join("+"), by: [...new Set(d.gifts.filter(g => g.source === "manual").map(g => g.entered_by))].join(", "), prospect: d.prospect ? { name: d.prospect.name, ask: d.prospect.ask_cents, before: d.prospect.gave_before_cents, notes: d.prospect.notes } : null, sponsor: d.sponsor ? `${d.sponsor.org} (${d.sponsor.tier})` : "", ticket: d.ticket ? `${d.ticket.tickets} ticket(s)` : "", table: d.table ? `${d.table.number}: ${d.table.host}` : "", bloomerang: d.bloomerang ? { lifetime: d.bloomerang.lifetime_cents, count: d.bloomerang.gift_count, first: d.bloomerang.first_gift.slice(0, 10), last: d.bloomerang.last_gift.slice(0, 10), lastAmount: d.bloomerang.last_gift_cents, gala: d.bloomerang.last_gala_cents, years: d.bloomerang.years_active, galas: d.bloomerang.galas, monthly: d.bloomerang.monthly, records: d.bloomerang.records } : null, notes: d.gifts.map(g => g.notes).filter(Boolean).join(" | ") });
+  const gift = (g: Gift) => ({ id: g.donation_id, t: g.created_at, time: g.local_time, donor: g.donor_name, display: g.display_name, anon: g.is_anonymous, amount: g.amount_cents, method: g.payment_method, source: g.source, by: g.entered_by, status: g.status, notes: g.notes, plain: g.note_plain, collection: g.collection, ref: g.collection_ref, table: g.table_number, amended: g.amended, original: g.original_amount_cents, restriction: g.qgiv?.restriction || "", recurring: !!g.qgiv?.recurring, city: g.qgiv ? [g.qgiv.city, g.qgiv.state].filter(Boolean).join(", ") : "", email: g.qgiv?.email || "", prospect: g.prospect?.name || "", ticket: !!g.ticket, seated: g.table ? `${g.table.number}: ${g.table.host}` : "" });
+  const donor = (d: Donor) => ({ key: d.key, name: d.name, display: d.display_name, anon: d.is_anonymous, total: d.total_cents, count: d.gifts.length, pledged: d.pledged_cents, paid: d.paid_cents, largest: d.largest_cents, first: d.first_gift_at, firstLabel: localTime(d.first_gift_at, r.config.timezone), rel: d.relationship, email: d.email, city: d.city, restriction: d.restriction, collections: [...new Set(d.gifts.map(g => g.collection))], sources: d.sources.join("+"), by: [...new Set(d.gifts.filter(g => g.source === "manual").map(g => g.entered_by))].join(", "), prospect: d.prospect ? { name: d.prospect.name, ask: d.prospect.ask_cents, before: d.prospect.gave_before_cents, notes: d.prospect.notes } : null, sponsor: d.sponsor ? `${d.sponsor.org} (${d.sponsor.tier})` : "", ticket: d.ticket ? `${d.ticket.tickets} ticket(s)` : "", table: d.table ? `${d.table.number}: ${d.table.host}` : "", bloomerang: d.bloomerang ? { lifetime: d.bloomerang.lifetime_cents, count: d.bloomerang.gift_count, first: d.bloomerang.first_gift.slice(0, 10), last: d.bloomerang.last_gift.slice(0, 10), lastAmount: d.bloomerang.last_gift_cents, gala: d.bloomerang.last_gala_cents, years: d.bloomerang.years_active, galas: d.bloomerang.galas, monthly: d.bloomerang.monthly, records: d.bloomerang.records } : null, notes: d.gifts.map(g => g.note_plain || g.notes).filter(Boolean).join(" ") });
   const { timeline, bands, prospects_missing, prospects_under_ask, operators, ...rest } = r.stats;
   return {
     event: r.event, stats: { ...rest, timeline, bands, operators, prospects_missing: prospects_missing.map(p => ({ name: p.name, ask: p.ask_cents, notes: p.notes })) },
@@ -36,7 +36,7 @@ function viewPayload(r: Report) {
     sponsors: r.sponsors.map(sp => { const d = r.donors.find(x => x.sponsor === sp); return { org: sp.org, tier: sp.tier, cost: sp.cost_cents, gave: d ? d.total_cents : null, donor: d?.name || "" }; }),
     tables: r.tables.map(t => { const ds = r.donors.filter(d => d.table === t); return { number: t.number, host: t.host, count: ds.reduce((n, d) => n + d.gifts.length, 0), raised: ds.reduce((n, d) => n + d.total_cents, 0), donors: ds.map(d => d.name) }; }).filter(t => t.count > 0).sort((a, b) => b.raised - a.raised),
     tickets_no_gift: r.tickets.filter(t => !t.cancelled && !r.donors.some(d => d.ticket === t)).map(t => ({ name: t.name, email: t.email, tickets: t.tickets, items: t.items })),
-    lapsed: r.bloomerang.lapsed
+    lapsed: r.bloomerang.lapsed, collection_labels: COLLECTION_LABEL
   };
 }
 
@@ -125,6 +125,7 @@ h3{font-size:clamp(16px,2vw,19px);font-weight:700;text-transform:uppercase;lette
 /* tables */
 .tbl{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 table{width:100%;border-collapse:collapse;font-size:14px}
+td.brief{display:none}
 th{font-family:var(--display);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-align:left;color:var(--slate);padding:10px 12px;border-bottom:1px solid var(--line-strong);white-space:nowrap;background:var(--surface-2);user-select:none}th[data-k]{cursor:pointer}th[data-k]:hover{color:var(--navy)}th.r,td.r{text-align:right}th[data-dir]{color:var(--navy)}th[data-dir]::after{content:" ↓";color:var(--gold-ink)}th[data-dir="asc"]::after{content:" ↑"}
 td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}tbody tr:last-child td{border-bottom:0}tbody tr:hover td{background:rgba(197,155,39,.06)}
 td.name{font-weight:600;color:var(--navy)}td.dim,.dim{color:var(--muted)}td.nowrap{white-space:nowrap}td .sub{display:block;font-weight:400;font-size:12.5px;color:var(--muted);margin-top:2px}
@@ -134,20 +135,23 @@ td.name{font-weight:600;color:var(--navy)}td.dim,.dim{color:var(--muted)}td.nowr
   .tbl tr{padding:10px 12px;border-bottom:1px solid var(--line)}.tbl tr:last-child{border-bottom:0}
   .tbl td{padding:2px 0;border:0;text-align:left!important}.tbl td:empty{display:none}
   .tbl td[data-l]::before{content:attr(data-l);display:inline-block;min-width:88px;font-family:var(--display);font-weight:700;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-right:8px}
-  .tbl td.name{font-size:15.5px;padding-bottom:4px}.tbl td.name::before{display:none}.tbl td.amt{font-size:17px;font-weight:700;padding-bottom:4px}.tbl td.amt::before{display:none}
+  .tbl td.name{font-size:15.5px;padding-bottom:2px;padding-right:28px}.tbl td.name::before{display:none}.tbl td.amt{font-size:17px;font-weight:700;padding-bottom:2px}.tbl td.amt::before{display:none}
+  .tbl td.brief{display:block;font-size:12.5px;color:var(--muted);padding-bottom:2px}.tbl tr{position:relative;cursor:pointer}.tbl tr::after{content:"";position:absolute;right:14px;top:16px;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .15s}.tbl tr.open::after{transform:rotate(-135deg);top:20px}
+  .tbl tr:not(.open) td:not(.name):not(.amt):not(.brief){display:none}.tbl tr.open td[data-l]{padding-top:4px}
   .tbl tbody tr:hover td{background:none}
 }
 .note{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;font-size:14px;color:var(--slate)}.note.warn{border-color:#E9C58A;background:#FBF3E4}.note code{font-family:var(--body);font-weight:600;color:var(--navy);word-break:break-all}
 dl.spec{display:grid;grid-template-columns:190px 1fr;gap:8px 20px;font-size:14px;margin:28px 0 0}dl.spec dt{font-weight:700;color:var(--navy)}dl.spec dd{margin:0;color:var(--slate)}@media (max-width:640px){dl.spec{grid-template-columns:1fr;gap:2px}dl.spec dd{margin-bottom:10px}}
 .foot{border-top:1px solid var(--line);margin-top:48px;padding:20px 0 max(20px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}.foot img{height:16px;vertical-align:middle}
-.print-only{display:none}
+.print-only{display:none}.print-story{display:none;margin-top:22px;padding-top:14px;border-top:1px solid rgba(229,197,120,.35);color:#C9D3E8;font-size:13px;max-width:70ch}.print-story b{color:#fff}
 @media print{
   @page{size:letter;margin:.45in}
-  body{background:#fff;font-size:11.5px}.top,.toolbar,.hide-print,.pager{display:none!important}.print-only{display:inline-flex}
-  .wrap{max-width:none;padding:0}.sec{padding:22px 26px;border:0;break-after:page;page-break-after:always;position:relative;min-height:9.6in}.sec::before{content:"";position:absolute;inset:6px;border:1px solid var(--gold);pointer-events:none}
-  .hero{padding:40px 36px;min-height:9.6in;break-after:page;-webkit-print-color-adjust:exact;print-color-adjust:exact}.hero-grid{grid-template-columns:1fr}
-  h2{font-size:24px}.stats{grid-template-columns:repeat(4,1fr);gap:14px}.stat-value{font-size:20px}.take{grid-template-columns:1fr 1fr}.two{display:block}.two>div{margin-bottom:18px}
-  .tbl{border:0}table{font-size:10.5px}td,th{padding:4px 6px}tr{break-inside:avoid}
+  body{background:#fff;font-size:11.5px}.top,.toolbar,.hide-print,.pager{display:none!important}.print-only{display:inline-flex}.print-story{display:block!important}
+  .wrap{max-width:none;padding:0}.sec{padding:22px 26px 28px;border:0;break-before:page;page-break-before:always;position:relative;min-height:0}#method{break-before:auto;padding-top:0}#method::before{display:none}#lists{padding-bottom:0}#method dl.spec{font-size:10px;gap:5px 14px;margin-top:12px}#method .foot{margin-top:18px}.sec::before{content:"";position:absolute;inset:6px;border:1px solid var(--gold);pointer-events:none}
+  .hero{padding:40px 36px;height:9.6in;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;break-after:page;-webkit-print-color-adjust:exact;print-color-adjust:exact}.hero>.wrap{display:flex;flex-direction:column;justify-content:space-between;flex:1}.hero-grid{grid-template-columns:1fr}.hero-stats{grid-template-columns:repeat(4,1fr)}
+  h2{font-size:24px}.stats{grid-template-columns:repeat(4,1fr);gap:14px}.stat-value{font-size:20px}.take{display:block;margin-top:16px}.take li{display:inline-block;vertical-align:top;width:48.5%;margin:0 1% 8px 0;box-sizing:border-box}.take li:nth-child(2n){margin-right:0}.take h4{font-size:12.5px}.take p{font-size:10.5px}.two{display:block}.two>div{margin-bottom:18px}
+  .tbl{border:0}table{font-size:10.5px}td,th{padding:4px 6px}tr{break-inside:avoid}td.brief{display:none!important}.tbl tr::after{display:none}.tbl tr:not(.open) td{display:table-cell}
+  .take li{break-inside:avoid}.stats{break-inside:avoid}#charts .two{break-before:page;padding-top:18px}#charts .two>div:last-child{margin-top:12px}#history .tbl{break-before:avoid}#history .tbl tbody tr:nth-child(n+11){display:none}#summary .two{display:grid;grid-template-columns:1fr 1fr;gap:14px;break-inside:avoid}#summary .two h3{margin-top:10px;font-size:13px}#summary table{font-size:9px}#summary td,#summary th{padding:2px 5px}#summary .stats{gap:10px 14px;margin-top:14px}#summary .stat-value{font-size:17px}#summary h3{margin-top:16px}
   .stat,.take li,.pill,.chart .bar,.chart-box{-webkit-print-color-adjust:exact;print-color-adjust:exact}#chart-timeline svg{height:2.7in}#chart-bands svg{height:2.4in}#chart-mix svg{height:1.9in}#chart-pareto svg{height:1.7in}h3{break-after:avoid}
 }`;
 
@@ -182,7 +186,7 @@ ${body}
     <div>
       <p class="eyebrow">${esc(c.client)} · ${esc(eventDate)}</p>
       <h1>${esc(c.event_short)} Donor Report</h1>
-      <p class="sub">${esc(r.event.subtitle.replace(/[.\s]+$/, ""))}. Every gift, every pledge, and what to do about them this week.</p>
+      <p class="sub">${esc(r.event.subtitle.replace(/[.\s]+$/, ""))}. Every gift and pledge from the night, with the follow-up list.</p>
       <div class="goal">
         <div class="total-label">Raised on the night</div>
         <div class="total">${esc(money0(s.total_cents))}</div>
@@ -192,11 +196,12 @@ ${body}
     </div>
     <div class="hero-stats">
       ${stat("Gifts", String(s.active_count), `${s.households} households`)}
-      ${stat("Pledges to collect", money0(s.pledge_cents), `${s.pledge_count} pledges`)}
-      ${stat("Online, settled", money0(s.online_cents), `${s.online_count} card gifts`)}
+      ${stat("Pledges to invoice", money0(s.collection.pledge.cents), `${s.collection.pledge.count} gifts, nothing collected yet`)}
+      ${stat("Checks and cash in hand", money0(s.collection.check.cents + s.collection.cash.cents), `${s.collection.check.count} checks, ${s.collection.cash.count} cash`)}
       ${stat("Major gifts", String(s.major_count), `${money0(s.major_cents)} at ${money0(r.event.major_gift_threshold_cents)}+`)}
     </div>
   </div>
+  <p class="print-story"><b>In short.</b> The room gave ${esc(money0(s.total_cents))}, ${esc(pct(s.pct_of_goal))} of the goal. ${esc(money0(s.collection.online.cents))} is already paid online and ${esc(money0(s.collection.check.cents + s.collection.cash.cents))} arrived as checks and cash. ${esc(money0(s.collection.pledge.cents))} is pledged and needs an invoice. ${s.repeat_donors} households had given before; ${s.new_donors} gave for the first time. The next pages give the numbers, the actions for this week, the timeline, the giving history, and the website traffic; the detailed lists are online.</p>
   <div class="hero-foot">
     <span class="prepared">Prepared by <img alt="wavedepth" src="data:image/svg+xml;base64,${wdLogo("#FFFFFF")}"></span>
     <span>Internal to the ${esc(c.client)} team. Contains donor names, pledges, and staff notes. Generated ${esc(generated)}.</span>
@@ -204,15 +209,24 @@ ${body}
 </div></section>
 <main>
 <section class="sec" id="summary"><div class="wrap">
-  ${head("Summary", "The night <em>in numbers</em>", `Figures come from the Givebar ledger, the Qgiv online form behind the QR code, and the staff MASTER workbook. Times are ${esc(c.timezone.replace("_", " "))}.`)}
-  <div class="stats">
+  ${head("Summary", "The night <em>in numbers</em>", `Sources: the Givebar ledger, the Qgiv donation form, the staff MASTER workbook, and Bloomerang. Times are ${esc(c.timezone.replace("_", " "))}.`)}
+  <h3 style="margin-top:28px">How the money arrives</h3>
+  <div class="stats" style="margin-top:0">
+    ${stat("Paid online", money0(s.collection.online.cents), `${s.collection.online.count} card gifts, net ${money0(s.net_online_cents)}`)}
+    ${stat("Checks received", money0(s.collection.check.cents), `${s.collection.check.count} checks, numbers on the Gifts page`)}
+    ${stat("Cash received", money0(s.collection.cash.cents), `${s.collection.cash.count} gifts`)}
+    ${stat("Card on pledge card", money0(s.collection.card.cents), `${s.collection.card.count} to charge`)}
+    ${stat("Pledge to invoice", money0(s.collection.pledge.cents), `${s.collection.pledge.count} gifts`)}
+  </div>
+  <h3>Shape of the giving</h3>
+  <div class="stats" style="margin-top:0">
     ${stat("Average gift", money0(s.avg_cents), `median ${money0(s.median_cents)}`)}
     ${stat("Top 10 gifts", pct(s.top10_pct), `${money0(s.top10_cents)} of the total`)}
     ${stat("Anonymous", money0(s.anonymous_cents), `${s.anonymous_count} gifts`)}
     ${stat("Deleted / corrected", `${s.void_count} / ${s.amended_count}`, "ledger entries")}
     ${stat("Zakat, online", money0(s.zakat_cents), `${s.zakat_count} gifts · ${pct(s.zakat_cents / (s.online_cents || 1))} of online`)}
     ${stat("Monthly donors", String(s.recurring_count), `${money0(s.recurring_monthly_cents)} per month started`)}
-    ${stat("Fees covered by donors", money0(s.gift_assist_cents), `of ${money0(s.fees_cents)} charged · net ${money0(s.net_online_cents)}`)}
+    ${stat("Fees covered by donors", money0(s.gift_assist_cents), `of ${money0(s.fees_cents)} charged`)}
     ${stat("Declined online", String(s.declined_count), `${money0(s.declined_cents)} attempted`)}
   </div>
   <div class="two" style="margin-top:8px">
@@ -223,7 +237,7 @@ ${body}
 </div></section>
 
 <section class="sec" id="takeaways"><div class="wrap">
-  ${head("Takeaways", "What to do <em>this week</em>", "Generated from the numbers. Actions first, then things to watch, then context. Each one names the list to work from.")}
+  ${head("Takeaways", "What to do <em>this week</em>", "Actions first, then risks, then context. Each one says where the list is.")}
   <ol class="take">${takeaways.map(t => `<li class="${t.kind}"><span class="tag">${esc(kindLabel[t.kind])}</span><h4>${esc(t.title)}</h4>${t.body ? `<p>${esc(t.body)}</p>` : ""}</li>`).join("")}</ol>
 </div></section>
 
@@ -240,7 +254,7 @@ ${body}
 </div></section>
 
 <section class="sec" id="web"><div class="wrap">
-  ${head("Website", "Donate page <em>traffic</em>", w.connected ? `From the Givebar Stats dashboard (website analytics for cairgeorgia.org), the seven days around the gala. Pulled ${esc(w.pulled_at.slice(0, 16).replace("T", " "))} UTC.` : "Website analytics were not pulled for this build (run reports/pull-stats.ts).")}
+  ${head("Website", "Donate page <em>traffic</em>", w.connected ? `cairgeorgia.org traffic for the seven days around the gala, from the Givebar Stats page. Pulled ${esc(w.pulled_at.slice(0, 16).replace("T", " "))} UTC.` : "Website analytics were not pulled for this build (run reports/pull-stats.ts).")}
   ${w.connected && w.week ? `
   <div class="stats">
     ${stat("Visitors, gala week", num(w.week.visitors), `${num(w.week.views)} page views`)}
@@ -256,7 +270,7 @@ ${body}
 </div></section>
 
 <section class="sec" id="history"><div class="wrap">
-  ${head("Bloomerang", "Giving <em>history</em>", r.bloomerang.connected ? `${r.bloomerang.matched} of ${s.households} households matched a Bloomerang record (${num(r.bloomerang.constituents)} constituents, pulled ${esc(r.bloomerang.pulled_at.slice(0, 10))}). History counts gifts before the gala day; tonight's online gifts are already synced into Bloomerang and are excluded.` : "Not connected.")}
+  ${head("Bloomerang", "Giving <em>history</em>", r.bloomerang.connected ? `${r.bloomerang.matched} of ${s.households} households matched a Bloomerang record (${num(r.bloomerang.constituents)} constituents, pulled ${esc(r.bloomerang.pulled_at.slice(0, 10))}). History means gifts before the gala day. The gala's online gifts are already in Bloomerang and are left out.` : "Not connected.")}
   ${r.bloomerang.connected ? `
   <div class="stats">
     ${stat("Repeat donors", String(s.repeat_donors), `gave ${money0(r.bloomerang.repeat_cents)}`)}
@@ -270,7 +284,7 @@ ${body}
 </div></section>
 
 <section class="sec" id="lists"><div class="wrap">
-  ${head("Detail", "The <em>lists</em>", "The full detail lives on its own pages (same password) so this overview stays readable; the workbook has every column.")}
+  ${head("Detail", "The <em>lists</em>", "Each list is its own page, same password. The workbook has every column.")}
   <div class="stats">
     ${PAGES.slice(1).map(p => `<div class="stat"><div class="stat-label">${esc(p.label)}</div><div class="stat-value">${p.file === "donors.html" ? s.households : p.file === "gifts.html" ? r.gifts.length : p.file === "crossref.html" ? s.prospects_total : s.pledge_count}</div><div class="stat-sub">${p.file === "donors.html" ? "households" : p.file === "gifts.html" ? "ledger entries" : p.file === "crossref.html" ? "prospects, plus tables and sponsors" : "pledges, plus declines and tickets"}</div><p style="margin:10px 0 0"><a class="btn sm hide-print" href="${p.file}">Open</a><a class="btn sm print-only" href="${esc(c.share_url)}${p.file}">Open online</a></p></div>`).join("")}
   </div>
@@ -281,7 +295,7 @@ ${body}
   <dl class="spec">
     <dt>Givebar ledger</dt><dd>VACUUM INTO snapshot of the production database taken ${esc(generated)}. Totals are the deterministic fold of every create, amend, void, and restore event. Rehearsal gifts are excluded.</dd>
     <dt>Online gifts</dt><dd>Qgiv form "${esc(r.qgiv.form_name)}" (${r.qgiv.all.length} transactions since January 1). Gift time is the Qgiv transaction time, not the import time. Amount is the gift net of donor-covered fees.</dd>
-    <dt>Pledges</dt><dd>Gifts recorded by staff in the ballroom with the Pledge method. They are commitments, not cash, until collected.</dd>
+    <dt>Pledges and payment</dt><dd>Staff recorded every ballroom gift as a pledge. The team note on each gift says what was collected: a check number, cash, or card details on the pledge card. "Pledge to invoice" means nothing was collected on the night.</dd>
     <dt>Households</dt><dd>Gifts are grouped by first and last name after removing titles ("Dr.", "Household of") and splitting couples. Anonymous donors are listed by legal name with an anonymous mark; that name never appeared on the chart.</dd>
     <dt>Cross-reference</dt><dd>MASTER workbook sheets ${esc(Object.values(c.master_sheets).join(", "))}, matched by person name and, for online gifts, email. Automatic matching is conservative: verify before acting on a blank.</dd>
     <dt>Website</dt><dd>${w.connected ? "Umami analytics for cairgeorgia.org as shown on the Givebar Stats page: visitors are unique sessions; a channel is a UTM source/medium pair; conversion divides online gifts by donate-page visitors in the same seven days." : "Not pulled."}</dd>
@@ -294,23 +308,23 @@ ${body}
 
   // Donors
   const donors = shell("donors.html", "Donors", `
-${banner("Donors", "Every donor <em style='font-style:normal;color:#E5C578'>household</em>", `${s.households} households, largest first. Gifts from the same person across the ballroom form and the online form are combined. Anonymous donors show their legal name with an anonymous mark.`)}
+${banner("Donors", "Every donor <em style='font-style:normal;color:#E5C578'>household</em>", `${s.households} households, largest first. Ballroom and online gifts from the same person are combined. Anonymous donors show their name with an anonymous mark. Tap a row for detail.`)}
 <main><section class="sec"><div class="wrap">
-  ${toolbar(`<input type="search" id="donor-q" placeholder="Search name, email, city, table, note" aria-label="Search donors"><select id="donor-f" aria-label="Filter donors"><option value="">All donors</option><option value="pledge">Has pledge to collect</option><option value="online">Gave online</option><option value="anon">Anonymous</option><option value="prospect">On prospect list</option><option value="sponsor">Sponsor</option><option value="ticket">Ticket buyer</option><option value="major">Major gift</option>${r.bloomerang.connected ? '<option value="repeat">Repeat (Bloomerang)</option><option value="new">First-time (Bloomerang)</option>' : ""}</select><label class="chip"><input type="checkbox" id="donor-notes">Team notes</label><button class="btn ghost" id="donor-csv" type="button">CSV of this view</button><span class="count" id="donor-count"></span>`)}
+  ${toolbar(`<input type="search" id="donor-q" placeholder="Search name, email, city, table, note" aria-label="Search donors"><select id="donor-f" aria-label="Filter donors"><option value="">All donors</option><option value="pledge">Has pledge to collect</option><option value="online">Gave online</option><option value="anon">Anonymous</option><option value="prospect">On prospect list</option><option value="sponsor">Sponsor</option><option value="ticket">Ticket buyer</option><option value="major">Major gift</option>${r.bloomerang.connected ? '<option value="repeat">Repeat (Bloomerang)</option><option value="new">First-time (Bloomerang)</option>' : ""}</select><select id="donor-c" aria-label="Filter by how the money arrives"><option value="">Any payment</option><option value="pledge">Pledge to invoice</option><option value="check">Check received</option><option value="cash">Cash received</option><option value="card">Card on pledge card</option><option value="online">Paid online</option></select><label class="chip"><input type="checkbox" id="donor-notes" checked>Notes</label><button class="btn ghost" id="donor-csv" type="button">CSV of this view</button><span class="count" id="donor-count"></span>`)}
   ${table("donor-table", `<th data-k="name">Donor</th><th data-k="total" class="r">Total</th><th data-k="count" class="r">Gifts</th><th data-k="pledged" class="r">Pledged</th><th data-k="paid" class="r">Online</th><th data-k="first">First gift</th><th>Context</th>${r.bloomerang.connected ? "<th>History</th>" : ""}`)}
 </div></section></main>${foot}`);
 
   // Gifts
   const gifts = shell("gifts.html", "Gifts", `
-${banner("Gifts", "Every gift, <em style='font-style:normal;color:#E5C578'>in order</em>", `${r.gifts.length} ledger entries including ${s.void_count} deleted and ${s.amended_count} corrected. The workbook carries the full event log with every amendment.`)}
+${banner("Gifts", "Every gift, <em style='font-style:normal;color:#E5C578'>in order</em>", `${r.gifts.length} ledger entries including ${s.void_count} deleted and ${s.amended_count} corrected. Deleted entries are hidden unless you include them. The workbook has the full event log. Tap a row for detail.`)}
 <main><section class="sec"><div class="wrap">
-  ${toolbar(`<input type="search" id="gift-q" placeholder="Search donor, operator, note, city" aria-label="Search gifts"><select id="gift-f" aria-label="Filter gifts"><option value="">All entries</option><option value="active">Active only</option><option value="voided">Deleted only</option><option value="pledge">Pledges</option><option value="online">Online</option><option value="amended">Corrected</option><option value="anon">Anonymous</option><option value="notes">With team note</option></select><button class="btn ghost" id="gift-csv" type="button">CSV of this view</button><span class="count" id="gift-count"></span>`)}
-  ${table("gift-table", `<th data-k="t">Time</th><th data-k="donor">Donor</th><th data-k="amount" class="r">Amount</th><th data-k="method">Method</th><th data-k="source">Source</th><th data-k="by">Recorded by</th><th>Flags</th><th>Note</th>`)}
+  ${toolbar(`<input type="search" id="gift-q" placeholder="Search donor, operator, note, city" aria-label="Search gifts"><select id="gift-f" aria-label="Filter gifts"><option value="">All gifts</option><option value="pledge">Pledge to invoice</option><option value="check">Check received</option><option value="cash">Cash received</option><option value="card">Card on pledge card</option><option value="online">Paid online</option><option value="amended">Corrected</option><option value="anon">Anonymous</option><option value="notes">With a note</option></select><label class="chip"><input type="checkbox" id="gift-deleted">Include deleted</label><button class="btn ghost" id="gift-csv" type="button">CSV of this view</button><span class="count" id="gift-count"></span>`)}
+  ${table("gift-table", `<th data-k="t">Time</th><th data-k="donor">Donor</th><th data-k="amount" class="r">Amount</th><th data-k="method">Method</th><th data-k="source">Source</th><th data-k="by">Recorded by</th><th data-k="collection">Payment</th><th>Note</th>`)}
 </div></section></main>${foot}`);
 
   // Cross-reference
   const crossref = shell("crossref.html", "Cross-reference", `
-${banner("Cross-reference", "Prospects, sponsors, <em style='font-style:normal;color:#E5C578'>tables</em>", "Tonight's ledger against the staff MASTER workbook: the major-donor ask list, sponsorship packages, and seating. Matching is by name and email; a blank means no automatic match, not necessarily no gift.")}
+${banner("Cross-reference", "Prospects, sponsors, <em style='font-style:normal;color:#E5C578'>tables</em>", "The ledger compared with the staff MASTER workbook: the ask list, sponsorships, and seating. Matching is by name and email. A blank means no match was found, not that nobody gave.")}
 <main><section class="sec"><div class="wrap">
   <div class="stats" style="margin-top:0">${stat("Prospects on list", String(s.prospects_total))}${stat("Gave tonight", String(s.prospects_gave), `${money0(s.prospects_actual_cents)} recorded`)}${stat("Asks on the list", money0(s.prospects_ask_cents))}${stat("Below ask", String(s.prospects_under_ask.length), `${s.prospects_missing.length} with an ask and no gift`)}</div>
   <h3>Major-donor ask list vs. actual</h3>
@@ -324,16 +338,17 @@ ${banner("Cross-reference", "Prospects, sponsors, <em style='font-style:normal;c
 
   // Follow-up
   const followup = shell("followup.html", "Follow-up", `
-${banner("Follow-up", "Lists to <em style='font-style:normal;color:#E5C578'>work from</em>", `${money0(s.pledge_cents)} in pledges to collect, ${s.prospects_missing.length} prospects with an ask and no gift, ${s.declined_count} declined online attempts, ${view.tickets_no_gift.length} ticket buyers with no gift${r.bloomerang.connected ? `, ${r.bloomerang.lapsed.length} lapsed gala donors` : ""}.`)}
+${banner("Follow-up", "Lists to <em style='font-style:normal;color:#E5C578'>work from</em>", `${money0(s.collection.pledge.cents)} in pledges to invoice, ${s.prospects_missing.length} prospects with an ask and no gift, ${s.declined_count} declined online attempts, ${view.tickets_no_gift.length} ticket buyers with no gift${r.bloomerang.connected ? `, ${r.bloomerang.lapsed.length} lapsed gala donors` : ""}.`)}
 <main><section class="sec"><div class="wrap">
-  <h3 style="margin-top:0">Pledges to collect <small>${esc(money0(s.pledge_cents))} · ${s.pledge_count} pledges</small></h3>
+  <h3 style="margin-top:0">Pledges to invoice <small>${esc(money0(s.collection.pledge.cents))} · ${s.collection.pledge.count} gifts with nothing collected on the night</small></h3>
+  <p class="note" style="margin-bottom:12px">Checks, cash, and card details collected at the tables are not on this list; they are marked on the Gifts page.</p>
   ${table("pledge-table", `<th data-k="name">Donor</th><th data-k="pledged" class="r">Pledged</th><th data-k="by">Recorded by</th><th>Table</th><th>Note</th>`)}
   <div class="two">
     <div><h3>Prospects with an ask and no gift <small>${s.prospects_missing.length}</small></h3>${table("missing-table", `<th>Prospect</th><th class="r">Ask</th><th>Notes</th>`)}</div>
     <div><h3>Declined online attempts <small>${s.declined_count}</small></h3>${table("declined-table", `<th>Name</th><th>Time</th><th class="r">Amount</th><th>Payment</th>`)}</div>
   </div>
   ${r.bloomerang.connected ? `<h3>Gave at last year's gala, nothing recorded tonight <small>${r.bloomerang.lapsed.length} Bloomerang records · ${esc(money0(r.bloomerang.lapsed.reduce((n, l) => n + l.last_gala_cents, 0)))} last year</small></h3>
-  <p class="note" style="margin-bottom:12px">Matched by name and email against tonight's ledger; a spouse or business name can hide a gift that was made. Check before calling.</p>
+  <p class="note" style="margin-bottom:12px">Matched by name and email. A gift made under a spouse's or business name will not match. Check before calling.</p>
   ${table("lapsed-table", `<th data-k="name">Name</th><th data-k="last_gala_cents" class="r">Last year's gala</th><th data-k="lifetime_cents" class="r">Lifetime</th><th data-k="last_gift">Last gift</th><th>Email</th>`)}` : ""}
   <h3>Ticket buyers with no gift recorded <small>${view.tickets_no_gift.length} people</small></h3>
   ${table("ticket-table", `<th>Name</th><th>Email</th><th class="r">Tickets</th><th>Order</th>`)}
@@ -366,27 +381,29 @@ function paged(rows,state,pagerEl,render,size){size=size||PAGE;const pages=Math.
 if(document.getElementById('donor-table')){
 const dState={key:'total',dir:'desc',page:1};let dView=[];const hasHistory=!!document.querySelector('#donor-table th:last-child') && document.querySelector('#donor-table thead').textContent.includes('History');
 function renderDonors(){const q=$('#donor-q').value.trim().toLowerCase();const f=$('#donor-f').value;const notes=$('#donor-notes').checked;
- dView=R.donors.filter(d=>{if(f==='pledge'&&!d.pledged)return false;if(f==='online'&&!d.paid)return false;if(f==='anon'&&!d.anon)return false;if(f==='prospect'&&!d.prospect)return false;if(f==='sponsor'&&!d.sponsor)return false;if(f==='ticket'&&!d.ticket)return false;if(f==='repeat'&&d.rel!=='repeat')return false;if(f==='new'&&d.rel!=='new')return false;if(f==='major'&&d.largest<R.event.major_gift_threshold_cents)return false;
+ const cf=$('#donor-c').value;dView=R.donors.filter(d=>{if(cf&&!d.collections.includes(cf))return false;if(f==='pledge'&&!d.pledged)return false;if(f==='online'&&!d.paid)return false;if(f==='anon'&&!d.anon)return false;if(f==='prospect'&&!d.prospect)return false;if(f==='sponsor'&&!d.sponsor)return false;if(f==='ticket'&&!d.ticket)return false;if(f==='repeat'&&d.rel!=='repeat')return false;if(f==='new'&&d.rel!=='new')return false;if(f==='major'&&d.largest<R.event.major_gift_threshold_cents)return false;
   if(!q)return true;return [d.name,d.display,d.email,d.city,d.table,d.sponsor,d.prospect&&d.prospect.name,d.notes].join(' ').toLowerCase().includes(q);});
  const rows=sortRows(dView,dState);$('#donor-count').textContent=rows.length+' of '+R.donors.length+' households · '+usd0(rows.reduce((s,d)=>s+d.total,0));
  const shown=paged(rows,dState,$('#donor-table-pager'),renderDonors);
  $('#donor-table tbody').innerHTML=shown.map(d=>{const ctx=[];if(d.prospect)ctx.push(pill('ask '+usd0(d.prospect.ask||0),'navy'));if(d.sponsor)ctx.push(pill('sponsor','gold'));if(d.ticket)ctx.push(pill('ticket'));if(d.table)ctx.push(pill('table '+d.table.split(':')[0]));if(d.restriction)ctx.push(pill(d.restriction,'green'));if(d.city)ctx.push(pill(d.city));if(d.largest>=R.event.major_gift_threshold_cents)ctx.push(pill('major','orange'));if(d.prospect&&d.prospect.before)ctx.push(pill('gave '+usd0(d.prospect.before)+' earlier','green'));
   const b=d.bloomerang;const hist=b?(b.count?('<b>'+usd0(b.lifetime)+'</b> · '+b.count+' gifts since '+esc(b.first.slice(0,4))+(b.monthly?' '+pill('monthly','green'):'')+'<span class="sub">last '+esc(b.last)+' '+usd0(b.lastAmount)+(b.galas.length?' · galas: '+esc(b.galas.map(g=>g.label.replace(' Annual','')+' '+usd0(g.cents)).join(', ')):'')+'</span>'):pill('first gift','gold')):'<span class="dim">no Bloomerang match</span>';
-  return '<tr>'+nameCell(d.name,d.anon,d.anon?'shown as '+d.display:(d.display!==d.name?'shown as '+d.display:''))+td('Total','<b>'+usd(d.total)+'</b>','r amt')+td('Gifts',d.count,'r')+td('Pledged',d.pledged?usd(d.pledged):'','r')+td('Online',d.paid?usd(d.paid):'','r')+td('First gift',esc(d.firstLabel),'dim nowrap')+td('Context',ctx.join('')+(notes&&d.notes?'<span class="sub">'+esc(d.notes)+'</span>':''))+(hasHistory?td('History',hist):'')+'</tr>';}).join('');}
-['#donor-q','#donor-f','#donor-notes'].forEach(s=>$(s).addEventListener('input',()=>{dState.page=1;renderDonors();}));sortable($('#donor-table'),dState,renderDonors);renderDonors();
+  const pay=d.collections.map(k=>pill(R.collection_labels[k],k==='pledge'?'orange':k==='online'?'':'green')).join('');const brief=[d.count>1?d.count+' gifts':'',d.collections.map(k=>R.collection_labels[k]).join(', '),d.prospect?'ask '+usd0(d.prospect.ask||0):'',b&&b.count?'gave before':''].filter(Boolean).join(' · ');
+  return '<tr>'+nameCell(d.name,d.anon,d.anon?'shown as '+d.display:(d.display!==d.name?'shown as '+d.display:''))+td('Total','<b>'+usd(d.total)+'</b>','r amt')+'<td class="brief">'+esc(brief)+'</td>'+td('Gifts',d.count,'r')+td('Pledged',d.pledged?usd(d.pledged):'','r')+td('Online',d.paid?usd(d.paid):'','r')+td('First gift',esc(d.firstLabel),'dim nowrap')+td('Context',pay+ctx.join('')+(notes&&d.notes?'<span class="sub">'+esc(d.notes)+'</span>':''))+(hasHistory?td('History',hist):'')+'</tr>';}).join('');}
+['#donor-q','#donor-f','#donor-c','#donor-notes'].forEach(s=>$(s).addEventListener('input',()=>{dState.page=1;renderDonors();}));sortable($('#donor-table'),dState,renderDonors);renderDonors();
 $('#donor-csv').addEventListener('click',()=>csv([['Donor','Display name','Anonymous','Total','Gifts','Pledged','Online','First gift','Email','City','Prospect ask','Sponsor','Table','Recorded by','Notes']].concat(sortRows(dView,dState).map(d=>[d.name,d.display,d.anon?'yes':'',d.total/100,d.count,d.pledged/100,d.paid/100,d.firstLabel,d.email,d.city,d.prospect?d.prospect.ask/100:'',d.sponsor,d.table,d.by,d.notes])),'donors.csv'));
 }
 
 if(document.getElementById('gift-table')){
 const gState={key:'t',dir:'asc',page:1};let gView=[];
 function renderGifts(){const q=$('#gift-q').value.trim().toLowerCase();const f=$('#gift-f').value;
- gView=R.gifts.filter(g=>{if(f==='active'&&g.status!=='active')return false;if(f==='voided'&&g.status!=='voided')return false;if(f==='pledge'&&g.method!=='pledge')return false;if(f==='online'&&g.source!=='online')return false;if(f==='amended'&&!g.amended)return false;if(f==='anon'&&!g.anon)return false;if(f==='notes'&&!g.notes)return false;if(!q)return true;return [g.donor,g.display,g.by,g.notes,g.email,g.city,g.table,g.seated].join(' ').toLowerCase().includes(q);});
+ const del=$('#gift-deleted').checked;gView=R.gifts.filter(g=>{if(!del&&g.status!=='active')return false;if(['pledge','check','cash','card','online'].includes(f)&&g.collection!==f)return false;if(f==='amended'&&!g.amended)return false;if(f==='anon'&&!g.anon)return false;if(f==='notes'&&!g.notes)return false;if(!q)return true;return [g.donor,g.display,g.by,g.notes,g.email,g.city,g.table,g.seated].join(' ').toLowerCase().includes(q);});
  const rows=sortRows(gView,gState);$('#gift-count').textContent=rows.length+' entries · '+usd0(rows.filter(g=>g.status==='active').reduce((s,g)=>s+g.amount,0))+' active';
  const shown=paged(rows,gState,$('#gift-table-pager'),renderGifts);
  $('#gift-table tbody').innerHTML=shown.map(g=>{const flags=[];if(g.status==='voided')flags.push(pill('deleted','red'));if(g.amended)flags.push(pill('was '+usd0(g.original),'orange'));if(g.recurring)flags.push(pill('monthly','green'));if(g.restriction==='Zakat')flags.push(pill('zakat','green'));if(g.prospect)flags.push(pill('prospect','navy'));if(g.seated)flags.push(pill('table '+g.seated.split(':')[0]));
-  return '<tr'+(g.status==='voided'?' style="opacity:.55"':'')+'>'+nameCell(g.donor,g.anon,g.time)+td('Amount','<b>'+usd(g.amount)+'</b>','r amt')+td('Method',esc(g.method))+td('Source',esc(g.source))+td('Recorded by',esc(g.by))+td('Flags',flags.join(''))+td('Note',esc(g.notes),'dim')+'</tr>';}).join('');}
-['#gift-q','#gift-f'].forEach(s=>$(s).addEventListener('input',()=>{gState.page=1;renderGifts();}));sortable($('#gift-table'),gState,renderGifts);renderGifts();
-$('#gift-csv').addEventListener('click',()=>csv([['Time','Donor','Display','Anonymous','Amount','Method','Source','Recorded by','Status','Corrected from','Note','Restriction','Recurring','City']].concat(sortRows(gView,gState).map(g=>[g.time,g.donor,g.display,g.anon?'yes':'',g.amount/100,g.method,g.source,g.by,g.status,g.amended?g.original/100:'',g.notes,g.restriction,g.recurring?'monthly':'',g.city])),'gifts.csv'));
+  const pay=pill(R.collection_labels[g.collection]+(g.ref?' #'+g.ref:''),g.collection==='pledge'?'orange':g.collection==='online'?'':'green');const brief=[R.collection_labels[g.collection]+(g.ref?' #'+g.ref:''),g.by&&g.source==='manual'?'by '+g.by:'',g.status==='voided'?'deleted':''].filter(Boolean).join(' · ');
+  return '<tr'+(g.status==='voided'?' style="opacity:.55"':'')+'>'+nameCell(g.donor,g.anon,g.time)+td('Amount','<b>'+usd(g.amount)+'</b>','r amt')+'<td class="brief">'+esc(brief)+'</td>'+td('Method',esc(g.method))+td('Source',esc(g.source))+td('Recorded by',esc(g.by))+td('Payment',pay+flags.join(''))+td('Note',esc(g.plain||g.notes),'dim')+'</tr>';}).join('');}
+['#gift-q','#gift-f','#gift-deleted'].forEach(s=>$(s).addEventListener('input',()=>{gState.page=1;renderGifts();}));sortable($('#gift-table'),gState,renderGifts);renderGifts();
+$('#gift-csv').addEventListener('click',()=>csv([['Time','Donor','Display','Anonymous','Amount','Method','Payment','Reference','Source','Recorded by','Status','Corrected from','Note','Restriction','Recurring','City']].concat(sortRows(gView,gState).map(g=>[g.time,g.donor,g.display,g.anon?'yes':'',g.amount/100,g.method,R.collection_labels[g.collection],g.ref,g.source,g.by,g.status,g.amended?g.original/100:'',g.notes,g.restriction,g.recurring?'monthly':'',g.city])),'gifts.csv'));
 }
 
 if(document.getElementById('prospect-table')){
@@ -403,7 +420,7 @@ $('#sponsor-table tbody').innerHTML=R.sponsors.filter(s=>s.gave!==null).sort((a,
 }
 
 if(document.getElementById('pledge-table')){
-const plState={key:'pledged',dir:'desc',page:1};const pledges=R.donors.filter(d=>d.pledged);
+const plState={key:'pledged',dir:'desc',page:1};const pledges=R.donors.filter(d=>d.collections.includes('pledge')).map(d=>({...d,pledged:R.gifts.filter(g=>g.status==='active'&&g.collection==='pledge'&&g.donor===d.name).reduce((n,g)=>n+g.amount,0)||d.pledged}));
 function renderPledges(){const rows=sortRows(pledges,plState);const shown=paged(rows,plState,$('#pledge-table-pager'),renderPledges);$('#pledge-table tbody').innerHTML=shown.map(d=>'<tr>'+nameCell(d.name,d.anon,'')+td('Pledged','<b>'+usd0(d.pledged)+'</b>','r amt')+td('Recorded by',esc(d.by))+td('Table',esc(d.table),'dim')+td('Note',esc(d.notes),'dim')+'</tr>').join('');}
 sortable($('#pledge-table'),plState,renderPledges);renderPledges();
 $('#missing-table tbody').innerHTML=R.stats.prospects_missing.sort((a,b)=>b.ask-a.ask).map(p=>'<tr>'+nameCell(p.name,false,'')+td('Ask','<b>'+usd0(p.ask)+'</b>','r amt')+td('Notes',esc(p.notes),'dim')+'</tr>').join('');
@@ -429,6 +446,8 @@ function mix(){const S=R.stats;const W=widthOf('chart-mix');const parts=[['Ballr
 function pareto(){const D=R.donors.map(d=>d.total);const total=D.reduce((s,v)=>s+v,0);if(!total)return;const W=widthOf('chart-pareto'),H=170,L=40,top=10,ih=120;let cum=0;const pts=D.map((v,i)=>{cum+=v;return [L+(W-L-10)*(i+1)/D.length,top+ih-ih*cum/total];});let out='<line class="axis" x1="'+L+'" x2="'+(W-10)+'" y1="'+(top+ih)+'" y2="'+(top+ih)+'"/>';[0.5,0.8,1].forEach(f=>{const y=top+ih-ih*f;out+='<line class="axis" x1="'+L+'" x2="'+(W-10)+'" y1="'+y+'" y2="'+y+'" stroke-dasharray="2 4"/><text x="'+(L-6)+'" y="'+(y+4)+'" text-anchor="end">'+Math.round(f*100)+'%</text>';});out+='<path class="line" d="M'+L+','+(top+ih)+' L'+pts.map(p=>p[0]+','+p[1]).join(' L')+'"/>';let run=0,n50=0;for(let i=0;i<D.length;i++){run+=D[i];if(run>=total/2){n50=i+1;break;}}out+='<text class="lbl" x="'+L+'" y="'+(H-8)+'">'+n50+' OF '+D.length+' HOUSEHOLDS GAVE HALF THE TOTAL</text>';$('#chart-pareto').innerHTML=svg(W,H,out);}
 function charts(){timeline();bands();mix();pareto();}charts();let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(charts,150);});
 }
+// Mobile rows open on tap; a row starts closed so the list stays short.
+document.querySelectorAll('.tbl').forEach(box=>box.addEventListener('click',e=>{if(e.target.closest('a,button'))return;const tr=e.target.closest('tr');if(tr&&tr.parentElement.tagName==='TBODY')tr.classList.toggle('open');}));
 // Close the chapter menu on outside click or Escape.
 const menu=document.querySelector('details.menu');if(menu){document.addEventListener('click',e=>{if(!menu.contains(e.target))menu.removeAttribute('open');});document.addEventListener('keydown',e=>{if(e.key==='Escape')menu.removeAttribute('open');});}
 })();`;
