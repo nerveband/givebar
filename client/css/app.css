@@ -930,7 +930,7 @@ textarea.form-input-text { min-height:80px; resize:vertical; }
 .stats-detail-filters label:first-child { flex-basis: 260px; }
 .stats-detail-filters input, .stats-detail-filters select, #stats-sort { min-height: 44px; }
 #stats-csv-text { width: 100%; font-family: var(--font-mono); }
-#chart-hour { max-height: 420px; overflow-y: auto; }
+.stats-activity-card { grid-column: 1 / -1; }
 #stats-donations { font-variant-numeric: tabular-nums; }
 .stats-main [hidden] { display: none !important; }
 

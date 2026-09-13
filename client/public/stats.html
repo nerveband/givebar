@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.5.1">
   <link rel="stylesheet" href="/css/base.css?v=7.5.1">
   <link rel="stylesheet" href="/css/components.css?v=7.5.1">
-  <link rel="stylesheet" href="/css/app.css?v=7.5.8">
+  <link rel="stylesheet" href="/css/app.css?v=7.5.9">
 </head>
 <body>
   <div class="ops-shell">
@@ -88,7 +88,7 @@
 
       <section class="stats-card">
         <div class="stats-card-head"><h2>Total raised over time</h2><span class="form-hint" id="timeline-hint"></span></div>
-        <p class="form-hint">Hover or tap to inspect gifts. Use the arrow keys when the chart is focused.</p>
+        <p class="form-hint">Blue dots mark intervals with gifts. Hover or tap for details; use arrow keys when focused.</p>
         <div id="chart-timeline" class="chart"></div>
       </section>
 
@@ -113,9 +113,9 @@
           <div class="stats-card-head"><h2>Gift sizes</h2></div>
           <div id="chart-size" class="chart bars"></div>
         </section>
-        <section class="stats-card">
-          <div class="stats-card-head"><h2>Time of day</h2><span class="form-hint">By minute · Eastern</span></div>
-          <div id="chart-hour" class="chart bars"></div>
+        <section class="stats-card stats-activity-card">
+          <div class="stats-card-head"><h2>Donation activity over time</h2><span class="form-hint" id="activity-hint"></span></div>
+          <div id="chart-hour" class="chart"></div>
         </section>
       </div>
 
@@ -161,6 +161,6 @@
 
   <script src="/js/session.js?v=7.5.3"></script>
   <script src="/js/presence.js?v=7.5.1"></script>
-  <script src="/js/stats.js?v=7.5.6"></script>
+  <script src="/js/stats.js?v=7.5.7"></script>
 </body>
 </html>

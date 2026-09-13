@@ -78,8 +78,10 @@
     const path = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ');
     svg('path', { d: `${path} L${x(points.length - 1).toFixed(1)},${y(0)} L${x(0)},${y(0)} Z`, fill: GOLD, opacity: 0.12 }, root);
     svg('path', { d: path, fill: 'none', stroke: GOLD, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }, root);
-    const last = points[points.length - 1];
-    svg('circle', { cx: x(points.length - 1), cy: y(last.y), r: 4, fill: GOLD }, root);
+    points.forEach((point, i) => {
+      if (!point.gifts) return;
+      svg('circle', { cx: x(i), cy: y(point.y), r: 4.5, fill: '#7ab8e6', stroke: '#101116', 'stroke-width': 2, class: 'donation-dot' }, root);
+    });
     axisLabels(root, points, x, H - 10);
     container.replaceChildren(root);
     addHover(root, points, x, i => `${points[i].label}: ${opts.format(points[i].y)}${points[i].detail ? ' · ' + points[i].detail : ''}`);
@@ -96,10 +98,11 @@
     for (let g = 0; g <= 3; g++) {
       const value = Math.round((maxY / 3) * g);
       svg('line', { x1: L, x2: W - R, y1: y(value), y2: y(value), stroke: LINE }, root);
-      text(root, L - 8, y(value) + 4, String(value), { 'text-anchor': 'end' });
+      text(root, L - 8, y(value) + 4, opts.axisFormat ? opts.axisFormat(value) : String(value), { 'text-anchor': 'end' });
     }
     points.forEach((p, i) => {
       svg('rect', { x: L + i * slot + slot * 0.15, y: y(p.y), width: slot * 0.7, height: Math.max(0, y(0) - y(p.y)), fill: opts.color || GOLD, rx: 2, opacity: p.y ? 0.9 : 0 }, root);
+      if (opts.dots && p.y > 0) svg('circle', { cx: L + i * slot + slot / 2, cy: y(p.y), r: 3.5, fill: '#7ab8e6', stroke: '#101116', 'stroke-width': 1.5, class: 'donation-dot' }, root);
       if (p.y2 !== undefined) svg('rect', { x: L + i * slot + slot * 0.15, y: y(p.y2), width: slot * 0.7, height: Math.max(0, y(0) - y(p.y2)), fill: INK, rx: 2, opacity: p.y2 ? 0.55 : 0 }, root);
     });
     axisLabels(root, points, i => L + i * slot + slot / 2, H - 10);
@@ -232,7 +235,7 @@
       return [...gifts.slice(0, 4).map(g => `${g.donor_name}: ${money(g.amount_cents)}`), ...(gifts.length > 4 ? [`+ ${gifts.length - 4} more gifts in this interval`] : [])];
     };
     $('timeline-hint').textContent = `per ${bucket >= 86_400_000 ? 'day' : bucket >= 3_600_000 ? `${bucket / 3_600_000} hour${bucket > 3_600_000 ? 's' : ''}` : `${bucket / 60_000} minute${bucket === 60_000 ? '' : 's'}`}`;
-    areaChart($('chart-timeline'), data.timeline.map(b => ({ label: timeLabel(b.t, bucket), y: b.cumulative_cents, donations: bucketDonations(b.t), detail: b.gifts ? `${b.gifts} gift${b.gifts === 1 ? '' : 's'} (${money(b.cents)})` : '' })), {
+    areaChart($('chart-timeline'), data.timeline.map(b => ({ label: timeLabel(b.t, bucket), y: b.cumulative_cents, gifts: b.gifts, donations: bucketDonations(b.t), detail: b.gifts ? `${b.gifts} gift${b.gifts === 1 ? '' : 's'} (${money(b.cents)})` : '' })), {
       label: 'Total raised over time', format: short,
       rules: [...data.milestones.map(m => ({ value: m.cents, label: m.label })), { value: data.goal_cents, label: 'Goal' }]
     });
@@ -244,7 +247,8 @@
     barList($('chart-source'), data.by_source, { label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
     barList($('chart-method'), data.by_method, { label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
     barList($('chart-size'), data.by_size, { label: r => r.label, value: r => r.gifts, format: r => `${r.gifts} · ${money(r.cents)}` });
-    barList($('chart-hour'), data.by_minute, { label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
+    columnChart($('chart-hour'), data.timeline.map(b => ({ label: timeLabel(b.t, bucket), y: b.cents, gifts: b.gifts, donations: bucketDonations(b.t) })), { label: 'Donation activity over time', axisFormat: short, dots: true, format: p => `${money(p.y)} · ${p.gifts} gift${p.gifts === 1 ? '' : 's'}` });
+    $('activity-hint').textContent = $('timeline-hint').textContent + ' · Eastern';
     if (web.connected) barList($('chart-devices'), web.devices, { label: r => r.device.charAt(0).toUpperCase() + r.device.slice(1), value: r => r.visitors, format: r => `${r.visitors}`, emptyMessage: 'No donation page visits in this range.' });
     else empty($('chart-devices'), 'Not connected.');
 
