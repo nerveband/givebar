@@ -27,8 +27,16 @@ export type TicketOrder = { name: string; email: string; tickets: number; items:
 export type TableRow = { number: string; host: string; allotted: number; occupied: number; guests: string };
 
 export type BloomerangMatch = {
-  constituent_id: number; name: string; email: string; lifetime_cents: number; gift_count: number;
-  first_gift: string; last_gift: string; last_gift_cents: number; last_gala_cents: number; last_gala_date: string; years_active: number[];
+  constituent_id: number; name: string; email: string;
+  /** Giving before the gala day: what the team knew walking in. */
+  lifetime_cents: number; gift_count: number; first_gift: string; last_gift: string; last_gift_cents: number;
+  /** Gift(s) tied to last year's gala campaign or its date window. */
+  last_gala_cents: number; last_gala_date: string; years_active: number[];
+  /** Every gala campaign the constituent gave to, oldest first ("6th Annual": cents). */
+  galas: { label: string; cents: number }[];
+  monthly: boolean;
+  /** Bloomerang holds duplicate records for many people (Kindful import); every record matching the donor is folded into one row. */
+  records: number; ids: number[];
 };
 
 export type Gift = {
@@ -52,7 +60,7 @@ export type Report = {
   generated_at: string; config: Config; event: { name: string; subtitle: string; goal_cents: number; total_cents: number; major_gift_threshold_cents: number; match_total_cents: number; qr_url: string; display_url: string; appeal_start: number | null; first_gift_at: number; last_gift_at: number };
   gifts: Gift[]; donors: Donor[]; events: LedgerEventRow[]; qgiv: { all: QgivTxn[]; declined: QgivTxn[]; pre_event: QgivTxn[]; form_name: string; pulled_at: string };
   prospects: Prospect[]; sponsors: Sponsor[]; tickets: TicketOrder[]; tables: TableRow[]; milestones: { label: string; cents: number; reached_at: number | null }[]; ask_tiers: { label: string; cents: number; hits: number }[];
-  bloomerang: { connected: boolean; pulled_at: string; constituents: number; matched: number; message: string };
+  bloomerang: { connected: boolean; pulled_at: string; constituents: number; matched: number; message: string; returning: { count: number; then_cents: number; now_cents: number; upgraded: number; downgraded: number }; repeat_cents: number; new_cents: number; lapsed: { name: string; email: string; last_gala_cents: number; last_gift: string; lifetime_cents: number }[] };
   web: WebStats; stats: Stats; takeaways: Takeaway[];
 };
 
@@ -176,40 +184,80 @@ export async function loadMaster(config: Config): Promise<{ prospects: Prospect[
 
 type BloomerangData = { pulled_at: string; constituents: Record<string, unknown>[]; transactions: Record<string, unknown>[]; campaigns: Record<string, unknown>[]; appeals: Record<string, unknown>[] };
 
-export function loadBloomerang(path: string, previousEventDate: string): { connected: boolean; pulled_at: string; constituents: number; index: NameIndex<BloomerangMatch>; message: string } {
+function campaignName(designation: Record<string, unknown>): string {
+  const campaign = designation.Campaign;
+  return campaign && typeof campaign === "object" && "Name" in campaign ? String(campaign.Name || "") : "";
+}
+
+/** Fold every constituent record that matches one donor (duplicates are common) into a single history. */
+export function mergeBloomerang(matches: BloomerangMatch[]): BloomerangMatch | null {
+  if (!matches.length) return null;
+  if (matches.length === 1) return matches[0];
+  const primary = matches.reduce((best, m) => m.gift_count > best.gift_count ? m : best, matches[0]);
+  const out: BloomerangMatch = { ...primary, years_active: [], galas: [], lifetime_cents: 0, gift_count: 0, first_gift: "", last_gift: "", last_gift_cents: 0, last_gala_cents: 0, last_gala_date: "", monthly: false, records: matches.length, ids: matches.map(m => m.constituent_id) };
+  const galas = new Map<string, number>();
+  for (const m of matches) {
+    out.lifetime_cents += m.lifetime_cents; out.gift_count += m.gift_count; out.last_gala_cents += m.last_gala_cents; out.monthly ||= m.monthly;
+    if (m.first_gift && (!out.first_gift || m.first_gift < out.first_gift)) out.first_gift = m.first_gift;
+    if (m.last_gift && (!out.last_gift || m.last_gift > out.last_gift)) { out.last_gift = m.last_gift; out.last_gift_cents = m.last_gift_cents; }
+    if (m.last_gala_date > out.last_gala_date) out.last_gala_date = m.last_gala_date;
+    for (const y of m.years_active) if (!out.years_active.includes(y)) out.years_active.push(y);
+    for (const g of m.galas) galas.set(g.label, (galas.get(g.label) || 0) + g.cents);
+    if (!out.email && m.email) out.email = m.email;
+  }
+  out.years_active.sort();
+  out.galas = [...galas.entries()].map(([label, cents]) => ({ label, cents })).sort((a, b) => (parseInt(a.label) || 99) - (parseInt(b.label) || 99));
+  return out;
+}
+
+export function loadBloomerang(path: string, previousEventDate: string, eventDate: string): { connected: boolean; pulled_at: string; constituents: number; index: NameIndex<BloomerangMatch>; all: BloomerangMatch[]; message: string } {
   const index = new NameIndex<BloomerangMatch>();
-  if (!existsSync(path)) return { connected: false, pulled_at: "", constituents: 0, index, message: "Bloomerang CRM history is not connected yet. Add a Bloomerang API key to 1Password and run reports/pull-bloomerang.ts; the next build fills in repeat-donor status, last gift, lifetime giving, and last year's gala gift for every matched donor." };
+  if (!existsSync(path)) return { connected: false, pulled_at: "", constituents: 0, index, all: [], message: "Bloomerang CRM history is not connected yet. Run reports/pull-bloomerang.ts with a Bloomerang API key; the next build fills in repeat-donor status, last gift, lifetime giving, and last year's gala gift for every matched donor." };
   const data = JSON.parse(readFileSync(path, "utf8")) as BloomerangData;
   const byConstituent = new Map<number, BloomerangMatch>();
   const previous = new Date(previousEventDate).getTime();
   const galaWindow = [previous - 14 * 86_400_000, previous + 21 * 86_400_000];
-  const galaLabel = /gala|annual/i;
-  const campaignNames = new Map<number, string>();
-  for (const row of [...data.campaigns, ...data.appeals]) campaignNames.set(Number(row.Id), String(row.Name || ""));
+  const galaCampaign = /(\d+)(?:st|nd|rd|th) annual|gala/i;
   for (const c of data.constituents) {
     const id = Number(c.Id);
-    const email = normalizeEmail((c.PrimaryEmail as { Value?: string } | undefined)?.Value);
+    const primary = c.PrimaryEmail;
+    const email = normalizeEmail(primary && typeof primary === "object" && "Value" in primary ? primary.Value : "");
     const name = String(c.FullName || [c.FirstName, c.LastName].filter(Boolean).join(" ") || c.InformalName || "");
-    byConstituent.set(id, { constituent_id: id, name, email, lifetime_cents: 0, gift_count: 0, first_gift: "", last_gift: "", last_gift_cents: 0, last_gala_cents: 0, last_gala_date: "", years_active: [] });
+    byConstituent.set(id, { constituent_id: id, name, email, lifetime_cents: 0, gift_count: 0, first_gift: "", last_gift: "", last_gift_cents: 0, last_gala_cents: 0, last_gala_date: "", years_active: [], galas: [], monthly: false, records: 1, ids: [id] });
   }
+  const galaTotals = new Map<number, Map<string, number>>();
   for (const t of data.transactions) {
     const match = byConstituent.get(Number(t.AccountId));
-    if (!match) continue;
-    const date = String(t.Date || "");
+    if (!match || t.IsRefunded === true || t.IsRefunded === "Yes") continue;
+    const date = String(t.Date || "").slice(0, 10);
     const ms = new Date(date).getTime();
     const amount = centsOf(t.Amount);
     const designations = Array.isArray(t.Designations) ? t.Designations as Record<string, unknown>[] : [];
-    if (!designations.some(d => ["Donation", "Pledge", "PledgePayment", "RecurringDonationPayment"].includes(String(d.Type)))) continue;
+    const types = designations.map(d => String(d.Type));
+    if (!types.some(type => ["Donation", "Pledge", "PledgePayment", "RecurringDonationPayment"].includes(type))) continue;
+    if (types.includes("RecurringDonationPayment")) match.monthly = true;
+    const campaigns = designations.map(campaignName).filter(name => galaCampaign.test(name));
+    for (const name of campaigns) {
+      const label = name.replace(/^(\d+(?:st|nd|rd|th) Annual)\b.*$/i, "$1").replace(/ - id:\d+$/, "").trim();
+      const totals = galaTotals.get(match.constituent_id) || new Map<string, number>();
+      totals.set(label, (totals.get(label) || 0) + amount); galaTotals.set(match.constituent_id, totals);
+    }
+    const lastYear = campaigns.some(name => name.includes(`${new Date(previous).getFullYear()}`) || /9th annual/i.test(name)) || (ms >= galaWindow[0] && ms <= galaWindow[1]);
+    if (lastYear) { match.last_gala_cents += amount; match.last_gala_date = date; }
+    // Tonight's online gifts are already synced into Bloomerang; history means everything before the gala day.
+    if (date >= eventDate) continue;
     match.lifetime_cents += amount; match.gift_count++;
     if (!match.first_gift || date < match.first_gift) match.first_gift = date;
     if (!match.last_gift || date > match.last_gift) { match.last_gift = date; match.last_gift_cents = amount; }
     const year = new Date(date).getFullYear();
     if (!match.years_active.includes(year)) match.years_active.push(year);
-    const named = designations.some(d => galaLabel.test(campaignNames.get(Number(d.CampaignId)) || "") || galaLabel.test(campaignNames.get(Number(d.AppealId)) || ""));
-    if ((ms >= galaWindow[0] && ms <= galaWindow[1]) || (named && year === new Date(previous).getFullYear())) { match.last_gala_cents += amount; match.last_gala_date = date; }
   }
-  for (const match of byConstituent.values()) { match.years_active.sort(); index.add(match.name, match, match.email); }
-  return { connected: true, pulled_at: data.pulled_at, constituents: byConstituent.size, index, message: `Bloomerang history pulled ${data.pulled_at}: ${byConstituent.size} constituents, ${data.transactions.length} transactions.` };
+  for (const match of byConstituent.values()) {
+    match.years_active.sort();
+    match.galas = [...(galaTotals.get(match.constituent_id) || new Map()).entries()].map(([label, cents]) => ({ label, cents })).sort((a, b) => (parseInt(a.label) || 99) - (parseInt(b.label) || 99));
+    index.add(match.name, match, match.email);
+  }
+  return { connected: true, pulled_at: data.pulled_at, constituents: byConstituent.size, index, all: [...byConstituent.values()], message: `Bloomerang history pulled ${data.pulled_at}: ${byConstituent.size} constituents, ${data.transactions.length} transactions.` };
 }
 
 type StatsPayload = { pulled_at: string; ranges: Record<string, { website?: { connected?: boolean; totals?: { views: number; visitors: number; donate_views: number; donate_visitors: number; tagged_visitors: number }; utm?: { source: string; medium: string; campaign: string; content: string; visitors: number; donate_views: number }[]; devices?: { device: string; visitors: number }[]; referrers?: { domain: string; visitors: number }[] } }> };
@@ -255,7 +303,7 @@ export async function buildReport(config: Config): Promise<Report> {
   const events = db.query<LedgerEvent, []>("SELECT * FROM ledger ORDER BY seq ASC").all().map(e => ({ ...e, local_time: localTime(e.created_at, config.timezone) }));
   const qgiv = loadQgiv(config.inputs.qgiv_history);
   const master = await loadMaster(config);
-  const bloomerang = loadBloomerang(config.inputs.bloomerang, config.previous_event_date);
+  const bloomerang = loadBloomerang(config.inputs.bloomerang, config.previous_event_date, config.event_date);
 
   const qgivById = new Map(qgiv.all.map(t => [t.id, t]));
   const prospectIndex = new NameIndex<Prospect>(); for (const p of master.prospects) prospectIndex.add(p.name, p);
@@ -288,7 +336,7 @@ export async function buildReport(config: Config): Promise<Report> {
       local_time: localTime(givenAt, config.timezone), status: r.is_voided ? "voided" : "active", void_reason: voidReasons.get(r.donation_id) || "", amended: original !== r.amount_cents,
       event_count: eventCounts.get(r.donation_id) || 1, minutes_into_appeal: appealStart ? Math.round((givenAt - appealStart) / 60000) : null,
       qgiv: q, prospect: prospectIndex.find(r.donor_name)[0] || null, sponsor: sponsorIndex.find(r.donor_name)[0] || null, ticket: ticketIndex.find(r.donor_name, email)[0] || null,
-      table: tableIndex.find(r.donor_name)[0] || null, bloomerang: bloomerang.index.find(r.donor_name, email)[0] || null, household: personKey(r.donor_name) || r.donor_name.toLowerCase()
+      table: tableIndex.find(r.donor_name)[0] || null, bloomerang: mergeBloomerang(bloomerang.index.find(r.donor_name, email)), household: personKey(r.donor_name) || r.donor_name.toLowerCase()
     };
   }).sort((a, b) => a.created_at - b.created_at);
 
@@ -309,7 +357,7 @@ export async function buildReport(config: Config): Promise<Report> {
   const donors = [...donorMap.values()].sort((a, b) => b.total_cents - a.total_cents);
   for (const d of donors) {
     d.tier = bandOf(d.total_cents);
-    d.relationship = d.bloomerang ? (d.bloomerang.gift_count > 0 && d.bloomerang.first_gift < config.event_date ? "repeat" : "new") : (d.prospect?.gave_before_cents ? "repeat" : "unknown");
+    d.relationship = d.bloomerang ? (d.bloomerang.gift_count > 0 ? "repeat" : "new") : (d.prospect?.gave_before_cents ? "repeat" : "unknown");
   }
 
   const active = gifts.filter(g => g.status === "active");
@@ -372,7 +420,15 @@ export async function buildReport(config: Config): Promise<Report> {
     generated_at: new Date().toISOString(), config,
     event: { name: state.event_name, subtitle: state.event_subtitle, goal_cents: goal, total_cents: total, major_gift_threshold_cents: state.major_gift_threshold_cents, match_total_cents: state.match_total_cents, qr_url: state.qr_url, display_url: state.display_url, appeal_start: appealStart, first_gift_at: active[0]?.created_at || 0, last_gift_at: last },
     gifts, donors, events, qgiv: { all: qgiv.all, declined, pre_event: preEvent, form_name: qgiv.form_name, pulled_at: qgiv.pulled_at }, prospects: master.prospects, sponsors: master.sponsors, tickets: master.tickets, tables: master.tables, milestones, ask_tiers: askTiers,
-    bloomerang: { connected: bloomerang.connected, pulled_at: bloomerang.pulled_at, constituents: bloomerang.constituents, matched: donors.filter(d => d.bloomerang).length, message: bloomerang.message },
+    bloomerang: (() => {
+      const returning = donors.filter(d => d.bloomerang?.last_gala_cents);
+      const matchedIds = new Set(donors.flatMap(d => d.bloomerang?.ids || []));
+      const matchedEmails = new Set(donors.flatMap(d => [d.email, d.bloomerang?.email || ""]).filter(Boolean));
+      const lapsed = bloomerang.all.filter(m => m.last_gala_cents > 0 && !m.ids.some(id => matchedIds.has(id)) && !(m.email && matchedEmails.has(m.email))).map(m => ({ name: m.name, email: m.email, last_gala_cents: m.last_gala_cents, last_gift: m.last_gift, lifetime_cents: m.lifetime_cents })).sort((a, b) => b.last_gala_cents - a.last_gala_cents);
+      return { connected: bloomerang.connected, pulled_at: bloomerang.pulled_at, constituents: bloomerang.constituents, matched: donors.filter(d => d.bloomerang).length, message: bloomerang.message,
+        returning: { count: returning.length, then_cents: returning.reduce((n, d) => n + d.bloomerang!.last_gala_cents, 0), now_cents: returning.reduce((n, d) => n + d.total_cents, 0), upgraded: returning.filter(d => d.total_cents > d.bloomerang!.last_gala_cents).length, downgraded: returning.filter(d => d.total_cents < d.bloomerang!.last_gala_cents).length },
+        repeat_cents: donors.filter(d => d.relationship === "repeat").reduce((n, d) => n + d.total_cents, 0), new_cents: donors.filter(d => d.relationship === "new").reduce((n, d) => n + d.total_cents, 0), lapsed };
+    })(),
     web: loadWebStats(config.inputs.stats, online.length), stats, takeaways: []
   };
   report.takeaways = buildTakeaways(report);
@@ -399,7 +455,12 @@ export function buildTakeaways(r: Report): Takeaway[] {
   if (r.web.connected && r.web.week) out.push({ kind: "insight", title: `${r.web.week.donate_visitors.toLocaleString("en-US")} people opened the donate page during gala week; ${pct(r.web.conversion)} gave`, body: `${r.web.week.visitors.toLocaleString("en-US")} website visitors in the seven days around the gala, ${Math.round(100 * (r.web.devices.find(d => d.device === "mobile")?.visitors || 0) / Math.max(1, r.web.devices.reduce((n, d) => n + d.visitors, 0)))}% on phones. Top QR channel: ${r.web.channels[0]?.label || "n/a"} (${r.web.channels[0]?.visitors || 0} visitors). Keep the pledge-form and table-card QR codes; they outperformed the ballroom chart QR.` });
   if (r.event.match_total_cents === 0) out.push({ kind: "watch", title: "No matching grant was configured", body: "A board or sponsor match, even $25,000, gives the emcee a second peak. Secure it before the next appeal; Givebar folds it automatically." });
   if (!r.bloomerang.connected) out.push({ kind: "action", title: "Connect Bloomerang to see repeat-donor history", body: r.bloomerang.message });
-  else out.push({ kind: "insight", title: `${s.repeat_donors} repeat donors, ${s.new_donors} first-time donors`, body: `${r.bloomerang.matched} of ${s.households} households matched a Bloomerang constituent. First-time donors need a welcome series within 7 days; repeat donors get a "you were with us again" note referencing their last gift.` });
+  else {
+    const b = r.bloomerang;
+    out.push({ kind: "insight", title: `${s.repeat_donors} repeat donors gave ${money(b.repeat_cents)}; ${s.new_donors} first-time donors gave ${money(b.new_cents)}`, body: `${b.matched} of ${s.households} households matched a Bloomerang record (${s.unknown_donors} had no match). First-time donors need a welcome series within 7 days; repeat donors get a "you were with us again" note referencing their last gift.` });
+    if (b.returning.count) out.push({ kind: b.returning.now_cents >= b.returning.then_cents ? "win" : "watch", title: `${b.returning.count} donors from last year's gala came back: ${money(b.returning.then_cents)} then, ${money(b.returning.now_cents)} now`, body: `${b.returning.upgraded} gave more than last year, ${b.returning.downgraded} gave less. The downgrades are the first stewardship calls; the upgrades deserve a personal thank-you from the board.` });
+    if (b.lapsed.length) out.push({ kind: "action", title: `${b.lapsed.length} donors gave at last year's gala (${money(b.lapsed.reduce((n, l) => n + l.last_gala_cents, 0))}) but not tonight`, body: `Lapsed gala donors in Bloomerang with no gift recorded tonight. Some were in the room and pledged under another name; check the list in Follow-up before calling, then make it the second segment of the post-gala email.` });
+  }
   for (const extra of r.config.extra_takeaways) out.push({ kind: "insight", title: extra, body: "" });
   return out;
 }

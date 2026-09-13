@@ -3,7 +3,7 @@
 // a name is split on couple separators and each half is reduced to lowercase ASCII words with
 // titles and honorifics removed.
 
-const TITLES: Record<string, true> = { dr: true, mr: true, mrs: true, ms: true, mx: true, sr: true, br: true, sister: true, brother: true, imam: true, shaykh: true, sheikh: true, hajji: true, haji: true, prof: true, professor: true, md: true, phd: true, esq: true, jr: true, ii: true, iii: true, the: true, household: true, of: true, family: true, and: true };
+const TITLES: Record<string, true> = { dr: true, mr: true, mrs: true, ms: true, mx: true, sr: true, br: true, sister: true, brother: true, imam: true, shaykh: true, sheikh: true, hajji: true, haji: true, prof: true, professor: true, md: true, phd: true, esq: true, jr: true, ii: true, iii: true, the: true, household: true, of: true, family: true, and: true, unknown: true };
 
 export function asciiFold(value: string): string {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[’‘`]/g, "'");

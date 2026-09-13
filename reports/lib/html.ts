@@ -26,7 +26,7 @@ export const PAGES: { file: string; label: string }[] = [
 /** The browser-side payload: enough for tables and charts, no Qgiv card data. */
 function viewPayload(r: Report) {
   const gift = (g: Gift) => ({ id: g.donation_id, t: g.created_at, time: g.local_time, donor: g.donor_name, display: g.display_name, anon: g.is_anonymous, amount: g.amount_cents, method: g.payment_method, source: g.source, by: g.entered_by, status: g.status, notes: g.notes, table: g.table_number, amended: g.amended, original: g.original_amount_cents, restriction: g.qgiv?.restriction || "", recurring: !!g.qgiv?.recurring, city: g.qgiv ? [g.qgiv.city, g.qgiv.state].filter(Boolean).join(", ") : "", email: g.qgiv?.email || "", prospect: g.prospect?.name || "", ticket: !!g.ticket, seated: g.table ? `${g.table.number}: ${g.table.host}` : "" });
-  const donor = (d: Donor) => ({ key: d.key, name: d.name, display: d.display_name, anon: d.is_anonymous, total: d.total_cents, count: d.gifts.length, pledged: d.pledged_cents, paid: d.paid_cents, largest: d.largest_cents, first: d.first_gift_at, firstLabel: localTime(d.first_gift_at, r.config.timezone), rel: d.relationship, email: d.email, city: d.city, restriction: d.restriction, sources: d.sources.join("+"), by: [...new Set(d.gifts.filter(g => g.source === "manual").map(g => g.entered_by))].join(", "), prospect: d.prospect ? { name: d.prospect.name, ask: d.prospect.ask_cents, before: d.prospect.gave_before_cents, notes: d.prospect.notes } : null, sponsor: d.sponsor ? `${d.sponsor.org} (${d.sponsor.tier})` : "", ticket: d.ticket ? `${d.ticket.tickets} ticket(s)` : "", table: d.table ? `${d.table.number}: ${d.table.host}` : "", bloomerang: d.bloomerang ? { lifetime: d.bloomerang.lifetime_cents, count: d.bloomerang.gift_count, first: d.bloomerang.first_gift.slice(0, 10), last: d.bloomerang.last_gift.slice(0, 10), lastAmount: d.bloomerang.last_gift_cents, gala: d.bloomerang.last_gala_cents, years: d.bloomerang.years_active } : null, notes: d.gifts.map(g => g.notes).filter(Boolean).join(" | ") });
+  const donor = (d: Donor) => ({ key: d.key, name: d.name, display: d.display_name, anon: d.is_anonymous, total: d.total_cents, count: d.gifts.length, pledged: d.pledged_cents, paid: d.paid_cents, largest: d.largest_cents, first: d.first_gift_at, firstLabel: localTime(d.first_gift_at, r.config.timezone), rel: d.relationship, email: d.email, city: d.city, restriction: d.restriction, sources: d.sources.join("+"), by: [...new Set(d.gifts.filter(g => g.source === "manual").map(g => g.entered_by))].join(", "), prospect: d.prospect ? { name: d.prospect.name, ask: d.prospect.ask_cents, before: d.prospect.gave_before_cents, notes: d.prospect.notes } : null, sponsor: d.sponsor ? `${d.sponsor.org} (${d.sponsor.tier})` : "", ticket: d.ticket ? `${d.ticket.tickets} ticket(s)` : "", table: d.table ? `${d.table.number}: ${d.table.host}` : "", bloomerang: d.bloomerang ? { lifetime: d.bloomerang.lifetime_cents, count: d.bloomerang.gift_count, first: d.bloomerang.first_gift.slice(0, 10), last: d.bloomerang.last_gift.slice(0, 10), lastAmount: d.bloomerang.last_gift_cents, gala: d.bloomerang.last_gala_cents, years: d.bloomerang.years_active, galas: d.bloomerang.galas, monthly: d.bloomerang.monthly, records: d.bloomerang.records } : null, notes: d.gifts.map(g => g.notes).filter(Boolean).join(" | ") });
   const { timeline, bands, prospects_missing, prospects_under_ask, operators, ...rest } = r.stats;
   return {
     event: r.event, stats: { ...rest, timeline, bands, operators, prospects_missing: prospects_missing.map(p => ({ name: p.name, ask: p.ask_cents, notes: p.notes })) },
@@ -35,7 +35,8 @@ function viewPayload(r: Report) {
     prospects: r.prospects.map(p => { const d = r.donors.find(x => x.prospect === p); return { name: p.name, before: p.gave_before_cents, ask: p.ask_cents, assumed: p.assumed_cents, actual: d ? d.total_cents : null, matched: d?.name || "", anon: !!d?.is_anonymous, notes: p.notes }; }),
     sponsors: r.sponsors.map(sp => { const d = r.donors.find(x => x.sponsor === sp); return { org: sp.org, tier: sp.tier, cost: sp.cost_cents, gave: d ? d.total_cents : null, donor: d?.name || "" }; }),
     tables: r.tables.map(t => { const ds = r.donors.filter(d => d.table === t); return { number: t.number, host: t.host, count: ds.reduce((n, d) => n + d.gifts.length, 0), raised: ds.reduce((n, d) => n + d.total_cents, 0), donors: ds.map(d => d.name) }; }).filter(t => t.count > 0).sort((a, b) => b.raised - a.raised),
-    tickets_no_gift: r.tickets.filter(t => !t.cancelled && !r.donors.some(d => d.ticket === t)).map(t => ({ name: t.name, email: t.email, tickets: t.tickets, items: t.items }))
+    tickets_no_gift: r.tickets.filter(t => !t.cancelled && !r.donors.some(d => d.ticket === t)).map(t => ({ name: t.name, email: t.email, tickets: t.tickets, items: t.items })),
+    lapsed: r.bloomerang.lapsed
   };
 }
 
@@ -254,6 +255,20 @@ ${body}
   </div>` : ""}
 </div></section>
 
+<section class="sec" id="history"><div class="wrap">
+  ${head("Bloomerang", "Giving <em>history</em>", r.bloomerang.connected ? `${r.bloomerang.matched} of ${s.households} households matched a Bloomerang record (${num(r.bloomerang.constituents)} constituents, pulled ${esc(r.bloomerang.pulled_at.slice(0, 10))}). History counts gifts before the gala day; tonight's online gifts are already synced into Bloomerang and are excluded.` : "Not connected.")}
+  ${r.bloomerang.connected ? `
+  <div class="stats">
+    ${stat("Repeat donors", String(s.repeat_donors), `gave ${money0(r.bloomerang.repeat_cents)}`)}
+    ${stat("First-time donors", String(s.new_donors), `gave ${money0(r.bloomerang.new_cents)} · ${s.unknown_donors} unmatched`)}
+    ${stat("Back from last year's gala", String(r.bloomerang.returning.count), `${money0(r.bloomerang.returning.then_cents)} then · ${money0(r.bloomerang.returning.now_cents)} now`)}
+    ${stat("Up / down vs last year", `${r.bloomerang.returning.upgraded} / ${r.bloomerang.returning.downgraded}`, `${r.bloomerang.returning.count - r.bloomerang.returning.upgraded - r.bloomerang.returning.downgraded} gave the same`)}
+    ${stat("Lapsed gala donors", String(r.bloomerang.lapsed.length), `gave ${money0(r.bloomerang.lapsed.reduce((n, l) => n + l.last_gala_cents, 0))} last year, nothing recorded tonight`)}
+  </div>
+  <h3>Returning gala donors <small>largest last-year gift first · full list on the Donors page</small></h3>
+  <div class="tbl"><table><thead><tr><th>Donor</th><th class="r">Last year</th><th class="r">Tonight</th><th class="r">Change</th><th>Gala history</th></tr></thead><tbody>${r.donors.filter(d => d.bloomerang?.last_gala_cents).sort((a, b) => b.bloomerang!.last_gala_cents - a.bloomerang!.last_gala_cents).slice(0, 15).map(d => { const b = d.bloomerang!; const delta = d.total_cents - b.last_gala_cents; return `<tr><td class="name">${esc(d.name)}${d.is_anonymous ? ' <span class="pill gold">anonymous</span>' : ""}</td><td class="r" data-l="Last year">${esc(money0(b.last_gala_cents))}</td><td class="r" data-l="Tonight"><b>${esc(money0(d.total_cents))}</b></td><td class="r" data-l="Change" style="color:${delta < 0 ? "var(--red)" : "var(--green)"}">${delta > 0 ? "+" : ""}${esc(money0(delta))}</td><td data-l="History" class="dim">${esc(b.galas.map(g => `${g.label.replace(" Annual", "")} ${money0(g.cents)}`).join(" · "))}</td></tr>`; }).join("")}</tbody></table></div>` : ""}
+</div></section>
+
 <section class="sec" id="lists"><div class="wrap">
   ${head("Detail", "The <em>lists</em>", "The full detail lives on its own pages (same password) so this overview stays readable; the workbook has every column.")}
   <div class="stats">
@@ -270,7 +285,7 @@ ${body}
     <dt>Households</dt><dd>Gifts are grouped by first and last name after removing titles ("Dr.", "Household of") and splitting couples. Anonymous donors are listed by legal name with an anonymous mark; that name never appeared on the chart.</dd>
     <dt>Cross-reference</dt><dd>MASTER workbook sheets ${esc(Object.values(c.master_sheets).join(", "))}, matched by person name and, for online gifts, email. Automatic matching is conservative: verify before acting on a blank.</dd>
     <dt>Website</dt><dd>${w.connected ? "Umami analytics for cairgeorgia.org as shown on the Givebar Stats page: visitors are unique sessions; a channel is a UTM source/medium pair; conversion divides online gifts by donate-page visitors in the same seven days." : "Not pulled."}</dd>
-    <dt>Bloomerang</dt><dd>${r.bloomerang.connected ? `Constituents and transactions via the REST API; "last gala" is any gift within two weeks before to three weeks after ${esc(c.previous_event_date)} or tagged to a campaign or appeal named Gala.` : `Not connected. The Givebar fundraising token is a Qgiv form token and is rejected by the Bloomerang API (401), so repeat-donor history needs a Bloomerang API key from the CAIR-Georgia account (Settings → Integrations → API keys). Once it exists, ${esc("reports/pull-bloomerang.ts")} fills the history columns on the next build.`}</dd>
+    <dt>Bloomerang</dt><dd>${r.bloomerang.connected ? `Constituents and transactions via the REST API (${num(r.bloomerang.constituents)} constituents). Duplicate records for the same person are folded together by name and email. "Last year's gala" is any gift tagged to the 9th Annual Fundraiser campaign or dated within two weeks before to three weeks after ${esc(c.previous_event_date)}. Lifetime, first, and last gift exclude anything on or after the gala day.` : `Not connected. The Givebar fundraising token is a Qgiv form token and is rejected by the Bloomerang API (401), so repeat-donor history needs a Bloomerang API key from the CAIR-Georgia account (Settings → Integrations → API keys). Once it exists, ${esc("reports/pull-bloomerang.ts")} fills the history columns on the next build.`}</dd>
     <dt>Privacy</dt><dd>This report includes legal names of anonymous donors, staff names, and team notes. It is for the ${esc(c.client)} team only.</dd>
   </dl>
   ${foot.replace('<div class="wrap">', "<div>")}
@@ -309,7 +324,7 @@ ${banner("Cross-reference", "Prospects, sponsors, <em style='font-style:normal;c
 
   // Follow-up
   const followup = shell("followup.html", "Follow-up", `
-${banner("Follow-up", "Lists to <em style='font-style:normal;color:#E5C578'>work from</em>", `${money0(s.pledge_cents)} in pledges to collect, ${s.prospects_missing.length} prospects with an ask and no gift, ${s.declined_count} declined online attempts, ${view.tickets_no_gift.length} ticket buyers with no gift.`)}
+${banner("Follow-up", "Lists to <em style='font-style:normal;color:#E5C578'>work from</em>", `${money0(s.pledge_cents)} in pledges to collect, ${s.prospects_missing.length} prospects with an ask and no gift, ${s.declined_count} declined online attempts, ${view.tickets_no_gift.length} ticket buyers with no gift${r.bloomerang.connected ? `, ${r.bloomerang.lapsed.length} lapsed gala donors` : ""}.`)}
 <main><section class="sec"><div class="wrap">
   <h3 style="margin-top:0">Pledges to collect <small>${esc(money0(s.pledge_cents))} · ${s.pledge_count} pledges</small></h3>
   ${table("pledge-table", `<th data-k="name">Donor</th><th data-k="pledged" class="r">Pledged</th><th data-k="by">Recorded by</th><th>Table</th><th>Note</th>`)}
@@ -317,6 +332,9 @@ ${banner("Follow-up", "Lists to <em style='font-style:normal;color:#E5C578'>work
     <div><h3>Prospects with an ask and no gift <small>${s.prospects_missing.length}</small></h3>${table("missing-table", `<th>Prospect</th><th class="r">Ask</th><th>Notes</th>`)}</div>
     <div><h3>Declined online attempts <small>${s.declined_count}</small></h3>${table("declined-table", `<th>Name</th><th>Time</th><th class="r">Amount</th><th>Payment</th>`)}</div>
   </div>
+  ${r.bloomerang.connected ? `<h3>Gave at last year's gala, nothing recorded tonight <small>${r.bloomerang.lapsed.length} Bloomerang records · ${esc(money0(r.bloomerang.lapsed.reduce((n, l) => n + l.last_gala_cents, 0)))} last year</small></h3>
+  <p class="note" style="margin-bottom:12px">Matched by name and email against tonight's ledger; a spouse or business name can hide a gift that was made. Check before calling.</p>
+  ${table("lapsed-table", `<th data-k="name">Name</th><th data-k="last_gala_cents" class="r">Last year's gala</th><th data-k="lifetime_cents" class="r">Lifetime</th><th data-k="last_gift">Last gift</th><th>Email</th>`)}` : ""}
   <h3>Ticket buyers with no gift recorded <small>${view.tickets_no_gift.length} people</small></h3>
   ${table("ticket-table", `<th>Name</th><th>Email</th><th class="r">Tickets</th><th>Order</th>`)}
 </div></section></main>${foot}`);
@@ -353,7 +371,7 @@ function renderDonors(){const q=$('#donor-q').value.trim().toLowerCase();const f
  const rows=sortRows(dView,dState);$('#donor-count').textContent=rows.length+' of '+R.donors.length+' households · '+usd0(rows.reduce((s,d)=>s+d.total,0));
  const shown=paged(rows,dState,$('#donor-table-pager'),renderDonors);
  $('#donor-table tbody').innerHTML=shown.map(d=>{const ctx=[];if(d.prospect)ctx.push(pill('ask '+usd0(d.prospect.ask||0),'navy'));if(d.sponsor)ctx.push(pill('sponsor','gold'));if(d.ticket)ctx.push(pill('ticket'));if(d.table)ctx.push(pill('table '+d.table.split(':')[0]));if(d.restriction)ctx.push(pill(d.restriction,'green'));if(d.city)ctx.push(pill(d.city));if(d.largest>=R.event.major_gift_threshold_cents)ctx.push(pill('major','orange'));if(d.prospect&&d.prospect.before)ctx.push(pill('gave '+usd0(d.prospect.before)+' earlier','green'));
-  const hist=d.bloomerang?('<b>'+usd0(d.bloomerang.lifetime)+'</b> lifetime · '+d.bloomerang.count+' gifts<span class="sub">last '+esc(d.bloomerang.last)+' '+usd0(d.bloomerang.lastAmount)+(d.bloomerang.gala?' · gala '+usd0(d.bloomerang.gala):'')+'</span>'):'';
+  const b=d.bloomerang;const hist=b?(b.count?('<b>'+usd0(b.lifetime)+'</b> · '+b.count+' gifts since '+esc(b.first.slice(0,4))+(b.monthly?' '+pill('monthly','green'):'')+'<span class="sub">last '+esc(b.last)+' '+usd0(b.lastAmount)+(b.galas.length?' · galas: '+esc(b.galas.map(g=>g.label.replace(' Annual','')+' '+usd0(g.cents)).join(', ')):'')+'</span>'):pill('first gift','gold')):'<span class="dim">no Bloomerang match</span>';
   return '<tr>'+nameCell(d.name,d.anon,d.anon?'shown as '+d.display:(d.display!==d.name?'shown as '+d.display:''))+td('Total','<b>'+usd(d.total)+'</b>','r amt')+td('Gifts',d.count,'r')+td('Pledged',d.pledged?usd(d.pledged):'','r')+td('Online',d.paid?usd(d.paid):'','r')+td('First gift',esc(d.firstLabel),'dim nowrap')+td('Context',ctx.join('')+(notes&&d.notes?'<span class="sub">'+esc(d.notes)+'</span>':''))+(hasHistory?td('History',hist):'')+'</tr>';}).join('');}
 ['#donor-q','#donor-f','#donor-notes'].forEach(s=>$(s).addEventListener('input',()=>{dState.page=1;renderDonors();}));sortable($('#donor-table'),dState,renderDonors);renderDonors();
 $('#donor-csv').addEventListener('click',()=>csv([['Donor','Display name','Anonymous','Total','Gifts','Pledged','Online','First gift','Email','City','Prospect ask','Sponsor','Table','Recorded by','Notes']].concat(sortRows(dView,dState).map(d=>[d.name,d.display,d.anon?'yes':'',d.total/100,d.count,d.pledged/100,d.paid/100,d.firstLabel,d.email,d.city,d.prospect?d.prospect.ask/100:'',d.sponsor,d.table,d.by,d.notes])),'donors.csv'));
@@ -390,6 +408,7 @@ function renderPledges(){const rows=sortRows(pledges,plState);const shown=paged(
 sortable($('#pledge-table'),plState,renderPledges);renderPledges();
 $('#missing-table tbody').innerHTML=R.stats.prospects_missing.sort((a,b)=>b.ask-a.ask).map(p=>'<tr>'+nameCell(p.name,false,'')+td('Ask','<b>'+usd0(p.ask)+'</b>','r amt')+td('Notes',esc(p.notes),'dim')+'</tr>').join('');
 $('#declined-table tbody').innerHTML=R.declined.map(t=>'<tr>'+nameCell(t.name,false,t.email)+td('Time',esc(t.time),'dim')+td('Amount',usd(t.amount),'r')+td('Payment',esc(t.payment),'dim')+'</tr>').join('')||'<tr><td class="dim">No declined attempts.</td></tr>';
+if(document.getElementById('lapsed-table')){const lpState={key:'last_gala_cents',dir:'desc',page:1};function renderLapsed(){const rows=sortRows(R.lapsed,lpState);const shown=paged(rows,lpState,$('#lapsed-table-pager'),renderLapsed);$('#lapsed-table tbody').innerHTML=shown.map(l=>'<tr>'+nameCell(l.name,false,'')+td('Last gala','<b>'+usd0(l.last_gala_cents)+'</b>','r amt')+td('Lifetime',usd0(l.lifetime_cents),'r')+td('Last gift',esc(l.last_gift),'dim')+td('Email',esc(l.email),'dim')+'</tr>').join('');}sortable($('#lapsed-table'),lpState,renderLapsed);renderLapsed();}
 const tkState={page:1};function renderTickets(){const shown=paged(R.tickets_no_gift,tkState,$('#ticket-table-pager'),renderTickets);$('#ticket-table tbody').innerHTML=shown.map(t=>'<tr>'+nameCell(t.name,false,'')+td('Email',esc(t.email),'dim')+td('Tickets',t.tickets,'r')+td('Order',esc(t.items),'dim')+'</tr>').join('');}renderTickets();
 }
 
