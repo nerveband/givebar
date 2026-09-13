@@ -22,6 +22,9 @@
     method: '',
     from: '', to: '', q: '', min: '', max: '', bucket: '', sort: 'newest', page: 0,
     data: null,
+    chartHeights: {},
+    zoom: null,
+    zoomBase: null,
     timer: null
   };
 
@@ -60,7 +63,7 @@
 
   function areaChart(container, points, opts) {
     if (!points.length || !points.some(p => p.y > 0)) return empty(container, opts.emptyMessage || 'Nothing in this range yet.');
-    const W = chartWidth(container), H = W < 520 ? 220 : 260, L = 56, R = 16, T = 16, B = 34;
+    const W = chartWidth(container), H = state.chartHeights[container.id] || (W < 520 ? 220 : 260), L = 56, R = 16, T = 16, B = 34;
     const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart-svg', role: 'img', 'aria-label': opts.label });
     const maxY = Math.max(...points.map(p => p.y), ...(opts.rules || []).filter(r => r.value <= Math.max(...points.map(p => p.y)) * 1.6).map(r => r.value), 1);
     const x = i => L + (i / Math.max(points.length - 1, 1)) * (W - L - R);
@@ -90,7 +93,7 @@
   /** Vertical bars over time (gifts per period, visits per period). */
   function columnChart(container, points, opts) {
     if (!points.length || !points.some(p => p.y > 0)) return empty(container, opts.emptyMessage || 'Nothing in this range yet.');
-    const W = chartWidth(container), H = W < 520 ? 190 : 220, L = 40, R = 12, T = 12, B = 34;
+    const W = chartWidth(container), H = state.chartHeights[container.id] || (W < 520 ? 190 : 220), L = 40, R = 12, T = 12, B = 34;
     const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart-svg', role: 'img', 'aria-label': opts.label });
     const maxY = Math.max(...points.map(p => p.y), 1);
     const slot = (W - L - R) / points.length;
@@ -175,6 +178,57 @@
       const value = opts.value(row);
       return `<div class="bar-row"><span class="bar-label">${fmt.escape(opts.label(row))}</span><span class="bar-track"><span class="bar-fill" style="width:${(value / max) * 100}%"></span></span><span class="bar-value">${fmt.escape(opts.format(row))}</span></div>`;
     }).join('');
+    if (opts.donations) container.querySelectorAll('.bar-row').forEach((element, index) => {
+      element.classList.add('stats-donor-bar');
+      element.tabIndex = 0;
+      element.setAttribute('role', 'button');
+      element.setAttribute('aria-expanded', 'false');
+      element.setAttribute('aria-label', `${opts.label(rows[index])}: ${opts.format(rows[index])}. Show donor amounts.`);
+      const panel = document.createElement('div');
+      panel.className = 'stats-donor-popover'; panel.hidden = true;
+      const gifts = opts.donations(rows[index]).sort((a, b) => b.amount_cents - a.amount_cents);
+      panel.innerHTML = `<strong>${fmt.escape(opts.label(rows[index]))} · ${gifts.length} gifts</strong><ul>${gifts.map(g => `<li><span>${fmt.escape(g.donor_name)}</span><b>${fmt.escape(money(g.amount_cents))}</b></li>`).join('')}</ul>`;
+      element.appendChild(panel);
+      const show = () => { panel.hidden = false; element.setAttribute('aria-expanded', 'true'); };
+      const hide = () => { panel.hidden = true; element.setAttribute('aria-expanded', 'false'); };
+      element.addEventListener('mouseenter', show);
+      element.addEventListener('mouseleave', hide);
+      element.addEventListener('focus', show);
+      element.addEventListener('blur', hide);
+      element.addEventListener('click', event => { if (!panel.contains(event.target)) show(); });
+      element.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); panel.hidden ? show() : hide(); } });
+    });
+  }
+
+  function pieChart(container, rows, opts) {
+    const nonzero = rows.filter(row => opts.value(row) > 0).sort((a, b) => opts.value(b) - opts.value(a));
+    if (!nonzero.length) return empty(container, 'No activity in this range.');
+    const entries = nonzero.slice(0, 6).map(row => ({ label: opts.label(row), value: opts.value(row) }));
+    if (nonzero.length > 6) entries.push({ label: 'Other', value: nonzero.slice(6).reduce((sum, row) => sum + opts.value(row), 0) });
+    const total = entries.reduce((sum, row) => sum + row.value, 0);
+    const colors = ['#e6bd7b', '#7ab8e6', '#9bc7a5', '#c0a3e5', '#e99b92', '#a7cbd2', '#9497a1'];
+    container.replaceChildren(); container.className = 'stats-pie';
+    const root = svg('svg', { viewBox: '0 0 220 220', role: 'img', 'aria-label': opts.title });
+    const legend = document.createElement('div'); legend.className = 'stats-pie-legend';
+    const detail = document.createElement('p'); detail.className = 'form-hint stats-pie-detail'; detail.setAttribute('aria-live', 'polite'); detail.textContent = opts.title;
+    let angle = -Math.PI / 2;
+    entries.forEach((row, index) => {
+      const sweep = row.value / total * Math.PI * 2;
+      const end = angle + sweep;
+      const description = `${row.label}: ${row.value.toLocaleString()} ${opts.unit} (${(row.value / total * 100).toFixed(1)}%)`;
+      const attrs = { fill: colors[index], stroke: '#101116', 'stroke-width': 2, tabindex: 0, 'aria-label': description };
+      const slice = sweep >= Math.PI * 2 - 0.00001
+        ? svg('circle', { cx: 110, cy: 110, r: 95, ...attrs }, root)
+        : svg('path', { d: `M110,110 L${110 + 95 * Math.cos(angle)},${110 + 95 * Math.sin(angle)} A95,95 0 ${sweep > Math.PI ? 1 : 0},1 ${110 + 95 * Math.cos(end)},${110 + 95 * Math.sin(end)} Z`, ...attrs }, root);
+      const title = svg('title', {}, slice); title.textContent = description;
+      const show = () => { detail.textContent = description; };
+      slice.addEventListener('mouseenter', show); slice.addEventListener('focus', show); slice.addEventListener('pointerdown', show);
+      const item = document.createElement('button'); item.type = 'button'; item.className = 'stats-pie-item';
+      item.innerHTML = `<span class="stats-pie-swatch" style="background:${colors[index]}"></span><span>${fmt.escape(row.label)}</span><b>${(row.value / total * 100).toFixed(1)}%</b>`;
+      item.addEventListener('mouseenter', show); item.addEventListener('focus', show); item.addEventListener('click', show);
+      legend.appendChild(item); angle = end;
+    });
+    container.append(root, legend, detail);
   }
 
   function table(container, rows, columns, emptyMessage) {
@@ -192,6 +246,7 @@
   function render(data) {
     const s = data.summary;
     renderDonations(data);
+    renderZoom(data);
     $('stats-search').placeholder = data.can_view_private ? 'Search donor, note, or operator' : 'Search donor name';
     $('stats-csv-preview').hidden = $('stats-csv-download').hidden = !data.can_view_private;
     $('stats-csv-signin').hidden = data.can_view_private;
@@ -246,15 +301,18 @@
       columnChart($('chart-web'), web.timeline.map(b => ({ label: timeLabel(b.t, web.bucket_ms), y: b.views, y2: b.visitors })), { label: 'Donation page visits', color: '#7ab8e6', format: p => `${p.y} views · ${p.y2} visitors`, emptyMessage: 'No donation page visits in this range.' });
     } else empty($('chart-web'), web.message || 'Website analytics are not connected.');
 
-    barList($('chart-source'), data.by_source, { label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
-    barList($('chart-method'), data.by_method, { label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
-    barList($('chart-size'), data.by_size, { label: r => r.label, value: r => r.gifts, format: r => `${r.gifts} · ${money(r.cents)}` });
+    barList($('chart-source'), data.by_source, { donations: row => data.donations.filter(g => g.source === row.key), label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
+    barList($('chart-method'), data.by_method, { donations: row => data.donations.filter(g => g.payment_method === row.key), label: r => r.label, value: r => r.cents, format: r => `${money(r.cents)} · ${r.gifts}` });
+    barList($('chart-size'), data.by_size, { donations: row => data.donations.filter(g => { const limits = [10000, 50000, 100000, 500000, 1000000, 2500000, Infinity]; return limits.findIndex(limit => g.amount_cents < limit) === Number(row.key); }), label: r => r.label, value: r => r.gifts, format: r => `${r.gifts} · ${money(r.cents)}` });
     columnChart($('chart-hour'), data.timeline.map(b => ({ label: timeLabel(b.t, bucket), y: b.cents, gifts: b.gifts, donations: bucketDonations(b.t) })), { label: 'Donation activity over time', axisFormat: short, dots: true, format: p => `${money(p.y)} · ${p.gifts} gift${p.gifts === 1 ? '' : 's'}` });
     $('activity-hint').textContent = $('timeline-hint').textContent + ' · Eastern';
     if (web.connected) barList($('chart-devices'), web.devices, { label: r => r.device.charAt(0).toUpperCase() + r.device.slice(1), value: r => r.visitors, format: r => `${r.visitors}`, emptyMessage: 'No donation page visits in this range.' });
     else empty($('chart-devices'), 'Not connected.');
 
     if (web.connected) {
+      pieChart($('pie-utm'), web.utm, { label: utmLabel, value: r => r.donate_views, title: 'Share of tagged donation page views', unit: 'donation page views' });
+      pieChart($('pie-referrers'), web.referrers, { label: r => r.domain, value: r => r.views, title: 'Share of views from the listed referrers', unit: 'views' });
+      pieChart($('pie-devices'), web.devices, { label: r => r.device, value: r => r.visitors, title: 'Donation page visitors by device', unit: 'visitors' });
       table($('table-utm'), web.utm, [
         { title: 'Arrived via', value: utmLabel },
         { title: 'Tags', html: r => `<span class="mono">${fmt.escape([r.source, r.medium, r.campaign, r.content].filter(Boolean).join(' / '))}</span>` },
@@ -272,6 +330,7 @@
         { title: 'Visitors', value: r => r.visitors, align: 'text-right' }
       ], 'No donation page visits in this range.');
     } else {
+      for (const id of ['pie-utm', 'pie-referrers', 'pie-devices']) $(id).replaceChildren();
       empty($('table-utm'), web.message || 'Not connected.');
       empty($('table-referrers'), 'Not connected.');
       empty($('table-pages'), 'Not connected.');
@@ -293,10 +352,111 @@
     $('stats-updated').textContent = `Updated ${eastern({ hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(data.server_time))}`;
   }
 
+  const zoomCharts = ['chart-timeline', 'chart-gifts', 'chart-web', 'chart-hour'];
+  const zoomTime = eastern({ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  for (const id of zoomCharts) {
+    const controls = document.createElement('div');
+    controls.className = 'stats-zoom';
+    controls.dataset.chart = id;
+    controls.innerHTML = `<div class="stats-chart-size"><label>Chart height <input type="range" min="180" max="520" step="20" value="${id === 'chart-timeline' ? 260 : 220}" aria-label="Chart height for ${id.replace('chart-', '')}"></label></div><div class="stats-zoom-head"><span class="stats-zoom-label">Drag the handles to zoom all charts</span><button type="button" class="btn-ghost stats-zoom-reset" disabled>Reset zoom</button></div><div class="stats-zoom-track"><svg class="stats-zoom-overview" viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true"></svg><div class="stats-zoom-window"></div><input type="range" class="stats-zoom-start" aria-label="Zoom start time for ${id.replace('chart-', '')}" step="1000"><input type="range" class="stats-zoom-end" aria-label="Zoom end time for ${id.replace('chart-', '')}" step="1000"></div><div class="stats-zoom-times"><span class="stats-zoom-from"></span><span class="stats-zoom-to"></span></div>`;
+    $(id).after(controls);
+    controls.querySelector('.stats-chart-size input').addEventListener('input', event => {
+      state.chartHeights[id] = Number(event.target.value);
+      if (state.data) render(state.data);
+    });
+    controls.querySelectorAll('.stats-zoom-track input').forEach(input => {
+      input.addEventListener('input', () => {
+        if (!state.zoomBase) return;
+        const base = state.zoomBase;
+        const gap = Math.min(1000, base.to - base.from);
+        let from = Number(controls.querySelector('.stats-zoom-start').value);
+        let to = Number(controls.querySelector('.stats-zoom-end').value);
+        if (from >= to) {
+          if (input.classList.contains('stats-zoom-start')) from = to - gap;
+          else to = from + gap;
+        }
+        syncZoomHandles({ from: Math.max(base.from, from), to: Math.min(base.to, to) });
+      });
+      input.addEventListener('change', () => {
+        if (!state.zoomBase) return;
+        const from = Number(controls.querySelector('.stats-zoom-start').value);
+        const to = Number(controls.querySelector('.stats-zoom-end').value);
+        state.zoom = from === state.zoomBase.from && to === state.zoomBase.to ? null : { from, to };
+        state.page = 0;
+        load();
+      });
+    });
+    const track = controls.querySelector('.stats-zoom-track');
+    let draggedHandle = null;
+    function moveHandle(event) {
+      if (!draggedHandle || !state.zoomBase) return;
+      const base = state.zoomBase, rect = track.getBoundingClientRect();
+      const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      const value = Math.min(base.to, base.from + Math.round(fraction * (base.to - base.from) / 1000) * 1000);
+      draggedHandle.value = value;
+      draggedHandle.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    track.addEventListener('pointerdown', event => {
+      if (!state.zoomBase) return;
+      event.preventDefault();
+      const rect = track.getBoundingClientRect(), base = state.zoomBase;
+      const at = base.from + (event.clientX - rect.left) / rect.width * (base.to - base.from);
+      const start = controls.querySelector('.stats-zoom-start'), end = controls.querySelector('.stats-zoom-end');
+      draggedHandle = Math.abs(at - Number(start.value)) <= Math.abs(at - Number(end.value)) ? start : end;
+      draggedHandle.focus({ preventScroll: true });
+      track.setPointerCapture(event.pointerId);
+      moveHandle(event);
+    });
+    track.addEventListener('pointermove', moveHandle);
+    track.addEventListener('pointerup', event => {
+      if (!draggedHandle) return;
+      moveHandle(event);
+      const input = draggedHandle; draggedHandle = null;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      track.releasePointerCapture(event.pointerId);
+    });
+    track.addEventListener('pointercancel', () => { draggedHandle = null; if (state.zoomBase) syncZoomHandles(state.zoom || state.zoomBase); });
+    controls.querySelector('.stats-zoom-reset').addEventListener('click', () => { state.zoom = null; state.zoomBase = null; state.page = 0; load(); });
+  }
+  function syncZoomHandles(selection) {
+    const base = state.zoomBase;
+    if (!base) return;
+    const span = Math.max(1, base.to - base.from);
+    document.querySelectorAll('.stats-zoom').forEach(control => {
+      for (const [selector, value] of [['.stats-zoom-start', selection.from], ['.stats-zoom-end', selection.to]]) {
+        const input = control.querySelector(selector);
+        input.min = base.from; input.max = base.to; input.value = value;
+        input.setAttribute('aria-valuetext', zoomTime.format(new Date(value)) + ' Eastern');
+      }
+      const left = (selection.from - base.from) / span * 100;
+      const right = (base.to - selection.to) / span * 100;
+      const window = control.querySelector('.stats-zoom-window');
+      window.style.left = `${left}%`; window.style.right = `${right}%`;
+      control.querySelector('.stats-zoom-from').textContent = zoomTime.format(new Date(selection.from));
+      control.querySelector('.stats-zoom-to').textContent = zoomTime.format(new Date(selection.to)) + ' Eastern';
+      control.querySelector('button').disabled = !state.zoom && left === 0 && right === 0;
+    });
+  }
+  function renderZoom(data) {
+    if (!state.zoom || !state.zoomBase) {
+      state.zoomBase = { from: data.from, to: data.to };
+      const bins = [];
+      const step = Math.max(1, Math.ceil(data.timeline.length / 200));
+      for (let i = 0; i < data.timeline.length; i += step) bins.push(data.timeline.slice(i, i + step).reduce((sum, b) => sum + b.gifts, 0));
+      const max = Math.max(...bins, 1);
+      const path = bins.map((v, i) => `${i ? 'L' : 'M'}${i / Math.max(bins.length - 1, 1) * 1000},${38 - v / max * 34}`).join(' ') + ' L1000,40 L0,40 Z';
+      document.querySelectorAll('.stats-zoom-overview').forEach(root => {
+        root.replaceChildren(); svg('path', { d: path, fill: '#7ab8e6', opacity: 0.35 }, root);
+      });
+    }
+    syncZoomHandles(state.zoom || state.zoomBase);
+  }
+
   function params() {
     const query = new URLSearchParams({ range: state.range, source: state.source, method: state.method, sort: state.sort });
     for (const key of ['q', 'min', 'max', 'bucket']) if (state[key] !== '') query.set(key, state[key]);
     if (state.range === 'custom') { query.set('from', state.from); query.set('to', state.to); }
+    if (state.zoom) { query.set('range', 'custom'); query.set('from', String(state.zoom.from)); query.set('to', String(state.zoom.to)); }
     return query;
   }
   function renderDonations(data) {
@@ -381,6 +541,7 @@
         state.from = String(from); state.to = String(to);
       } catch (error) { $('stats-error').textContent = error.message; return; }
     }
+    if (state.range === 'custom') { state.zoom = null; state.zoomBase = null; }
     state.q = $('stats-search').value.trim();
     for (const key of ['min', 'max']) state[key] = $('stats-' + key).value === '' ? '' : String(Math.round(Number($('stats-' + key).value) * 100));
     state.bucket = $('stats-bucket').value;
@@ -399,6 +560,7 @@
       button.addEventListener('click', () => {
         state[key] = button.dataset[attr];
         if (key === 'range') {
+          state.zoom = null; state.zoomBase = null;
           $('stats-custom-range').hidden = state.range !== 'custom';
           if (state.range === 'custom') {
             const data = state.data;

@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.5.1">
   <link rel="stylesheet" href="/css/base.css?v=7.5.1">
   <link rel="stylesheet" href="/css/components.css?v=7.5.1">
-  <link rel="stylesheet" href="/css/app.css?v=7.5.11">
+  <link rel="stylesheet" href="/css/app.css?v=7.5.14">
 </head>
 <body>
   <div class="ops-shell">
@@ -144,12 +144,15 @@
       <div class="stats-grid">
         <section class="stats-card">
           <div class="stats-card-head"><h2>QR codes and tagged links</h2><span class="form-hint">Visitors who arrived with UTM tags</span></div>
+          <div id="pie-utm"></div>
           <div id="table-utm" class="stats-table"></div>
         </section>
         <section class="stats-card">
           <div class="stats-card-head"><h2>Where visitors came from</h2></div>
+          <div id="pie-referrers"></div>
           <div id="table-referrers" class="stats-table"></div>
           <div class="stats-card-head" style="margin-top:20px"><h2>Devices on the donation page</h2></div>
+          <div id="pie-devices"></div>
           <div id="chart-devices" class="chart bars"></div>
         </section>
         <section class="stats-card">
@@ -168,6 +171,6 @@
 
   <script src="/js/session.js?v=7.5.3"></script>
   <script src="/js/presence.js?v=7.5.1"></script>
-  <script src="/js/stats.js?v=7.5.9"></script>
+  <script src="/js/stats.js?v=7.5.12"></script>
 </body>
 </html>
