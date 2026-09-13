@@ -56,8 +56,9 @@ run_container() {
   docker network connect "$UMAMI_NETWORK" givebar 2>/dev/null || true
 }
 healthy() {
+  # Every API route is sign-in only, so a 401 from the server (not the proxy) proves the app is up.
   for _ in $(seq 1 25); do
-    curl -fsS -m 3 "http://127.0.0.1:3333/api/state?role=stage" >/dev/null 2>&1 && return 0
+    case "$(curl -s -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:3333/api/state?role=stage")" in 200|401) return 0 ;; esac
     sleep 1
   done
   return 1
