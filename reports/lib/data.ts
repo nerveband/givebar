@@ -62,7 +62,7 @@ export function readNote(note: string, method: string, source: string): { collec
   if (check) { collection = "check"; ref = check[1]; parts.push(`Check number ${check[1]} was handed in at the table.`); }
   else if (/\bcash\b/i.test(note)) { collection = "cash"; const mult = /(\d+)\s*x\s*\$?(\d+)/i.exec(note); parts.push(mult ? `Cash received: ${mult[1]} bills of ${mult[2]}.` : "Cash received at the table."); }
   else if (/credit\s*card|card\s*detail/i.test(note)) { collection = "card"; parts.push("The pledge card carries credit card details; charge the card, no invoice needed."); }
-  else if (method === "pledge") { parts.push("Pledge only: nothing was collected on the night, invoice and follow up."); }
+  else if (method === "pledge") { /* status says it: pledge to invoice */ }
   if (table) parts.push(`Seated at table ${table[1]}.`);
   if (/out of town/i.test(note)) parts.push("Donor is out of town.");
   const reach = /reach out to ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i.exec(note);
