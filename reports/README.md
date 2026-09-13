@@ -41,7 +41,7 @@ Step 2 can be skipped when nothing new came in online; the previous `reports/dat
 - `reports/lib/xlsx.ts`: workbook sheets (ExcelJS). Add a column by extending the sheet's column list and row mapper.
 - `reports/lib/html.ts`: the HTML template, CSS (screen and print), inline charts, and the browser-side table code. The payload sent to the browser is built in `viewPayload`; anything new for the interactive tables goes there first.
 - `reports/build-report.ts`: orchestration and the Chromium print (`~/.cache/ms-playwright/chromium-*` or a `chromium`/`google-chrome` on PATH).
-- `reports/theme/`: the CAIR-Georgia logo and the wavedepth logo. `reports/theme/fonts/` (Brandon Grotesque, Plus Jakarta Sans, Space Mono) is gitignored because the fonts are licensed; `build-report.ts` copies them from the gala booklet release (`/home/nerveband/state/booklet-r22-spacing-release/versions/r16/assets`) when missing.
+- `reports/theme/`: the CAIR-Georgia logo and the wavedepth logo. `reports/theme/fonts/` (Brandon Grotesque, Plus Jakarta Sans) is gitignored because the fonts are licensed; `build-report.ts` copies them from the gala booklet release (`/home/nerveband/state/booklet-r22-spacing-release/versions/r16/assets`) when missing.
 
 ## Config (`reports/report.config.json`)
 
