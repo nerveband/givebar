@@ -527,6 +527,7 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="/css/sync-now.css?v=1">
 </head>
 <body>
 
@@ -543,6 +544,7 @@
         <span>Reconnecting...</span>
       </div>
       <div class="presenter-top-actions">
+        <div data-sync-now class="sync-now-controls" hidden><button type="button">Sync now</button><span role="status"></span></div>
         <button type="button" id="btn-full-history" class="presenter-btn">
           <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg>
           <span>Full History</span>
@@ -628,5 +630,6 @@
 
   <script src="/js/live.js?v=7.5.2"></script>
   <script src="/js/emcee.js?v=7.5.1"></script>
+  <script src="/js/sync-now.js?v=1"></script>
 </body>
 </html>

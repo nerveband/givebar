@@ -900,6 +900,7 @@
       .qr-image-frame { width: 112px; height: 112px; }
     }
   </style>
+  <link rel="stylesheet" href="/css/sync-now.css?v=1">
 </head>
 <body data-bg-style="plain" data-orientation="horizontal">
   <video id="stage-background-video" muted autoplay loop playsinline aria-hidden="true" hidden></video>
@@ -985,9 +986,11 @@
     </footer>
 
   </main>
+<div data-sync-now class="sync-now-controls sync-now-stage" hidden><button type="button">Sync now</button><span role="status"></span></div>
 
   <script src="/js/live.js?v=7.5.2"></script>
   <script src="/js/odometer.js?v=7.5.1"></script>
   <script src="/js/stage.js?v=7.5.1"></script>
+  <script src="/js/sync-now.js?v=1"></script>
 </body>
 </html>

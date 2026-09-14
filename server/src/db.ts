@@ -4,10 +4,10 @@ import { dirname } from "path";
 
 /**
  * Schema version. Fresh databases are created at this version directly.
- * The only supported upgrade path is from the previous released version (15);
+ * The only supported upgrade path is from the released versions 15 and 16;
  * anything older must start from a fresh database or a restored backup.
  */
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 export function initDatabase(dbPath: string = process.env.GIVEBAR_DB_PATH || "data/givebar.sqlite"): Database {
   if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
@@ -148,7 +148,8 @@ function createSchema(db: Database, seedDefaults: boolean): void {
       enabled INTEGER NOT NULL DEFAULT 0,
       last_sync_at INTEGER,
       last_error TEXT NOT NULL DEFAULT '',
-      imported_count INTEGER NOT NULL DEFAULT 0
+      imported_count INTEGER NOT NULL DEFAULT 0,
+      slow_sync_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS fundraising_receipt (
       transaction_id TEXT PRIMARY KEY,
@@ -228,11 +229,14 @@ export function migrateSchema(db: Database): void {
   db.transaction(() => {
     const fresh = !tableExists(db, "event_state");
     const version = db.query<{ user_version: number }, []>(`PRAGMA user_version;`).get()!.user_version;
-    if (!fresh && version !== 15 && version !== SCHEMA_VERSION) {
+    if (!fresh && version !== 15 && version !== 16 && version !== SCHEMA_VERSION) {
       throw new Error(`Unsupported Givebar database schema version ${version}. Restore a backup taken with the previous release or start from a fresh database.`);
     }
     createSchema(db, fresh);
     if (!fresh && version === 15) upgradeFrom15(db);
+    if (!fresh && version < 17 && !db.query<{ name: string }, []>("PRAGMA table_info(fundraising_sync)").all().some(column => column.name === "slow_sync_at")) {
+      db.exec("ALTER TABLE fundraising_sync ADD COLUMN slow_sync_at INTEGER");
+    }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
   })();
 }

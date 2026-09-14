@@ -6,13 +6,16 @@
   const message = document.getElementById('fundraising-status');
   const save = document.getElementById('fundraising-save');
   const sync = document.getElementById('fundraising-sync');
+  const schedule = document.getElementById('fundraising-schedule');
+  const fast = document.getElementById('fundraising-fast');
+  const slowAt = document.getElementById('fundraising-slow-at');
   let initialized = false;
   let connected = false;
   let busy = false;
   async function request(payload) {
     if (busy) return;
     busy = true;
-    save.disabled = sync.disabled = true;
+    save.disabled = sync.disabled = schedule.disabled = fast.disabled = true;
     if (payload) message.textContent = payload.action === 'sync' ? 'Syncing gifts…' : 'Saving import settings…';
     try {
       const response = await GivebarSession.api('/api/fundraising', {
@@ -28,6 +31,14 @@
         enabled.checked = !!data.enabled;
         initialized = true;
       }
+      if (!initialized || payload?.action === 'schedule' || !slowAt.dataset.loaded) {
+        const date = data.slow_sync_at ? new Date(data.slow_sync_at) : null;
+        slowAt.value = date ? new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+        slowAt.dataset.loaded = 'true';
+      }
+      document.getElementById('fundraising-schedule-status').textContent = data.slow_sync_at
+        ? (data.interval_seconds === 600 ? 'Checking every 10 minutes.' : 'Checking every 5 seconds. Switching to every 10 minutes at ' + new Date(data.slow_sync_at).toLocaleString() + '.') + ' Sync now checks immediately.'
+        : 'Checking every 5 seconds. No slower schedule is set.';
       const lastSync = data.last_sync_at ? GivebarSession.format.time(data.last_sync_at) : 'Never';
       connected = !!data.token_configured;
       const badge = document.getElementById('fundraising-badge');
@@ -41,7 +52,7 @@
     } catch (error) {
       message.textContent = error.message;
       message.style.color = '#fca5a5';
-    } finally { busy = false; save.disabled = false; sync.disabled = !connected; }
+    } finally { busy = false; save.disabled = schedule.disabled = fast.disabled = false; sync.disabled = !connected; }
   }
   save.addEventListener('click', async () => {
     const ok = await GivebarSession.confirm(enabled.checked
@@ -50,6 +61,12 @@
     if (!ok) return;
     request({ action: 'configure', form_id: formId.value.trim(), start_date: startDate.value, enabled: enabled.checked });
   });
+  schedule.addEventListener('click', () => {
+    const at = new Date(slowAt.value).getTime();
+    if (!Number.isFinite(at)) { GivebarSession.toast('Choose a valid switch time.'); return; }
+    request({ action: 'schedule', slow_sync_at: at });
+  });
+  fast.addEventListener('click', () => request({ action: 'schedule', slow_sync_at: null }));
   sync.addEventListener('click', () => request({ action: 'sync' }));
   request();
   setInterval(() => { if (!document.hidden) request(); }, 15000);

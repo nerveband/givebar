@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
-import { initDatabase } from '../server/src/db';
+import { initDatabase, migrateSchema, SCHEMA_VERSION } from '../server/src/db';
 import { applyFundraisingGifts, parseFundraisingGifts } from '../server/src/fundraising';
 import { foldLedger, recordDonation, updateEventState, voidDonation } from '../server/src/ledger';
 import { getStageState } from '../server/src/projection';
@@ -107,9 +107,41 @@ test('the sync polls every 5 seconds, a failure backs the timer off for 30 secon
     tick!();
     await new Promise(r => setTimeout(r, 20));
     expect(calls).toHaveLength(4); // a success clears the back-off
+    const originalNow = Date.now;
+    let now = originalNow();
+    Date.now = () => now;
+    try {
+      db.query("UPDATE fundraising_sync SET slow_sync_at = ? WHERE id = 1").run(now + 1000);
+      expect(sync.status().interval_seconds).toBe(5);
+      now += 1000;
+      expect(sync.status().interval_seconds).toBe(600);
+      tick!();
+      await new Promise(r => setTimeout(r, 20));
+      expect(calls).toHaveLength(4);
+      now += 600000;
+      tick!();
+      await new Promise(r => setTimeout(r, 20));
+      expect(calls).toHaveLength(5);
+      tick!();
+      await new Promise(r => setTimeout(r, 20));
+      expect(calls).toHaveLength(5);
+      await sync.sync();
+      expect(calls).toHaveLength(6);
+      expect(createFundraisingSync(db, () => 'token').status().interval_seconds).toBe(600);
+    } finally { Date.now = originalNow; }
     sync.stop();
   } finally {
     globalThis.fetch = realFetch;
     globalThis.setInterval = realSetInterval;
   }
+});
+
+test('schema 16 preserves the ledger and import state while adding the optional schedule', () => {
+  recordDonation(db, { donation_id: 'migration-gift', donor_name: 'Donor', amount_cents: 12345 });
+  db.query("UPDATE fundraising_sync SET imported_count = 9, last_sync_at = 123 WHERE id = 1").run();
+  db.exec("ALTER TABLE fundraising_sync DROP COLUMN slow_sync_at; PRAGMA user_version = 16");
+  migrateSchema(db);
+  expect(foldLedger(db).total_raised_cents).toBe(12345);
+  expect(db.query("SELECT imported_count, last_sync_at, slow_sync_at FROM fundraising_sync").get()).toEqual({ imported_count: 9, last_sync_at: 123, slow_sync_at: null });
+  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: SCHEMA_VERSION });
 });

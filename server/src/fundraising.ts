@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { readFileSync } from "fs";
 import { amendDonation, foldLedger, recordDonation, voidDonation } from "./ledger";
 import { requireRole } from "./authz";
-type SyncSettings = { form_id: string; start_date: string; enabled: number; last_sync_at: number | null; last_error: string; imported_count: number };
+type SyncSettings = { form_id: string; start_date: string; enabled: number; last_sync_at: number | null; last_error: string; imported_count: number; slow_sync_at: number | null };
 type RemoteGift = { id: string; amount: number; donor: string; anonymous: boolean; method: "card" | "check" | "cash"; date: string };
 type ObjectValue = Record<string, unknown>;
 const ACTOR = "Bloomerang Fundraising";
@@ -111,7 +111,8 @@ export function createFundraisingSync(db: Database, readToken = () => {
   let timer: ReturnType<typeof setInterval> | undefined;
   const settings = () => db.query<SyncSettings, []>("SELECT * FROM fundraising_sync WHERE id = 1").get()!;
   const tokenAvailable = () => { try { return !!readToken(); } catch { return false; } };
-  const status = () => ({ ...settings(), token_configured: tokenAvailable(), running, interval_seconds: POLL_MS / 1000, retry_in_seconds: Math.max(0, Math.ceil((retryAt - Date.now()) / 1000)) });
+  const intervalMs = () => { const at = settings().slow_sync_at; return at !== null && Date.now() >= at ? 600000 : POLL_MS; };
+  const status = () => ({ ...settings(), token_configured: tokenAvailable(), running, interval_seconds: intervalMs() / 1000, slow_interval_seconds: 600, retry_in_seconds: Math.max(0, Math.ceil((retryAt - Date.now()) / 1000)) });
   async function sync() {
     if (running) return status();
     const config = settings();
@@ -153,6 +154,13 @@ export function createFundraisingSync(db: Database, readToken = () => {
     try {
       const body = object(await req.json());
       if (body.action === "sync") return Response.json(await sync());
+      if (body.action === "schedule") {
+        if (auth.role !== "admin") return Response.json({ error: "Administrator access required." }, { status: 403 });
+        const at = body.slow_sync_at;
+        if (at !== null && (!Number.isSafeInteger(at) || Number(at) < 0 || Number(at) > 8640000000000000)) return Response.json({ error: "Provide a valid switch time." }, { status: 400 });
+        db.query("UPDATE fundraising_sync SET slow_sync_at = ? WHERE id = 1").run(at as number | null);
+        return Response.json(status());
+      }
       if (body.action !== "configure") return Response.json({ error: "INVALID_ACTION" }, { status: 400 });
       if (auth.role !== "admin") return Response.json({ error: "FORBIDDEN", message: "Administrator access required." }, { status: 403 });
       const formId = String(body.form_id || "");
@@ -163,6 +171,11 @@ export function createFundraisingSync(db: Database, readToken = () => {
       return Response.json(await sync());
     } catch { return Response.json({ error: "Invalid Fundraising request." }, { status: 400 }); }
   }
-  const tick = () => { if (Date.now() >= retryAt) void sync(); };
+  const tick = () => {
+    const config = settings();
+    const slow = intervalMs() > POLL_MS;
+    const due = !slow || config.last_sync_at === null || Date.now() >= config.last_sync_at + intervalMs();
+    if (Date.now() >= retryAt && due) void sync();
+  };
   return { handle, sync, status, start() { if (!timer) { void sync(); timer = setInterval(tick, POLL_MS); } }, stop() { clearInterval(timer); timer = undefined; } };
 }

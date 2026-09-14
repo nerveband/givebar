@@ -1,0 +1,8 @@
+.sync-now-controls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sync-now-controls[hidden] { display: none; }
+.sync-now-controls button { min-height: 44px; padding: 8px 14px; border: 1px solid #b79a60; border-radius: 8px; color: #f2d598; background: #171719; font: inherit; cursor: pointer; }
+.sync-now-controls button:disabled { opacity: .65; cursor: wait; }
+.sync-now-controls [role="status"] { max-width: 260px; font: 12px/1.4 sans-serif; }
+.sync-now-stage { position: fixed; right: 16px; bottom: 16px; z-index: 100; padding: 6px; border-radius: 10px; color: #fff; background: #101116; opacity: 0; transition: opacity .15s; }
+.sync-now-stage:hover, .sync-now-stage:focus-within { opacity: 1; }
+@media (hover: none) { .sync-now-stage { opacity: 1; } }
