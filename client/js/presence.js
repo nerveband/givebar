@@ -90,6 +90,11 @@
     if (ms < 3600000) return Math.round(ms / 60000) + 'm';
     return Math.round(ms / 3600000) + 'h';
   }
+  function initials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    return (parts.length ? parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '') : '?').toUpperCase();
+  }
+
 
   function paint(mount) {
     const stale = state.view && (state.failed || Date.now() - state.confirmedAt > STALE_MS);
@@ -149,13 +154,29 @@
         const row = document.createElement('div');
         row.className = 'gbp-row';
         if (entry.client_id === clientId) row.setAttribute('data-self', 'true');
+        const avatar = document.createElement('span');
+        avatar.className = 'gbp-avatar';
+        avatar.setAttribute('aria-hidden', 'true');
+        avatar.textContent = initials(entry.name);
         const name = document.createElement('span');
         name.className = 'gbp-name';
-        name.textContent = entry.name + (entry.role === 'admin' ? ' (admin)' : '');
+        name.textContent = entry.name;
+        if (entry.role === 'admin') {
+          const tag = document.createElement('span');
+          tag.className = 'gbp-tag';
+          tag.textContent = 'admin';
+          name.appendChild(tag);
+        }
+        if (entry.client_id === clientId) {
+          const you = document.createElement('span');
+          you.className = 'gbp-tag gbp-tag-you';
+          you.textContent = 'you';
+          name.appendChild(you);
+        }
         const meta = document.createElement('span');
         meta.className = 'gbp-meta';
         meta.textContent = entry.device + ' \u00b7 ' + ago(Math.max(0, serverNow - entry.last_seen));
-        row.append(name, meta);
+        row.append(avatar, name, meta);
         group.appendChild(row);
       }
       mount.list.appendChild(group);
@@ -172,7 +193,7 @@
     const root = document.createElement('div');
     root.className = 'gbp';
     root.innerHTML =
-      '<div class="gbp-bar"><span class="gbp-count">' + svg(ICON_USERS) + '<span data-gbp-count>\u2014</span></span><span class="gbp-word">connected</span></div>'
+      '<div class="gbp-bar"><span class="gbp-count">' + svg(ICON_USERS) + '<span data-gbp-count>\u2014</span></span><span class="gbp-word">connected</span><span class="gbp-live" data-gbp-live aria-hidden="true"></span></div>'
       + '<div class="gbp-alert" data-gbp-alert role="status" aria-live="polite" hidden>' + svg(ICON_WARNING) + '<span data-gbp-alert-text></span></div>'
       + '<div class="gbp-list" data-gbp-list></div>';
     container.textContent = '';

@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.5.1">
   <link rel="stylesheet" href="/css/base.css?v=7.5.1">
   <link rel="stylesheet" href="/css/components.css?v=7.5.1">
-  <link rel="stylesheet" href="/css/app.css?v=7.5.1">
+  <link rel="stylesheet" href="/css/app.css?v=7.6.0">
   <style>
     /* Home landing surface — lives inside the same operational shell as every
        other operator page. Presentation Contrast: near-black surfaces, amber
@@ -412,8 +412,8 @@
       <section class="hub-section" aria-labelledby="presence-title">
         <div class="hub-section-head">
           <h2 class="hub-section-title" id="presence-title">Who’s here</h2>
+          <span class="hub-section-note" id="presence-note">Signed-in operators by page. Room screens are not tracked.</span>
         </div>
-        <p>Signed-in operators, grouped by page. Chart and Presenter are room screens and are not tracked.</p>
         <div id="presence"></div>
       </section>
 
@@ -422,10 +422,16 @@
           <h2 class="hub-section-title" id="briefing-title">Team briefing</h2>
           <button type="button" class="btn-secondary" id="btn-copy-briefing" data-copy-label="Copy briefing">Copy briefing</button>
         </div>
-        <p>Everything an operator needs, as plain text you can paste into a group chat or email. Invite emails from Settings carry the same steps with a personal sign-in link.</p>
-        <div class="briefing-box">
-          <div id="briefing-links"></div>
-          <ol id="briefing-steps"></ol>
+        <div class="briefing-card">
+          <div class="briefing-links" id="briefing-links"></div>
+          <ol class="briefing-steps" id="briefing-steps"></ol>
+          <div class="briefing-foot">
+            <button type="button" class="briefing-toggle" id="btn-briefing-toggle" aria-expanded="false" aria-controls="briefing-steps">
+              <span data-label>Show all steps</span>
+              <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
+            </button>
+            <span class="briefing-facts" id="briefing-facts"></span>
+          </div>
         </div>
       </section>
 
@@ -611,8 +617,8 @@
     </main>
   </div>
 
-  <script src="/js/session.js?v=7.5.3"></script>
-  <script src="/js/presence.js?v=7.5.3"></script>
+  <script src="/js/session.js?v=7.6.0"></script>
+  <script src="/js/presence.js?v=7.6.0"></script>
   <script>
     (function () {
       'use strict';
@@ -736,8 +742,21 @@
         const section = document.getElementById('briefing-section');
         section.hidden = false;
         const links = [['Sign in', brief.links.signin], ['Manage Donations', brief.links.donations], ['Fullscreen Bar Chart (projector)', brief.links.chart], ['Presenter View (podium)', brief.links.presenter]];
-        document.getElementById('briefing-links').innerHTML = links.map(([label, url]) => `<div><strong>${fmt.escape(label)}:</strong> <a href="${fmt.escape(url)}">${fmt.escape(url)}</a></div>`).join('');
-        document.getElementById('briefing-steps').innerHTML = brief.steps.map(step => `<li>${fmt.escape(step)}</li>`).join('');
+        const chipLabels = ['Sign in', 'Manage Donations', 'Bar Chart', 'Presenter'];
+        document.getElementById('briefing-links').innerHTML = links.map(([, url], i) => `<a class="briefing-chip" href="${fmt.escape(url)}"><span>${fmt.escape(chipLabels[i])}</span><small>${fmt.escape(url.replace(/^https?:\/\//, ''))}</small></a>`).join('');
+        const BRIEF_COUNT = 2;
+        document.getElementById('briefing-steps').innerHTML = brief.steps.map((step, i) => `<li${i >= BRIEF_COUNT ? ' data-more' : ''}>${fmt.escape(step)}</li>`).join('');
+        document.getElementById('briefing-facts').textContent = `Large gifts confirm at ${fmt.money(brief.major_gift_threshold_cents)} · on screen after ${brief.stage_delay_seconds} s`;
+        const toggle = document.getElementById('btn-briefing-toggle');
+        const hiddenCount = Math.max(0, brief.steps.length - BRIEF_COUNT);
+        toggle.hidden = hiddenCount === 0;
+        toggle.onclick = () => {
+          const open = toggle.getAttribute('aria-expanded') !== 'true';
+          toggle.setAttribute('aria-expanded', String(open));
+          section.classList.toggle('is-expanded', open);
+          toggle.querySelector('[data-label]').textContent = open ? 'Show less' : `Show all ${brief.steps.length} steps`;
+        };
+        toggle.querySelector('[data-label]').textContent = `Show all ${brief.steps.length} steps`;
         const operators = brief.operators.map(op => `${op.display_name} (sign-in name: ${op.username}${op.role === 'admin' ? ', administrator' : ''})`);
         const text = [
           `${brief.event_name}: Givebar operator briefing`,
@@ -763,7 +782,7 @@
         GivebarPresence.mount(document.getElementById('presence'));
         const me = await GivebarSession.whoami();
         signedIn = Boolean(me.authenticated);
-        if (!signedIn) document.getElementById('presence').closest('.hub-section').querySelector('p').textContent = 'Sign in to see who is connected.';
+        if (!signedIn) document.getElementById('presence-note').textContent = 'Sign in to see who is connected.';
         loadGlance();
         setInterval(loadGlance, 5000);
         if (signedIn) loadBriefing();

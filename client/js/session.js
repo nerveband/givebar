@@ -53,12 +53,13 @@
     timeZone: 'America/New_York', month: 'short', day: 'numeric',
     hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
   });
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const wholeDollars = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const dollarsAndCents = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const SOURCE_LABEL = { manual: 'Entered by hand', bloomerang: 'Online gift', rehearsal: 'Rehearsal sample' };
 
   const format = {
     time: value => value ? easternTime.format(new Date(value)) : 'Time unavailable',
-    money: cents => typeof cents === 'number' && Number.isFinite(cents) ? currency.format(cents / 100) : 'Unavailable',
+    money: cents => typeof cents === 'number' && Number.isFinite(cents) ? (cents % 100 === 0 ? wholeDollars : dollarsAndCents).format(cents / 100) : 'Unavailable',
     source: value => SOURCE_LABEL[value] || value || 'Source unavailable',
     escape: value => String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch])
   };

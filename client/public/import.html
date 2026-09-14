@@ -9,10 +9,10 @@
   <link rel="stylesheet" href="/css/tokens.css?v=7.5.1">
   <link rel="stylesheet" href="/css/base.css?v=7.5.1">
   <link rel="stylesheet" href="/css/components.css?v=7.5.1">
-  <link rel="stylesheet" href="/css/app.css?v=7.5.4">
+  <link rel="stylesheet" href="/css/app.css?v=7.6.0">
   <link rel="stylesheet" href="/css/vendor/jsuites.css?v=4.17.7">
   <link rel="stylesheet" href="/css/vendor/jspreadsheet.css?v=4.15.0">
-  <link rel="stylesheet" href="/css/import.css?v=1">
+  <link rel="stylesheet" href="/css/import.css?v=4">
 </head>
 <body>
   <div class="ops-shell">
@@ -40,8 +40,7 @@
         <h1>Bulk Import</h1>
         <div class="page-header-actions">
           <a href="/donations" class="btn-secondary">Manage Donations</a>
-          <button type="button" id="btn-clear" class="btn-secondary">Start over</button>
-          <button type="button" id="btn-import" class="btn-primary" disabled>Record gifts</button>
+          <button type="button" id="btn-clear" class="btn-ghost" hidden>Clear sheet</button>
         </div>
       </header>
 
@@ -58,7 +57,7 @@
             <label for="paste-box">Paste here (from a spreadsheet or CSV)</label>
             <textarea id="paste-box" rows="4" placeholder="Donor name&#9;Amount&#9;Anonymous&#9;Note&#10;Jane Doe&#9;2,500&#9;&#9;Table 4"></textarea>
             <div class="import-intake-actions">
-              <button type="button" id="btn-load-paste" class="btn-secondary">Add pasted rows</button>
+              <button type="button" id="btn-load-paste" class="btn-primary">Add pasted rows</button>
               <label class="btn-secondary import-file-label"><input type="file" id="file-input" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">Choose a CSV file</label>
             </div>
           </div>
@@ -82,15 +81,38 @@
 
       <section class="import-results" aria-labelledby="results-title">
         <h2 id="results-title">3. Record</h2>
-        <p id="import-status" class="form-hint" role="status" aria-live="polite">Rows marked Ready will be recorded when you press Record gifts. Rows that need attention stay in the sheet with the reason in their Status column.</p>
+        <p id="import-status" class="form-hint" role="status" aria-live="polite">Rows marked Ready are recorded when you press Record gifts; you review the list first. Rows that need attention stay in the sheet with the reason in their Status column.</p>
+        <div id="undo-bar" class="undo-bar import-undo" role="status" aria-live="polite" hidden>
+          <span id="undo-text"></span>
+          <button type="button" id="btn-undo" class="btn-secondary undo-btn">Undo</button>
+        </div>
+        <div class="import-record-actions">
+          <button type="button" id="btn-import" class="btn-primary" disabled>Record gifts</button>
+        </div>
       </section>
     </main>
   </div>
 
-  <script src="/js/session.js?v=7.5.3"></script>
-  <script src="/js/presence.js?v=7.5.1"></script>
+  <dialog id="review-dialog" class="operator-dialog donation-dialog" aria-labelledby="review-title">
+    <form id="review-form" method="dialog">
+      <div class="dialog-head">
+        <div class="donation-dialog-heading"><h2 id="review-title">Review before recording</h2><button type="button" id="btn-review-close" class="btn-secondary">Close</button></div>
+        <p id="review-intro"></p>
+      </div>
+      <div class="dialog-body">
+        <table class="review-table"><thead><tr><th>Donor</th><th class="text-right">Amount</th><th>Notes</th></tr></thead><tbody id="review-rows"></tbody></table>
+      </div>
+      <div class="dialog-foot review-foot">
+        <span id="review-total" class="review-total"></span>
+        <button type="submit" id="btn-review-confirm" class="btn-primary">Record</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/js/session.js?v=7.6.0"></script>
+  <script src="/js/presence.js?v=7.6.0"></script>
   <script src="/js/vendor/jsuites.js?v=4.17.7"></script>
   <script src="/js/vendor/jspreadsheet.js?v=4.15.0"></script>
-  <script src="/js/import.js?v=1"></script>
+  <script src="/js/import.js?v=3"></script>
 </body>
 </html>

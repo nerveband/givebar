@@ -215,7 +215,7 @@
     onbeforedeleterow(el, rowIndex, count) {
       for (let y = rowIndex; y < rowIndex + count; y++) {
         const info = meta.get(el.jexcel.options.data[y]?.[COL.id]);
-        if (info?.recorded) { say(importStatus, 'Recorded rows stay in the sheet as a record of what was sent. Use Start over to clear them.'); return false; }
+        if (info?.recorded) { say(importStatus, 'Recorded rows stay in the sheet as a record of what was sent. Use Clear sheet to remove them from this page.'); return false; }
       }
       return true;
     },
@@ -317,6 +317,7 @@
       if (attention) parts.push(`${attention} need${attention === 1 ? 's' : ''} attention`);
       if (recorded) parts.push(`${recorded} recorded`);
       summary.textContent = parts.length ? parts.join(' · ') : 'No rows yet.';
+      $('btn-clear').hidden = !parts.length;
       importButton.disabled = running || !ready;
       importButton.textContent = ready ? `Record ${ready} ${ready === 1 ? 'gift' : 'gifts'} (${fmt.money(readyCents)})` : 'Record gifts';
       saveDraft();
@@ -450,12 +451,9 @@
     });
     if (!jobs.length) return;
     const total = jobs.reduce((sum, job) => sum + job.cents, 0);
-    const ok = await GivebarSession.confirm({
-      title: `Record ${jobs.length} ${jobs.length === 1 ? 'gift' : 'gifts'} totalling ${fmt.money(total)}?`,
-      body: `Each gift is recorded under your name and reaches the ballroom screen after ${Math.round(stageDelayMs / 1000)} seconds. Pause the chart first if the audience should not see them yet.`,
-      confirmLabel: `Record ${fmt.money(total)}`
-    });
-    if (!ok) return;
+    if (!(await reviewBatch(jobs, total))) return;
+    hideUndo();
+    const batch = [];
     running = true;
     importButton.disabled = true;
     importButton.textContent = 'Recording…';
@@ -478,6 +476,7 @@
         if (response.ok) {
           info.recorded = true; info.needs = []; info.problem = undefined;
           recorded++;
+          batch.push(job.id);
           continue;
         }
         if (response.status >= 500) { stopped = true; break; }
@@ -502,9 +501,102 @@
       if (stopped) parts.push('The server could not be reached; the remaining rows were not sent. Nothing was lost: press Record gifts again when the connection returns.');
       if (recorded) parts.push(`Recorded gifts reach the ballroom screen in ${Math.round(stageDelayMs / 1000)} seconds and can be edited or deleted in Manage Donations.`);
       say(importStatus, parts.join(' '));
+      if (batch.length) offerUndo(batch);
     }
   }
   importButton.addEventListener('click', recordReadyRows);
+
+  // --- Review modal -----------------------------------------------------------
+
+  const reviewDialog = $('review-dialog');
+  /** Lists every gift about to be recorded; resolves true only on an explicit Record. */
+  function reviewBatch(jobs, total) {
+    const rows = $('review-rows');
+    rows.replaceChildren(...jobs.map(job => {
+      const row = sheet.options.data[rowIndexOf(job.id)];
+      const info = meta.get(job.id);
+      const tr = document.createElement('tr');
+      const donor = document.createElement('td');
+      donor.textContent = row[COL.name] + (row[COL.anonymous] ? ' (anonymous on screen)' : '');
+      const amount = document.createElement('td');
+      amount.className = 'text-right review-amount';
+      amount.textContent = fmt.money(job.cents);
+      const notes = document.createElement('td');
+      notes.className = 'review-notes';
+      notes.textContent = [info.needs.length ? 'confirmed: ' + needsText(info) : '', row[COL.note]].filter(Boolean).join(' · ');
+      tr.append(donor, amount, notes);
+      return tr;
+    }));
+    $('review-intro').textContent = `Each gift is recorded under your name and reaches the ballroom screen after ${Math.round(stageDelayMs / 1000)} seconds. You can undo the whole batch for 30 seconds afterwards.`;
+    $('review-total').textContent = `${jobs.length} ${jobs.length === 1 ? 'gift' : 'gifts'} · ${fmt.money(total)}`;
+    $('btn-review-confirm').textContent = `Record ${fmt.money(total)}`;
+    return new Promise(resolve => {
+      const finish = value => { reviewDialog.onclose = null; if (reviewDialog.open) reviewDialog.close(); resolve(value); };
+      $('review-form').onsubmit = event => { event.preventDefault(); finish(true); };
+      $('btn-review-close').onclick = () => finish(false);
+      reviewDialog.onclose = () => finish(false);
+      reviewDialog.showModal();
+      $('btn-review-confirm').focus();
+    });
+  }
+
+  // --- Undo ---------------------------------------------------------------------
+
+  const UNDO_MS = 30000;
+  const undoBar = $('undo-bar');
+  let undoBatch = null;
+  let undoTimer = null;
+  let undoTick = null;
+
+  function hideUndo() {
+    clearTimeout(undoTimer); clearInterval(undoTick);
+    undoBatch = null;
+    undoBar.hidden = true;
+  }
+
+  /** Offers to void the whole batch for 30 seconds; inside the stage delay nothing reaches the screen. */
+  function offerUndo(ids) {
+    hideUndo();
+    undoBatch = ids;
+    const deadline = Date.now() + UNDO_MS;
+    const paint = () => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      $('undo-text').textContent = `${ids.length} ${ids.length === 1 ? 'gift' : 'gifts'} recorded. Undo removes ${ids.length === 1 ? 'it' : 'all of them'} (${left} s).`;
+    };
+    paint();
+    undoBar.hidden = false;
+    undoTick = setInterval(paint, 1000);
+    undoTimer = setTimeout(hideUndo, UNDO_MS);
+  }
+
+  $('btn-undo').addEventListener('click', async () => {
+    const ids = undoBatch;
+    if (!ids || running) return;
+    hideUndo();
+    running = true;
+    importButton.disabled = true;
+    let undone = 0, failed = 0;
+    for (const id of ids) {
+      try {
+        const response = await GivebarSession.api(`/api/donation/${id}/void`, { method: 'POST', headers, body: JSON.stringify({ reason: 'Bulk import undone' }) });
+        if (!response.ok) { failed++; continue; }
+      } catch (_) { failed++; continue; }
+      undone++;
+      // The voided ledger id stays voided; the row gets a fresh id so it can be recorded again if wanted.
+      const y = rowIndexOf(id);
+      meta.delete(id);
+      if (y !== -1) {
+        const cells = sheet.records[y];
+        for (let x = 1; x < cells.length; x++) { cells[x].classList.remove('readonly'); cells[x].querySelector('input')?.removeAttribute('disabled'); }
+        sheet.rows[y]?.classList.remove('import-row-recorded');
+        sheet.ignoreHistory = true; sheet.ignoreEvents = true;
+        try { setCell(COL.id, y, newId()); setCell(COL.confirm, y, false); } finally { sheet.ignoreHistory = false; sheet.ignoreEvents = false; }
+      }
+    }
+    running = false;
+    refresh();
+    say(importStatus, `${undone} ${undone === 1 ? 'gift' : 'gifts'} removed from the ledger (restorable from History).${failed ? ` ${failed} could not be removed: delete ${failed === 1 ? 'it' : 'them'} in Manage Donations.` : ''} The rows are back to Ready; press Record gifts to record them again or Clear sheet to discard.`);
+  });
 
   async function loadSettings() {
     try {
