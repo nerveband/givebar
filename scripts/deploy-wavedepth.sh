@@ -14,12 +14,18 @@
 # the Stats page (CAIR-Georgia website). Nothing is printed.
 #
 # Usage: scripts/deploy-wavedepth.sh [ssh-target]      (default root@172.245.248.17)
-#        SSH="ssh -F ~/.ssh/config" scripts/deploy-wavedepth.sh isla-production
+#        SSH="ssh -F /path/to/config" scripts/deploy-wavedepth.sh isla-production
+# By default the user's ~/.ssh/config is used on its own: sandboxed shells (agent
+# harnesses) see system files as owned by nobody, and OpenSSH then refuses the
+# system-wide drop-ins. The user config is read first in a normal shell anyway.
 # Never run this during the live appeal.
 set -euo pipefail
 
 TARGET="${1:-root@172.245.248.17}"
-SSH="${SSH:-ssh}"
+if [ -z "${SSH:-}" ]; then
+  SSH=ssh
+  [ -f "$HOME/.ssh/config" ] && SSH="ssh -F $HOME/.ssh/config"
+fi
 APP_DIR="/etc/dokploy/applications/givebar"
 cd "$(git rev-parse --show-toplevel)"
 TAG="givebar:$(git rev-parse --short HEAD)"
