@@ -707,9 +707,14 @@ dialog::backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
 .donation-dialog details input { margin:8px 0 16px; }
 .donation-dialog #preset-grid button { flex:1 1 100px; min-height:56px; }
 .donation-dialog #add-error-banner { color:#fca5a5; }
-.donation-dialog .confirm-box { padding:16px; border:1px solid #e6bd7b; border-radius:12px; }
-.donation-dialog .confirm-box h3 { margin:0 0 8px; font-size:17px; }
-#duplicate-confirmation { border-color:#f0a3a3; }
+.donation-dialog .confirm-box { position: relative; padding: 18px 18px 18px 56px; border: 2px solid var(--color-warning); border-radius: 12px; background: color-mix(in oklab, var(--color-warning) 16%, #1a1710); color: var(--ink-primary); }
+.donation-dialog .confirm-box::before { content: ""; position: absolute; left: 18px; top: 20px; width: 26px; height: 26px; background: var(--color-warning); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM120,104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm8,88a12,12,0,1,1,12-12A12,12,0,0,1,128,192Z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM120,104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm8,88a12,12,0,1,1,12-12A12,12,0,0,1,128,192Z'/%3E%3C/svg%3E") center / contain no-repeat; }
+.donation-dialog .confirm-box h3 { margin: 0 0 8px; font-size: 19px; font-weight: 800; color: var(--color-warning); letter-spacing: -0.01em; }
+.donation-dialog .confirm-box p { margin: 0 0 12px; font-size: 16px; font-weight: 600; color: var(--ink-primary); line-height: 1.45; }
+.donation-dialog .confirm-box .donation-check { font-weight: 700; }
+#duplicate-confirmation { border-color: #f0a3a3; background: color-mix(in oklab, #f0a3a3 14%, #1a1210); }
+#duplicate-confirmation::before { background: #f0a3a3; }
+#duplicate-confirmation h3 { color: #fca5a5; }
 #add-donation-status, #outbox-status { padding:16px; margin-bottom:20px; border:1px solid #41664a; border-radius:12px; color:#b5ecc1; }
 /* Feedback that must survive scrolling: the record confirmation, the sync queue, and the 30-second undo. */
 #add-donation-status, #outbox-status, .undo-bar { position: sticky; top: 8px; z-index: 30; background: #10160f; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
