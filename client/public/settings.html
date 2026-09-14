@@ -401,6 +401,7 @@
         <a href="/" class="ops-nav-item">Home</a>
         <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item">Manage Donations</a>
+        <a href="/import" class="ops-nav-item">Bulk Import</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item active" aria-current="page">Settings</a>
         <a href="/team" class="ops-nav-item">Team and backups</a>
@@ -790,13 +791,20 @@
             <div class="accordion-body" id="sec-connections-body">
               <section class="fundraising-connection" aria-labelledby="fundraising-title">
                 <div class="donation-dialog-heading"><h3 id="fundraising-title">Bloomerang Fundraising</h3><span id="fundraising-badge" class="connection-badge">Checking…</span></div>
-                <p class="form-hint">The server automatically checks for online gifts every 5 seconds, even when this page is closed. Gifts go straight to the ballroom screen once Fundraising reports them. No manual sync or re-entry needed.</p>
+                <p class="form-hint">The server checks for online gifts automatically, even when this page is closed. Gifts go straight to the ballroom screen once Fundraising reports them. No manual sync or re-entry needed.</p>
                 <div class="connection-summary">
                   <div><span>Imported gifts</span><strong id="fundraising-count">—</strong></div>
                   <div><span>Last successful sync</span><strong id="fundraising-last-sync">—</strong></div>
                 </div>
                 <p id="fundraising-status" role="status">Checking connection…</p>
-                <button id="fundraising-sync" type="button" class="btn-secondary">Check now (optional)</button>
+                <button id="fundraising-sync" type="button" class="btn-secondary">Sync now</button>
+                <div class="connection-config">
+                  <h4>Automatic sync timing</h4>
+                  <p id="fundraising-schedule-status" class="form-hint"></p>
+                  <label class="form-label" for="fundraising-slow-at">Switch to every 10 minutes at (your device time)</label>
+                  <input id="fundraising-slow-at" type="datetime-local" class="form-input-text">
+                  <div class="inline-fields"><button id="fundraising-schedule" type="button" class="btn-secondary">Save switch time</button><button id="fundraising-fast" type="button" class="btn-ghost">Keep every 5 seconds</button></div>
+                </div>
                 <div class="connection-config">
                   <h4>Import settings</h4>
                   <div class="inline-fields">
@@ -857,6 +865,6 @@
   <script src="/js/session.js?v=7.5.3"></script>
   <script src="/js/presence.js?v=7.5.1"></script>
   <script src="/js/settings.js?v=7.5.4"></script>
-  <script src="/js/fundraising.js?v=7.5.2"></script>
+  <script src="/js/fundraising.js?v=7.5.3"></script>
 </body>
 </html>

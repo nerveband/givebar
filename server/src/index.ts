@@ -95,6 +95,7 @@ const SIGNED_IN_PAGES: Record<string, string> = {
   "/preview": "public/preview.html",
   "/presenter-preview": "public/preview.html",
   "/donations": "public/control.html",
+  "/import": "public/import.html",
   "/history": "public/history.html",
   "/stats": "public/stats.html"
 };

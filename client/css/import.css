@@ -1,0 +1,107 @@
+/* Bulk Import page: intake panel, sheet, and a dark-theme skin over jspreadsheet CE. */
+
+.import-intro { max-width: 72rem; margin: 0 0 var(--space-6); }
+
+.import-intake,
+.import-sheet,
+.import-results {
+  background: #18191d;
+  border: 1px solid #27282e;
+  border-radius: var(--brand-radius);
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+.import-intake h2, .import-sheet h2, .import-results h2 { margin: 0 0 var(--space-4); font-size: var(--text-lg); }
+
+.import-intake-grid { display: grid; gap: var(--space-5); }
+@media (min-width: 60rem) { .import-intake-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); } }
+.import-intake label { display: block; font-size: var(--text-sm); color: var(--ink-secondary); margin-bottom: var(--space-2); }
+.import-intake textarea {
+  width: 100%;
+  min-height: 7rem;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--bg-canvas);
+  color: var(--ink-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--brand-radius);
+  padding: var(--space-3);
+  box-sizing: border-box;
+}
+.import-intake-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }
+.import-intake-actions .btn-secondary { min-height: 44px; }
+.import-file-label { cursor: pointer; }
+.import-file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.import-file-label:focus-within { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.import-help p { margin: 0 0 var(--space-3); font-size: var(--text-sm); }
+#intake-status { margin: var(--space-4) 0 0; color: #ffe1af; }
+
+.import-sheet-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.import-sheet-head p { margin: 0 0 var(--space-4); font-variant-numeric: tabular-nums; }
+#btn-import[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+/* --- jspreadsheet skin (the host div itself becomes .jexcel_container) --- */
+.import-grid.jexcel_container { display: block; padding: 0; width: 100%; max-width: 100%; min-width: 0; }
+.import-grid > .jexcel_content { display: block; padding: 0; width: 100% !important; box-sizing: border-box; box-shadow: none !important; border: 1px solid #2f3037; border-radius: var(--brand-radius); background: var(--bg-canvas); }
+.import-grid .jexcel_content::-webkit-scrollbar-track { background: #16171b; }
+.import-grid .jexcel_content::-webkit-scrollbar-thumb { background: #44434a; }
+
+.import-grid .jexcel { background: var(--bg-canvas); color: var(--ink-primary); font-family: var(--font-sans); font-size: 15px; border-right-color: #2f3037; border-bottom-color: #2f3037; }
+.import-grid .jexcel > thead > tr > td {
+  background: #202127;
+  color: var(--ink-secondary);
+  border-color: #2f3037;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  height: 40px;
+  padding: 0 10px;
+  text-align: left;
+}
+.import-grid .jexcel > thead > tr > td.selected { background: #2c2d35; color: var(--ink-primary); }
+.import-grid .jexcel > tbody > tr > td {
+  border-color: #2f3037;
+  height: 44px;
+  padding: 0 10px;
+  line-height: 44px;
+  color: var(--ink-primary);
+}
+.import-grid .jexcel > tbody > tr > td:first-child { background: #202127; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.import-grid .jexcel > tbody > tr.selected > td:first-child { background: #2c2d35; color: var(--ink-primary); }
+.import-grid .jexcel > tbody > tr > td.highlight { background: rgba(255, 255, 255, 0.06); }
+.import-grid .jexcel > tbody > tr > td.highlight-left { border-left: 1px solid var(--brand-accent); }
+.import-grid .jexcel > tbody > tr > td.highlight-right { border-right: 1px solid var(--brand-accent); }
+.import-grid .jexcel > tbody > tr > td.highlight-top { border-top: 1px solid var(--brand-accent); }
+.import-grid .jexcel > tbody > tr > td.highlight-bottom { border-bottom: 1px solid var(--brand-accent); }
+.import-grid .jexcel > tbody > tr > td.readonly { color: var(--ink-secondary); }
+.import-grid .jexcel > tbody > tr > td:nth-child(3) { font-variant-numeric: tabular-nums; }
+.import-grid .jexcel > tbody > tr > td:nth-child(11) { font-size: var(--text-sm); }
+.import-grid .jexcel > tbody > tr > td > input[type=checkbox] { width: 20px; height: 20px; margin: 0; vertical-align: middle; accent-color: var(--brand-accent); }
+.import-grid .jexcel > tbody > tr > td > input,
+.import-grid .jexcel > tbody > tr > td > textarea {
+  background: var(--bg-elevated);
+  color: var(--ink-primary);
+  font-size: 15px;
+  height: 42px;
+  line-height: 42px;
+  padding: 0 10px;
+  box-sizing: border-box;
+}
+.import-grid .jexcel > tbody > tr > td > input[type=checkbox] { height: 20px; line-height: normal; padding: 0; }
+.import-grid .jexcel_corner { background: var(--brand-accent); border-color: var(--bg-canvas); }
+
+.import-grid .jexcel > tbody > tr.import-row-recorded > td { background: #14231a; color: #a4e7b6; }
+.import-grid .jexcel > tbody > tr.import-row-recorded > td:first-child { background: #17301f; color: #a4e7b6; }
+
+/* jsuites context menu, dark */
+.import-grid .jcontextmenu { background: var(--bg-elevated); color: var(--ink-primary); border: 1px solid var(--border-strong); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); }
+.import-grid .jcontextmenu > div { min-height: 44px; line-height: 44px; padding: 0 var(--space-4); color: var(--ink-primary); }
+.import-grid .jcontextmenu > div:hover { background: var(--bg-hover); }
+.import-grid .jcontextmenu hr { border-color: var(--border-subtle); }
+
+@media (max-width: 40rem) {
+  .import-grid .jexcel_content { max-height: 55vh !important; }
+  .page-header-actions { flex-wrap: wrap; }
+}

@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/css/base.css?v=7.5.1">
   <link rel="stylesheet" href="/css/components.css?v=7.5.1">
   <link rel="stylesheet" href="/css/app.css?v=7.5.4">
+  <link rel="stylesheet" href="/css/sync-now.css?v=1">
 </head>
 <body>
   <div class="ops-shell">
@@ -22,6 +23,7 @@
         <a href="/" class="ops-nav-item">Home</a>
         <a href="/preview" class="ops-nav-item">Fullscreen Bar Chart</a>
         <a href="/donations" class="ops-nav-item active">Manage Donations</a>
+        <a href="/import" class="ops-nav-item">Bulk Import</a>
         <a href="/presenter-preview" class="ops-nav-item">Presenter View</a>
         <a href="/settings" class="ops-nav-item">Settings</a>
         <a href="/team" class="ops-nav-item">Team and backups</a>
@@ -46,7 +48,9 @@
               <span class="lh-toggle-text">Links</span>
             </button>
           </div>
+          <a href="/import" class="btn-secondary">Bulk import</a>
           <a id="link-export-csv" href="/api/export/csv" class="btn-secondary">Download CSV</a>
+          <div data-sync-now class="sync-now-controls" hidden><button type="button">Sync now</button><span role="status"></span></div>
           <button type="button" id="btn-pause-chart" class="btn-secondary" aria-pressed="false">Pause chart</button>
           <button type="button" id="btn-open-add" class="btn-primary">Add donation</button>
         </div>
@@ -187,5 +191,6 @@
   <script src="/js/entry.js?v=7.5.3"></script>
   <script src="/js/linkhub.js?v=7.5.2"></script>
   <script src="/js/stage-messages.js?v=7.5.3"></script>
+  <script src="/js/sync-now.js?v=1"></script>
 </body>
 </html>

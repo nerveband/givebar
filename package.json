@@ -7,7 +7,8 @@
   "scripts": {
     "start": "bun run server/src/index.ts",
     "dev": "bun --watch server/src/index.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "vendor": "cp node_modules/jspreadsheet-ce/dist/index.js client/js/vendor/jspreadsheet.js && cp node_modules/jsuites/dist/jsuites.js client/js/vendor/jsuites.js && cp node_modules/jspreadsheet-ce/dist/jspreadsheet.css client/css/vendor/jspreadsheet.css && cp node_modules/jsuites/dist/jsuites.css client/css/vendor/jsuites.css"
   },
   "keywords": [
     "fundraising",
@@ -24,7 +25,9 @@
     "@types/bun": "latest",
     "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "jspreadsheet-ce": "4.15.0",
+    "jsuites": "4.17.7"
   },
   "dependencies": {
     "nodemailer": "^10.0.2",
